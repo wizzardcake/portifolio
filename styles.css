@@ -1,0 +1,1487 @@
+/* ==========================================================================
+   DESIGN TOKENS
+   ========================================================================== */
+:root {
+  --bg: #F2E8D5;
+  --text: #211C1A;
+  --card-bg: #FFFDF6;
+  --burgundy: #B23A4E;
+  --burgundy-rgb: 178, 58, 78;
+  --teal: #1E7A6F;
+  --teal-rgb: 30, 122, 111;
+  --gold: #A9791F;
+  --gold-rgb: 169, 121, 31;
+  --interlude: #241D19;
+  --interlude-core: #362A23;
+  --interlude-edge: #120D0A;
+  --interlude-text: #F0E6D2;
+
+  /* Fixed regardless of theme: the device bezel and page backdrop are always dark. */
+  --bezel: #08070A;
+
+  /* Fixed regardless of theme: the screen fill gradient stops — deep, weathered
+     tones (not bright vaporwave pastel), independent of --gold/--teal/--burgundy
+     which stay theme-tuned for ordinary UI (buttons, tags) elsewhere. */
+  --screen-color: #3D1A5C;
+  --screen-emerald: #0A4A30;
+  --relic-bg-teal: #123F3A;
+
+  /* Deep, "patinated artifact" accents for the desktop cards, their seal-like
+     sub-icons, and any content-view texture — heavier/darker than the
+     ordinary --gold/--teal/--burgundy tokens, and fixed regardless of theme. */
+  --relic-gold-rgb: 140, 96, 28;
+  --relic-teal-rgb: 24, 82, 74;
+  --relic-burgundy-rgb: 110, 26, 40;
+  /* Centered nebula core shape: width, and height fixed at 2x that width. */
+  --nebula-w: clamp(110px, 18vw, 210px);
+  --nebula-h: calc(var(--nebula-w) * 2);
+
+  /* Shared so the traveling spark's path matches the screen's own corner rounding. */
+  --screen-radius: clamp(14px, 2.2vw, 32px);
+  --spark-color: var(--gold);
+  --spark-color-2: #F5F0E6;
+  /* Fallback only — script.js sets this on #screen itself, sized to that
+     element's own current (post-3D-transform) rect, so the charge dial's
+     circle always fits inside the screen like an embedded display. */
+  --indicator-radius: 90px;
+
+  --font-heading: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-accent: 'Cinzel', serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1B1512;
+    --text: #F0E6D2;
+    --card-bg: #251E19;
+    --burgundy: #E0637A;
+    --burgundy-rgb: 224, 99, 122;
+    --teal: #4FB3A2;
+    --teal-rgb: 79, 179, 162;
+    --gold: #D9A441;
+    --gold-rgb: 217, 164, 65;
+    --interlude: #120E0C;
+    --interlude-core: #1D1613;
+    --interlude-edge: #050403;
+    --interlude-text: #F0E6D2;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #1B1512;
+  --text: #F0E6D2;
+  --card-bg: #251E19;
+  --burgundy: #E0637A;
+  --burgundy-rgb: 224, 99, 122;
+  --teal: #4FB3A2;
+  --teal-rgb: 79, 179, 162;
+  --gold: #D9A441;
+  --gold-rgb: 217, 164, 65;
+  --interlude: #120E0C;
+  --interlude-core: #1D1613;
+  --interlude-edge: #050403;
+  --interlude-text: #F0E6D2;
+}
+
+@property --spark-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --spark-angle-2 {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* ==========================================================================
+   RESET / BASE
+   ========================================================================== */
+* { box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: clip;
+}
+
+body {
+  height: 100dvh;
+  background: var(--bezel);
+  color: var(--text);
+  font-family: var(--font-body);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+button { font-family: inherit; }
+
+/* ==========================================================================
+   DEVICE FRAME
+   ========================================================================== */
+.experience {
+  position: fixed; inset: 0; width: 100%; height: 100dvh;
+  /* Clip the deliberately offscreen table/held-card edges at the viewport,
+     outside both the 3D stage and the independently scrolling reader. */
+  overflow: clip;
+}
+.device { position: relative; width: 100%; height: 100%; padding: 0; }
+
+@keyframes device-float {
+  0%   { transform: translateY(0)     rotate(0deg); }
+  25%  { transform: translateY(-10px) rotate(-0.7deg); }
+  50%  { transform: translateY(2px)   rotate(0deg); }
+  75%  { transform: translateY(8px)   rotate(0.7deg); }
+  100% { transform: translateY(0)     rotate(0deg); }
+}
+
+.screen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(ellipse var(--nebula-w) var(--nebula-h) at 50% 50%,
+      var(--screen-emerald) 0%,
+      var(--screen-emerald) 30%,
+      transparent 72%),
+    linear-gradient(135deg, var(--screen-color) 0%, var(--relic-bg-teal) 100%);
+  border: 3px solid var(--bezel);
+  border-radius: var(--screen-radius);
+  overflow: visible;
+  font-size: clamp(0.65rem, 2.2vmin, 1.15rem);
+  box-shadow:
+    inset 0 0 10px 3px rgba(0, 0, 0, 0.75),
+    inset 0 0 32px 14px rgba(0, 0, 0, 0.55),
+    inset 0 0 70px 28px rgba(0, 0, 0, 0.3),
+    0 0 50px 14px rgba(var(--teal-rgb), 0.4),
+    0 0 90px 32px rgba(var(--teal-rgb), 0.22),
+    0 0 150px 55px rgba(var(--teal-rgb), 0.1);
+  animation: screen-glow-breathe var(--pulse-dur, 5s) ease-in-out infinite;
+  filter: brightness(var(--charge-brightness, 1)) saturate(var(--charge-saturate, 1));
+  transition: filter 0.35s ease;
+}
+
+/* Compact mode: the screen and the table take turns filling the same
+   space (only one of them is ever the "current view"), same as it always
+   was before the table/pool/screen split existed. */
+.screen.hidden { display: none; }
+
+@media (min-width: 900px) {
+  /* Explicit row on both items: the table comes first in the DOM, so leaving
+     the portal's row to auto-placement pushes it onto a second row rather
+     than letting it sit back in column 1 beside the table. */
+  .screen {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  /* Desktop mode: the portal is its own always-present floating object,
+     sitting beside the table rather than taking over for it — never
+     hidden here, whether or not anything is inside it. */
+  .screen.hidden { display: flex; }
+}
+
+.screen::before,
+.screen::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  padding: 3px;
+  border-radius: inherit;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.screen::before {
+  background: conic-gradient(from var(--spark-angle),
+    transparent 0deg,
+    transparent 353deg,
+    var(--spark-color) 357deg,
+    #fff 359deg,
+    var(--spark-color) 360deg);
+  animation: spark-orbit var(--spark-dur, 6s) linear infinite;
+}
+
+.screen::after {
+  background: conic-gradient(from var(--spark-angle-2),
+    transparent 0deg,
+    transparent 353deg,
+    var(--spark-color-2) 357deg,
+    #fff 359deg,
+    var(--spark-color-2) 360deg);
+  animation: spark-orbit-reverse var(--spark-dur, 6s) linear infinite;
+}
+
+/* Both sparks start together and move at equal, opposite speed, so they
+   meet again every half lap (0%, 50%, 100%) — brighten right on those
+   beats to read as a little collision flash where they cross. */
+@keyframes spark-orbit {
+  0%   { --spark-angle: 0deg;   filter: brightness(1) drop-shadow(0 0 0 transparent); }
+  4%   { filter: brightness(1) drop-shadow(0 0 0 transparent); }
+  50%  { --spark-angle: 180deg; filter: brightness(2.4) drop-shadow(0 0 10px var(--spark-color)); }
+  54%  { filter: brightness(1) drop-shadow(0 0 0 transparent); }
+  96%  { filter: brightness(1) drop-shadow(0 0 0 transparent); }
+  100% { --spark-angle: 360deg; filter: brightness(2.4) drop-shadow(0 0 10px var(--spark-color)); }
+}
+
+@keyframes spark-orbit-reverse {
+  0%   { --spark-angle-2: 0deg;    filter: brightness(1) drop-shadow(0 0 0 transparent); }
+  4%   { filter: brightness(1) drop-shadow(0 0 0 transparent); }
+  50%  { --spark-angle-2: -180deg; filter: brightness(2.4) drop-shadow(0 0 10px var(--spark-color-2)); }
+  54%  { filter: brightness(1) drop-shadow(0 0 0 transparent); }
+  96%  { filter: brightness(1) drop-shadow(0 0 0 transparent); }
+  100% { --spark-angle-2: -360deg; filter: brightness(2.4) drop-shadow(0 0 10px var(--spark-color-2)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen::before,
+  .screen::after,
+  .device {
+    animation: none;
+  }
+}
+
+@keyframes screen-glow-breathe {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 10px 3px rgba(0, 0, 0, 0.75),
+      inset 0 0 32px 14px rgba(0, 0, 0, 0.55),
+      inset 0 0 70px 28px rgba(0, 0, 0, 0.3),
+      0 0 50px 14px rgba(var(--teal-rgb), 0.4),
+      0 0 90px 32px rgba(var(--teal-rgb), 0.22),
+      0 0 150px 55px rgba(var(--teal-rgb), 0.1);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 10px 3px rgba(0, 0, 0, 0.75),
+      inset 0 0 32px 14px rgba(0, 0, 0, 0.55),
+      inset 0 0 70px 28px rgba(0, 0, 0, 0.3),
+      0 0 70px 22px rgba(var(--teal-rgb), 0.5),
+      0 0 120px 45px rgba(var(--teal-rgb), 0.3),
+      0 0 190px 72px rgba(var(--teal-rgb), 0.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen { animation: none; }
+}
+
+.device-topbar {
+  position: absolute; inset: 20px 24px auto; z-index: 61;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.device-topbar .wordmark-letter, .device-topbar .theme-toggle { pointer-events: auto; }
+
+.wordmark {
+  font-family: var(--font-accent);
+  font-weight: 600;
+  font-size: 1.1em;
+  color: var(--interlude-text);
+  display: inline-flex;
+  gap: 0.16em;
+}
+
+.wordmark-letter {
+  display: inline-block;
+  position: relative;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  animation: letter-float 3.6s ease-in-out infinite;
+}
+
+.wordmark-letter:nth-child(2) { animation-delay: -0.6s; }
+.wordmark-letter:nth-child(3) { animation-delay: -1.2s; }
+.wordmark-letter:nth-child(4) { animation-delay: -1.8s; }
+.wordmark-letter:nth-child(5) { animation-delay: -2.4s; }
+.wordmark-letter:nth-child(6) { animation-delay: -3.0s; }
+
+.wordmark-letter.dragging {
+  cursor: grabbing;
+  animation-play-state: paused;
+  z-index: 5;
+}
+
+@keyframes letter-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wordmark-letter { animation: none; }
+}
+
+.theme-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.08) 38%, transparent 60%),
+    rgba(255, 255, 255, 0.1);
+  color: var(--interlude-text);
+  width: 2em;
+  height: 2em;
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none;
+  font-size: 1em;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+  /* Shares viewport coordinates with the rolling drag handler. */
+  position: fixed;
+  top: 20px;
+  left: calc(100% - 56px);
+  box-shadow:
+    inset -3px -4px 7px rgba(0, 0, 0, 0.4),
+    inset 2px 3px 5px rgba(255, 255, 255, 0.35),
+    0 3px 8px rgba(0, 0, 0, 0.4);
+}
+.theme-toggle:hover { background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.12) 38%, transparent 60%), rgba(255, 255, 255, 0.16); }
+.theme-toggle.rolling { cursor: grabbing; }
+
+/* ==========================================================================
+   INTRO SEQUENCE — power-on boot ritual
+   ========================================================================== */
+@property --veil-hole {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 150%;
+}
+
+.intro-scene {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bezel);
+  perspective: 1400px;
+  z-index: 50;
+}
+
+body:not(.intro-active) .intro-scene {
+  position: static;
+  background: none;
+  perspective: none;
+  z-index: auto;
+}
+
+body.intro-done .intro-floor,
+body.intro-done .intro-orbit,
+body.intro-done .intro-indicator-track,
+body.intro-done .intro-indicator {
+  display: none;
+}
+
+.intro-floor {
+  position: absolute;
+  top: 62%;
+  left: 50%;
+  width: min(900px, 130vw);
+  height: min(900px, 130vw);
+  transform: translate(-50%, -50%) rotateX(76deg);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(var(--teal-rgb), 0.4) 0%,
+    rgba(var(--teal-rgb), 0.14) 35%,
+    transparent 70%);
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  pointer-events: none;
+}
+
+body.intro-active .intro-floor { opacity: 1; }
+
+/* The "smyg": several concentric rings receding into the portal, like
+   looking down a lit tunnel — this is what makes it read as a portal
+   rather than a flat display. A plain child of .screen, sharing its exact
+   box/3D transform automatically (no JS measurement needed, so it's never
+   wrong mid-tilt) — its ring colors are kept strong specifically because
+   .screen's own --charge-brightness filter dims it along with everything
+   else on the screen during boot, and it still has to read clearly then.
+   No explicit z-index, so it stays behind the app content painted after
+   it in the DOM (the app-view sections), instead of covering it. */
+.screen-tunnel {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 50% 50%,
+      transparent 0%, transparent 34%,
+      rgba(var(--portal-glow-rgb, var(--teal-rgb)), 0.9) 50%,
+      rgba(var(--portal-glow-rgb, var(--teal-rgb)), 0.5) 64%,
+      rgba(0, 0, 0, 0.6) 80%,
+      rgba(0, 0, 0, 0.92) 100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+body.intro-active .screen-tunnel { opacity: 1; }
+
+/* Kept visible (faintly) after boot too, in desktop mode — a constant,
+   subtle reminder that this is a portal, not a flat screen. Zero
+   specificity via :where(), so the approach/active states below (which
+   need to override this baseline) always win regardless of source order. */
+@media (min-width: 900px) {
+  :where(body.intro-done) .screen-tunnel { opacity: 0.14; }
+}
+
+.device-tilt {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 1.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.device-tilt.intro-pose {
+  transform: translateY(14vh) rotateX(60deg) rotateZ(-7deg) scale(0.4);
+  animation: intro-idle-hop 3.6s ease-in-out infinite;
+}
+
+/* The "walked forward, looked down" approach: a closer, flatter pose the
+   scene eases into right after boot, before the charge dial becomes
+   interactive — simulates the camera closing in on the screen. Flatter and
+   much bigger than the resting device size, so the screen (and the dial
+   embedded in it) reads clearly rather than sitting small and distant. */
+.device-tilt.intro-pose-zoomed {
+  transform: translateY(0) rotateX(14deg) rotateZ(-1deg) scale(1.7);
+  animation: intro-idle-hop 3.6s ease-in-out infinite;
+}
+
+@keyframes intro-idle-hop {
+  0%, 100% { translate: 0 0;      rotate: 0deg; }
+  30%      { translate: 0 -3%;    rotate: -1deg; }
+  50%      { translate: 1% 0;     rotate: 0.6deg; }
+  70%      { translate: 0 -1.5%;  rotate: -0.4deg; }
+}
+
+.device-tilt.tap-hit    { animation: intro-idle-hop 3.6s ease-in-out infinite, tap-hit-shake 0.3s ease; }
+.device-tilt.tap-miss   { animation: intro-idle-hop 3.6s ease-in-out infinite, tap-miss-shake 0.4s ease; }
+
+@keyframes tap-hit-shake {
+  0%   { translate: 0 0; }
+  30%  { translate: 0 -1.6%; }
+  60%  { translate: 0 0.6%; }
+  100% { translate: 0 0; }
+}
+
+@keyframes tap-miss-shake {
+  0%   { translate: 0 0; rotate: 0deg; }
+  20%  { translate: -1.2% 0.4%; rotate: -1.4deg; }
+  45%  { translate: 1.2% 0;     rotate: 1.4deg; }
+  70%  { translate: -0.6% 0;    rotate: -0.6deg; }
+  100% { translate: 0 0; rotate: 0deg; }
+}
+
+.intro-orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  opacity: var(--charge-brightness, 0.1);
+  transition: opacity 0.35s ease;
+}
+
+.intro-orbit--h { animation: orbit-spin-y var(--spark-dur, 9s) linear infinite; }
+.intro-orbit--v { animation: orbit-spin-x var(--spark-dur, 9s) linear infinite; }
+
+@keyframes orbit-spin-y { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
+@keyframes orbit-spin-x { from { transform: rotateX(0deg); } to { transform: rotateX(360deg); } }
+
+.intro-orbit-dot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  margin: -5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, var(--spark-color) 55%, transparent 100%);
+  box-shadow: 0 0 12px 4px rgba(var(--teal-rgb), 0.65);
+}
+
+.intro-orbit-dot--a { transform: translateZ(clamp(140px, 20vw, 260px)); }
+.intro-orbit--h .intro-orbit-dot--b { transform: rotateY(180deg) translateZ(clamp(140px, 20vw, 260px)); }
+.intro-orbit--v .intro-orbit-dot--b { transform: rotateX(180deg) translateZ(clamp(140px, 20vw, 260px)); }
+
+/* Now just a decorative ring framing the ball (which fills almost all of
+   it and owns the drag itself) — not the drag target anymore. */
+.intro-indicator-track {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--indicator-radius) * 2);
+  height: calc(var(--indicator-radius) * 2);
+  margin-top: calc(var(--indicator-radius) * -1);
+  margin-left: calc(var(--indicator-radius) * -1);
+  border-radius: 50%;
+  border: 2px dashed rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
+  z-index: 9;
+  pointer-events: none;
+}
+
+/* Redesigned: no more a small dot orbiting a path — the ball now fills the
+   ring, stays put, and turns in place to wherever/however you drag it, like
+   a trackball rather than a dial hand moving around a circle. The lighting
+   (highlight + core glow) is this element's own flat background, so it
+   stays fixed like a real specular highlight would; what actually sells the
+   spin is .ball-globe's wireframe rings underneath, genuinely rotating in
+   3D (script.js drives --spin-x/--spin-y straight off the raw drag delta)
+   rather than a flat conic-gradient standing in for rotation. */
+.intro-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--indicator-radius) * 1.76);
+  height: calc(var(--indicator-radius) * 1.76);
+  margin-top: calc(var(--indicator-radius) * -0.88);
+  margin-left: calc(var(--indicator-radius) * -0.88);
+  border-radius: 50%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.55) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, var(--spark-color) 0%, rgba(0, 0, 0, 0.72) 100%);
+  box-shadow:
+    inset -10px -12px 22px rgba(0, 0, 0, 0.6),
+    inset 8px 9px 16px rgba(255, 255, 255, 0.14),
+    0 0 6px 2px rgba(0, 0, 0, 0.5),
+    0 0 40px 12px rgba(var(--teal-rgb), calc(0.2 + var(--charge-brightness, 0.1) * 0.6));
+  cursor: grab;
+  touch-action: none;
+  pointer-events: auto;
+  z-index: 10;
+  transition: box-shadow 0.3s ease;
+}
+
+.intro-indicator.dragging { cursor: grabbing; }
+
+/* A wireframe sphere: each .ball-ring is a plain flat circle, but tilted by
+   a different static rotateX/rotateY so, together, they read as a globe's
+   meridians (rotateY set) and a couple of latitude bands (rotateX set)
+   instead of one flat disc. .ball-core carries the *live* drag rotation —
+   since it's a preserve-3d ancestor, that spin composes with each ring's
+   own static tilt in true 3D space, so the whole wireframe turns together
+   as one rigid ball rather than each ring just fading in and out. */
+.ball-globe {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  perspective: 260px;
+}
+
+.ball-core {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--spin-x, 0deg)) rotateY(var(--spin-y, 0deg));
+  will-change: transform; /* own compositor layer — a rotation update here
+    recomposites instead of repainting the whole ring set every frame */
+}
+
+.ball-ring {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  border: 1.5px solid rgba(var(--teal-rgb), 0.55);
+}
+
+.ball-ring--band {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Fixed to the sphere's own surface (rotateY/rotateX place the point on
+   the globe, translateZ pushes it out to the ball's actual radius — kept
+   in sync with the ball's own live-measured size via --indicator-radius,
+   not a hardcoded px value), so as .ball-core turns, each glint travels
+   around with it and swings out of view on the far side — an actual
+   surface marking, not a flat decal. Solid enough to read at a glance
+   even where the thin ring lines wash out against the background. */
+.ball-facet {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.power-veil,
+.power-flash {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--screen-radius);
+  pointer-events: none;
+  z-index: 20;
+}
+
+.power-veil {
+  background: var(--bezel);
+  -webkit-mask: radial-gradient(ellipse var(--veil-hole, 150%) var(--veil-hole, 150%) at 50% 50%, transparent 98%, #fff 100%);
+  mask: radial-gradient(ellipse var(--veil-hole, 150%) var(--veil-hole, 150%) at 50% 50%, transparent 98%, #fff 100%);
+  transition: --veil-hole 0.7s ease;
+}
+
+.power-flash {
+  background: radial-gradient(circle, #fff 0%, var(--spark-color) 40%, transparent 75%);
+  opacity: 0;
+  z-index: 21;
+}
+
+.power-flash.flash { animation: power-flash-pulse 0.35s ease-out; }
+
+@keyframes power-flash-pulse {
+  0%   { opacity: 0; }
+  35%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .device-tilt,
+  .intro-orbit,
+  .intro-indicator {
+    animation: none;
+  }
+}
+
+/* While the boot ritual is running, only the portal (and the charge dial
+   inside it) are visible — the table and the topbar stay hidden until
+   they're spat out through the portal once it's unlocked, not just inert
+   underneath it. */
+body.intro-active .device-topbar,
+body.intro-active .desktop,
+body.intro-active .app-view {
+  pointer-events: none;
+}
+
+body.intro-active .device-topbar {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+body.intro-textreveal .device-topbar {
+  opacity: 1;
+}
+
+body.intro-active .desktop {
+  visibility: hidden;
+}
+
+/* Force the screen visible through the whole boot ritual regardless of
+   mode — in compact mode it would otherwise carry the same .hidden class
+   it uses to stay off-screen until an app opens. */
+body.intro-active .screen.hidden {
+  display: flex;
+}
+
+/* The "smyg": looking straight down a tunnel into the portal — several
+   concentric dark rings receding inward, on top of the low charge-level
+   brightness, so it reads as deep and switched-off rather than just dim. */
+body.intro-active .screen {
+  box-shadow:
+    inset 0 0 3px 2px rgba(0, 0, 0, 0.95),
+    inset 0 0 16px 8px rgba(0, 0, 0, 0.85),
+    inset 0 0 40px 20px rgba(0, 0, 0, 0.7),
+    inset 0 0 75px 36px rgba(0, 0, 0, 0.5),
+    inset 0 0 130px 60px rgba(var(--teal-rgb), 0.2),
+    0 0 45px 12px rgba(var(--teal-rgb), 0.3);
+  transition: box-shadow 0.6s ease;
+}
+
+.wordmark.is-long {
+  font-size: 0.62em;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 60vw;
+}
+
+/* TEMPORARY dev nav — remove once the real tap-target UX is designed. */
+.dev-nav {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  display: flex;
+  gap: 10px;
+  z-index: 999;
+}
+
+.dev-nav-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.dev-nav-btn:hover { background: rgba(255, 255, 255, 0.2); }
+.dev-nav-btn:active { transform: scale(0.94); }
+
+/* ==========================================================================
+   WORKSPACE — table/portal camera stage, with an independent foreground hand.
+   ========================================================================== */
+.workspace { position: absolute; inset: 0; }
+
+/* A viewport hand, never a second row in the table's layout. Empty space
+   passes input through to the portal; only the actual cards catch it. */
+.desktop, .desktop.hidden {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  display: block; padding: 0; z-index: 60; pointer-events: none;
+}
+.desktop-icons { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hand-card .sub-card { pointer-events: auto; }
+
+
+
+/* ---- Sub-cards: each is its own destination in the hand — Prosjekter,
+   Arbeidserfaring, Kurs & Fag, Verktøy, Om meg. */
+.sub-card {
+  position: relative;
+  width: 100%;
+  background: var(--card-bg);
+  border: 2px solid rgb(var(--card-glow-rgb, var(--relic-teal-rgb)));
+  border-radius: clamp(10px, 1.6vw, 16px);
+  color: var(--interlude-text);
+  text-shadow: 0 0 8px rgba(var(--card-glow-rgb, var(--relic-teal-rgb)), 0.85), 0 1px 2px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: clamp(0.7rem, 2.4vw, 0.95rem);
+  aspect-ratio: 3 / 4;
+  padding: 10%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  box-shadow:
+    0 0 6px 1px rgba(255, 255, 255, 0.4),
+    0 0 16px 4px rgba(var(--card-glow-rgb, var(--relic-teal-rgb)), 0.45),
+    0 8px 16px rgba(0, 0, 0, 0.4);
+  animation: sub-card-float 4s ease-in-out infinite;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Staggered so the fan bobs like a wave rather than all in lockstep. */
+.hand-card--prosjekter .sub-card      { animation-delay: -0.5s; }
+.hand-card--arbeidserfaring .sub-card { animation-delay: -1.5s; }
+.hand-card--kurs .sub-card            { animation-delay: -2.5s; }
+.hand-card--verktoy .sub-card         { animation-delay: -3.5s; }
+.hand-card--ommeg .sub-card           { animation-delay: 0s; }
+
+.sub-card:hover,
+.sub-card:focus-visible {
+  transform: translateY(-4px) scale(1.04);
+  box-shadow:
+    0 0 8px 2px rgba(255, 255, 255, 0.5),
+    0 0 24px 7px rgba(var(--card-glow-rgb, var(--relic-teal-rgb)), 0.6),
+    0 12px 20px rgba(0, 0, 0, 0.45);
+}
+
+@keyframes sub-card-float {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sub-card { animation: none; }
+}
+
+.sub-card-footer {
+  font-size: 0.75em;
+  opacity: 0.75;
+  font-weight: 500;
+}
+
+/* ---- Vortex/portal glow the cards seem to rise out of ---- */
+@property --vortex-spin {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.desktop-vortex {
+  position: absolute;
+  top: 60%;
+  left: 50%;
+  width: 92%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: -2;
+  background:
+    radial-gradient(circle at 50% 50%, #000 0%, rgba(0, 0, 0, 0.85) 14%, transparent 38%),
+    conic-gradient(from var(--vortex-spin),
+      rgba(var(--teal-rgb), 0.85) 0deg,
+      transparent 24deg,
+      rgba(var(--teal-rgb), 0.55) 65deg,
+      transparent 100deg,
+      rgba(var(--teal-rgb), 0.85) 150deg,
+      transparent 190deg,
+      rgba(var(--teal-rgb), 0.55) 240deg,
+      transparent 290deg,
+      rgba(var(--teal-rgb), 0.85) 335deg,
+      transparent 360deg);
+  -webkit-mask: radial-gradient(circle at 50% 50%, #fff 0%, #fff 45%, transparent 72%);
+  mask: radial-gradient(circle at 50% 50%, #fff 0%, #fff 45%, transparent 72%);
+  animation: vortex-spin 11s linear infinite;
+}
+
+@keyframes vortex-spin {
+  to { --vortex-spin: 360deg; }
+}
+
+/* Drifting fog banks behind the swirl. */
+.desktop-vortex::before {
+  content: '';
+  position: absolute;
+  inset: -25%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 42%, rgba(255, 255, 255, 0.12) 0%, transparent 32%),
+    radial-gradient(circle at 68% 60%, rgba(255, 255, 255, 0.09) 0%, transparent 36%),
+    radial-gradient(circle at 50% 28%, rgba(var(--teal-rgb), 0.3) 0%, transparent 42%);
+  filter: blur(14px);
+  animation: fog-drift 16s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes fog-drift {
+  0%   { transform: translate(-3%, 1%) scale(1); }
+  100% { transform: translate(3%, -2%) scale(1.1); }
+}
+
+/* Occasional lightning flicker inside the clouds. */
+.desktop-vortex::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 48% 40%,
+    #fff 0%,
+    rgba(210, 235, 255, 0.7) 6%,
+    transparent 30%);
+  mix-blend-mode: screen;
+  opacity: 0;
+  animation: lightning-flicker 7.5s infinite;
+  pointer-events: none;
+}
+
+@keyframes lightning-flicker {
+  0%, 89%, 100% { opacity: 0; }
+  90%   { opacity: 0.85; }
+  90.6% { opacity: 0.1; }
+  91.2% { opacity: 0.65; }
+  92%   { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-vortex,
+  .desktop-vortex::before,
+  .desktop-vortex::after {
+    animation: none;
+  }
+}
+
+/* ---- Bordet: one hand of cards, stacked directly on top of each other
+   like a hand held up in front of you — only the front card (--stack-i:
+   0) reads fully; the rest peek out from behind it, offset by their
+   place in the stack (script.js owns handOrder/layoutHand, the same
+   pattern as .deck-card's own stack). Hovering a peeking card shows an
+   enlarged, fully legible copy (see .card-peek); dragging any card
+   re-sorts the stack. ---- */
+.card-hand {
+  position: absolute;
+  inset: 0;
+}
+
+.hand-card {
+  position: absolute;
+  bottom: calc(-1 * clamp(42px, 6dvh, 64px));
+  left: calc(50% - 32px);
+  width: clamp(150px, 25dvh, 240px);
+  transform-origin: bottom center;
+  translate:
+    calc(-50% + var(--stack-i, 0) * 16px)
+    calc(var(--stack-i, 0) * -12px);
+  rotate: calc(-6deg + var(--stack-i, 0) * 4deg);
+  scale: calc(1 - var(--stack-i, 0) * 0.025);
+  transition: translate 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+              rotate 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+              scale 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* script.js neutralizes rotate/scale to their identity values (instantly)
+     the moment a card is picked up — a rotated/scaled ancestor would
+     otherwise skew the drag's own translate math — and animates them back
+     once the card settles into its new spot in the stack. */
+}
+
+.hand-card .sub-card { width: 100%; }
+
+.hand-card--prosjekter      { --card-glow-rgb: var(--relic-gold-rgb); }
+.hand-card--arbeidserfaring { --card-glow-rgb: var(--relic-gold-rgb); }
+.hand-card--kurs            { --card-glow-rgb: var(--relic-teal-rgb); }
+.hand-card--verktoy         { --card-glow-rgb: var(--relic-teal-rgb); }
+.hand-card--ommeg           { --card-glow-rgb: var(--relic-burgundy-rgb); }
+
+/* Enlarged floating copy of a peeking (non-front) card, shown on hover so
+   it can be read without digging it out of the stack first. Filled in and
+   positioned by script.js; purely a readability aid, so it never
+   intercepts pointer events of its own. */
+.card-peek {
+  position: fixed;
+  z-index: 60;
+  width: min(220px, 46vw);
+  pointer-events: none;
+  opacity: 0;
+  scale: 0.85;
+  animation: none;
+  transition: opacity 0.15s ease, scale 0.15s ease;
+}
+.card-peek.is-visible {
+  opacity: 1;
+  scale: 1;
+}
+
+.sub-card--ommeg {
+  justify-content: space-between;
+}
+.sub-card--ommeg .sub-card-footer { margin-top: auto; }
+
+/* ---- The portal's own glow, driven by the same .screen-tunnel used
+   during boot. Three states — off (a faint, always-there hint — see the
+   .screen-tunnel base rule), the glow escalating continuously as a card
+   is dragged closer (driven by JS setting --portal-intensity, never a
+   binary class), and active (full glow with a slow pulse, while that
+   card's content shows on the screen and it's waiting to be retrieved). ---- */
+.screen-tunnel.approach {
+  opacity: calc(0.15 + var(--portal-intensity, 0) * 0.85);
+}
+
+.screen.portal-active .screen-tunnel {
+  opacity: 1;
+  animation: portal-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes portal-pulse {
+  0%, 100% { filter: brightness(1) saturate(1); }
+  50%      { filter: brightness(1.4) saturate(1.3); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen.portal-active .screen-tunnel { animation: none; }
+}
+
+/* ---- Temporary retrieval button — shown only while a card is inside the
+   portal. Drag-back-out is a separate, later pass. ---- */
+.portal-retrieve {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  translate: -50% 0;
+  z-index: 5;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: clamp(0.75rem, 1.8vw, 0.95rem);
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--interlude-text);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.portal-retrieve:hover { background: rgba(0, 0, 0, 0.6); transform: translateY(-2px); }
+
+
+/* ==========================================================================
+   APP VIEWS
+   ========================================================================== */
+.app-view {
+  flex: 1;
+  min-height: 0;
+  display: none;
+  flex-direction: column;
+  background:
+    radial-gradient(ellipse var(--nebula-w) var(--nebula-h) at 50% 50%,
+      var(--screen-emerald) 0%,
+      var(--screen-emerald) 30%,
+      transparent 72%),
+    linear-gradient(135deg, var(--screen-color) 0%, var(--relic-bg-teal) 100%);
+}
+
+.app-view.active { display: flex; }
+
+.app-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.app-header h2 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.3em;
+  color: var(--interlude-text);
+  margin: 0;
+}
+
+.back-btn {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.9em;
+  background: var(--card-bg);
+  color: var(--text);
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  padding: 8px 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.back-btn:hover { background: var(--gold); color: var(--card-bg); }
+.back-btn:active { transform: scale(0.97); }
+.back-btn.small { font-size: 0.8em; padding: 6px 14px; margin-bottom: 18px; }
+
+.app-content {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 24px 28px 36px;
+  color: var(--interlude-text);
+}
+
+/* ==========================================================================
+   PROSJEKTER
+   ========================================================================== */
+.project-list:not([hidden]) { display: flex; flex-direction: column; gap: 18px; }
+
+.project-card {
+  background: var(--card-bg);
+  color: var(--text);
+  border-radius: 18px;
+  padding: 20px 22px;
+  cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.project-card:hover,
+.project-card:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.project-card--featured {
+  border-left: 6px solid var(--burgundy);
+}
+
+.project-card--featured .project-title {
+  font-size: 1.5em;
+}
+
+.project-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.project-card--minor {
+  padding: 14px 18px;
+}
+.project-card--minor .project-title { font-size: 1em; }
+
+.project-meta {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.75em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.project-title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.15em;
+  margin: 6px 0 6px;
+}
+
+.project-tagline {
+  font-size: 0.92em;
+  margin: 0;
+  opacity: 0.85;
+  line-height: 1.45;
+}
+
+/* ---- Prosjekter deck: a fanned stack, one card up front at a time ---- */
+.deck {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 4 / 5;
+  margin: 0 auto 4px;
+}
+
+.deck-card {
+  position: absolute;
+  inset: 0;
+  background: var(--card-bg);
+  color: var(--text);
+  border-radius: 18px;
+  padding: 18px 20px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+  transform:
+    translate(calc(var(--stack-i, 0) * 16px), calc(var(--stack-i, 0) * -12px))
+    rotate(calc(var(--stack-i, 0) * 4deg))
+    scale(calc(1 - var(--stack-i, 0) * 0.045));
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease;
+  touch-action: none;
+}
+
+.deck-card:hover,
+.deck-card:focus-visible {
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+}
+
+.deck-card-image {
+  flex: 1;
+  min-height: 0;
+  margin: 10px 0;
+  border-radius: 12px;
+  background: repeating-linear-gradient(45deg,
+    rgba(var(--teal-rgb), 0.22) 0 2px, transparent 2px 10px);
+  border: 1px dashed rgba(var(--teal-rgb), 0.55);
+}
+
+.deck-card-bullets {
+  margin: 0;
+  padding-left: 1.1em;
+  font-size: 0.85em;
+  line-height: 1.45;
+  opacity: 0.9;
+}
+.deck-card-bullets li + li { margin-top: 4px; }
+.deck-card-bullets .detail-placeholder { opacity: 0.6; font-style: italic; }
+
+.deck-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.deck-tag {
+  background: var(--card-bg);
+  color: var(--text);
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.8em;
+  font-family: var(--font-heading);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.deck-tag:hover { background: var(--gold); color: var(--card-bg); }
+.deck-tag.active {
+  background: var(--burgundy);
+  border-color: var(--burgundy);
+  color: var(--card-bg);
+}
+
+.more-link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--gold);
+  font-family: var(--font-heading);
+  font-size: 0.85em;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.more-link:hover { text-decoration: underline; }
+
+.more-projects:not([hidden]) {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.project-detail:not([hidden]) { display: flex; flex-direction: column; }
+
+.detail-content {
+  background: var(--card-bg);
+  color: var(--text);
+  border-radius: 18px;
+  padding: 26px 28px;
+}
+
+.detail-content .project-meta { display: block; margin-bottom: 8px; }
+.detail-content h3 {
+  font-family: var(--font-heading);
+  font-size: 1.6em;
+  margin: 0 0 10px;
+}
+.detail-content p { line-height: 1.6; }
+.detail-content .detail-placeholder {
+  margin-top: 18px;
+  font-style: italic;
+  opacity: 0.6;
+}
+
+/* ==========================================================================
+   ARBEIDSERFARING
+   ========================================================================== */
+.experience-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.experience-item {
+  background: var(--card-bg);
+  color: var(--text);
+  border-radius: 16px;
+  padding: 18px 22px;
+  border-left: 6px solid var(--teal);
+}
+
+.experience-item h3 {
+  font-family: var(--font-heading);
+  font-size: 1.1em;
+  margin: 0 0 6px;
+}
+
+.experience-item p { margin: 0; line-height: 1.5; opacity: 0.85; }
+
+/* ==========================================================================
+   CHIPS (Kurs & Fag / Om meg)
+   ========================================================================== */
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.chip {
+  position: relative;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.18) 0%, transparent 55%),
+    linear-gradient(155deg, #3a2c22 0%, #1b120d 100%);
+  color: var(--interlude-text);
+  border: 1px solid rgba(var(--relic-gold-rgb), 0.85);
+  /* Stamped-token silhouette, matching the seal icons, not a pill. */
+  border-radius: 46% 54% 52% 48% / 52% 46% 54% 48%;
+  padding: 8px 18px;
+  font-size: 0.85em;
+  font-family: var(--font-heading);
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.15),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.5),
+    0 0 10px 1px rgba(var(--relic-gold-rgb), 0.4);
+  text-shadow: 0 0 5px rgba(var(--relic-gold-rgb), 0.5);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.chip:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.2),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.45),
+    0 0 16px 3px rgba(var(--relic-gold-rgb), 0.6);
+}
+
+.chip.active {
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.22) 0%, transparent 55%),
+    linear-gradient(155deg, #4a2020 0%, #200d0d 100%);
+  border-color: rgba(var(--relic-burgundy-rgb), 0.9);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.15),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.5),
+    0 0 14px 3px rgba(var(--relic-burgundy-rgb), 0.6);
+  text-shadow: 0 0 6px rgba(var(--relic-burgundy-rgb), 0.6);
+}
+
+.chip-placeholder {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-size: 0.92em;
+  opacity: 0.85;
+}
+
+/* ==========================================================================
+   OM MEG
+   ========================================================================== */
+.ommeg-intro {
+  font-size: 1.05em;
+  line-height: 1.7;
+  max-width: 60ch;
+  margin: 0 0 22px;
+}
+
+.interlude-band {
+  position: relative;
+  background:
+    radial-gradient(circle at 25% 20%, rgba(255, 255, 255, 0.07) 0%, transparent 50%),
+    linear-gradient(160deg, #2b211b 0%, #150f0c 100%);
+  border: 1px solid rgba(var(--relic-gold-rgb), 0.5);
+  /* A slightly irregular, hand-carved tablet edge, not a clean rounded box. */
+  border-radius: 4% 3% 5% 2% / 3% 5% 2% 4%;
+  padding: 22px 26px;
+  margin-bottom: 22px;
+  box-shadow:
+    inset 0 2px 4px rgba(255, 255, 255, 0.06),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.5),
+    0 0 30px 4px rgba(var(--relic-gold-rgb), 0.18),
+    0 14px 24px rgba(0, 0, 0, 0.4);
+}
+
+.interlude-band p {
+  margin: 0;
+  line-height: 1.7;
+  max-width: 60ch;
+}
+
+.btn-download {
+  display: inline-block;
+  margin-top: 8px;
+  background: var(--burgundy);
+  color: var(--card-bg);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  text-decoration: none;
+  padding: 12px 22px;
+  border-radius: 999px;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+}
+.btn-download:hover { opacity: 0.9; }
+.btn-download:active { transform: scale(0.97); }
+
+/* ==========================================================================
+   VERKTØY
+   ========================================================================== */
+.tool-group { margin-bottom: 22px; }
+
+.tool-group h3 {
+  font-family: var(--font-heading);
+  font-size: 0.95em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gold);
+  margin: 0 0 10px;
+}
+
+.tool-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tool-item {
+  background: var(--card-bg);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 0.88em;
+}
+
+/* ==========================================================================
+   KONTAKT
+   ========================================================================== */
+.contact-footer {
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(var(--relic-gold-rgb), 0.35);
+}
+
+.contact-footer-heading {
+  font-family: var(--font-heading);
+  font-size: 1.1em;
+  margin: 0 0 14px;
+}
+
+.contact-card {
+  background: var(--card-bg);
+  color: var(--text);
+  border-radius: 16px;
+  padding: 18px 22px;
+  margin-bottom: 16px;
+}
+
+.contact-label {
+  font-family: var(--font-heading);
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--teal);
+  margin: 0 0 6px;
+}
+
+.contact-value {
+  font-size: 1.05em;
+  margin: 0;
+}
+
+.contact-link { color: var(--burgundy); text-decoration: none; }
+.contact-link:hover { text-decoration: underline; }
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media (max-width: 640px) {
+  .project-row, .more-projects { grid-template-columns: 1fr; }
+  .app-header { padding: 14px 16px; }
+  .app-content { padding: 18px 16px 28px; }
+}

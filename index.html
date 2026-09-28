@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ANNISJ — Markedsføringsportfolio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="portal.css">
+</head>
+<body class="intro-active">
+
+<main class="experience" id="experience" aria-label="Interaktiv portfolio">
+<div class="intro-scene" id="introScene">
+  <div class="intro-floor"></div>
+
+  <div class="device-tilt intro-pose" id="deviceTilt">
+
+    <div class="intro-orbit intro-orbit--h">
+      <span class="intro-orbit-dot intro-orbit-dot--a"></span>
+      <span class="intro-orbit-dot intro-orbit-dot--b"></span>
+    </div>
+    <div class="intro-orbit intro-orbit--v">
+      <span class="intro-orbit-dot intro-orbit-dot--a"></span>
+      <span class="intro-orbit-dot intro-orbit-dot--b"></span>
+    </div>
+
+    <div class="device" id="device">
+      <div class="power-veil" id="powerVeil"></div>
+      <div class="power-flash" id="powerFlash"></div>
+
+
+      <!-- Physical table/portal stage. Interactive cards live in the foreground. -->
+      <div class="workspace" id="workspace">
+
+
+
+      <!-- PORTALEN — cards are thrown in here to activate them (no more
+           separate "basseng"); its own glow builds continuously as a card
+           approaches, same idea as the old pool, just merged into the
+           portal itself. -->
+      <div class="screen hidden" id="screen">
+
+        <div class="portal-table" aria-hidden="true">
+          <div class="portal-table-top"></div>
+          <i class="table-leg table-leg--back-left"></i><i class="table-leg table-leg--back-right"></i>
+          <i class="table-leg table-leg--front-left"></i><i class="table-leg table-leg--front-right"></i>
+        </div>
+
+        <!-- An empty aperture at Z=0. Walls and atmosphere are separate
+             objects below it, visible through the cut in the tabletop. -->
+        <div class="screen-tunnel" aria-hidden="true">
+          <div class="portal-abyss portal-depth-layer"></div>
+          <div class="portal-stars portal-depth-layer"></div>
+          <div class="portal-fog portal-fog--deep portal-depth-layer"><canvas class="portal-depth"></canvas></div>
+          <div class="portal-fog portal-fog--near portal-depth-layer"><canvas class="portal-depth"></canvas></div>
+          <div class="portal-particles"></div>
+          <div class="portal-wall portal-wall--top"></div>
+          <div class="portal-wall portal-wall--right"></div>
+          <div class="portal-wall portal-wall--bottom"></div>
+          <div class="portal-wall portal-wall--left"></div>
+        </div>
+        <span class="portal-origin" aria-hidden="true"></span>
+        <div class="portal-contact" aria-hidden="true"></div>
+        <div class="portal-matter" id="portalMatter" aria-hidden="true"><canvas></canvas></div>
+        <p class="portal-hint" id="portalHint">Drei kulen for å åpne</p>
+
+        <!-- Boot-ritual charge dial — lives on the screen itself (like a
+             display embedded in it), not floating loose around the device. -->
+        <div class="intro-indicator-track"></div>
+        <div class="intro-indicator" id="introIndicator" role="button" tabindex="0" aria-label="Drei kulen for å åpne portalen, eller trykk Enter">
+          <div class="ball-globe">
+            <div class="ball-core">
+              <div class="ball-ring" style="transform: rotateY(0deg)"></div>
+              <div class="ball-ring" style="transform: rotateY(36deg)"></div>
+              <div class="ball-ring" style="transform: rotateY(72deg)"></div>
+              <div class="ball-ring" style="transform: rotateY(108deg)"></div>
+              <div class="ball-ring" style="transform: rotateY(144deg)"></div>
+              <div class="ball-ring ball-ring--band" style="transform: rotateX(58deg)"></div>
+              <div class="ball-ring ball-ring--band" style="transform: rotateX(-58deg)"></div>
+              <!-- Facets: irregular glints fixed to the sphere's surface —
+                   unlike the rings (thin, easy to lose against a bright or
+                   low-contrast background), these are solid enough patches
+                   of light that the spin reads at a glance regardless of
+                   lighting or viewing angle. -->
+              <div class="ball-facet" style="width: 26%; height: 26%; opacity: 0.8; background: radial-gradient(circle, rgba(var(--teal-rgb), 1) 0%, transparent 70%); transform: translate(-50%, -50%) rotateY(10deg) rotateX(25deg) translateZ(calc(var(--indicator-radius) * 0.88));"></div>
+              <div class="ball-facet" style="width: 18%; height: 18%; opacity: 0.9; background: radial-gradient(circle, var(--gold) 0%, transparent 70%); transform: translate(-50%, -50%) rotateY(55deg) rotateX(-35deg) translateZ(calc(var(--indicator-radius) * 0.88));"></div>
+              <div class="ball-facet" style="width: 22%; height: 22%; opacity: 0.65; background: radial-gradient(circle, #fff 0%, transparent 70%); transform: translate(-50%, -50%) rotateY(95deg) rotateX(50deg) translateZ(calc(var(--indicator-radius) * 0.88));"></div>
+              <div class="ball-facet" style="width: 28%; height: 28%; opacity: 0.75; background: radial-gradient(circle, rgba(var(--teal-rgb), 1) 0%, transparent 70%); transform: translate(-50%, -50%) rotateY(140deg) rotateX(-10deg) translateZ(calc(var(--indicator-radius) * 0.88));"></div>
+              <div class="ball-facet" style="width: 17%; height: 17%; opacity: 0.9; background: radial-gradient(circle, var(--gold) 0%, transparent 70%); transform: translate(-50%, -50%) rotateY(185deg) rotateX(35deg) translateZ(calc(var(--indicator-radius) * 0.88));"></div>
+              <div class="ball-facet" style="width: 20%; height: 20%; opacity: 0.7; background: radial-gradient(circle, rgba(var(--teal-rgb), 1) 0%, transparent 70%); transform: translate(-50%, -50%) rotateY(225deg) rotateX(-55deg) translateZ(calc(var(--indicator-radius) * 0.88));"></div>
+              <div class="ball-facet" style="width: 24%; height: 24%; opacity: 0.6; background: radial-gradient(circle, #fff 0%, transparent 70%); transform: translate(-50%, -50%) rotateY(265deg) rotateX(15deg) translateZ(calc(var(--indicator-radius) * 0.88));"></div>
+              <div class="ball-facet" style="width: 19%; height: 19%; opacity: 0.8; background: radial-gradient(circle, var(--gold) 0%, transparent 70%); transform: translate(-50%, -50%) rotateY(300deg) rotateX(-25deg) translateZ(calc(var(--indicator-radius) * 0.88));"></div>
+              <div class="ball-facet" style="width: 22%; height: 22%; opacity: 0.75; background: radial-gradient(circle, rgba(var(--teal-rgb), 1) 0%, transparent 70%); transform: translate(-50%, -50%) rotateY(335deg) rotateX(55deg) translateZ(calc(var(--indicator-radius) * 0.88));"></div>
+              <div class="ball-facet" style="width: 16%; height: 16%; opacity: 0.65; background: radial-gradient(circle, #fff 0%, transparent 70%); transform: translate(-50%, -50%) rotateY(20deg) rotateX(-65deg) translateZ(calc(var(--indicator-radius) * 0.88));"></div>
+            </div>
+          </div>
+        </div>
+
+    <div class="portal-page">
+    <button class="portal-retrieve" id="portalRetrieve" type="button" hidden>Få tilbake kort</button>
+    <!-- APP: PROSJEKTER -->
+    <section class="app-view" id="app-prosjekter" data-app-view>
+      <header class="app-header">
+        <button class="back-btn" data-close type="button">← Tilbake</button>
+        <h2>Prosjekter</h2>
+      </header>
+      <div class="app-content">
+
+        <div class="project-list" data-project-list>
+
+          <div class="deck" id="prosjekterDeck"></div>
+          <div class="deck-tags" id="prosjekterTags"></div>
+
+          <button class="more-link" id="moreLink" type="button">Mer, for de nysgjerrige ↓</button>
+
+          <div class="more-projects" id="moreProjects" hidden>
+            <article class="project-card project-card--minor" data-project="aleneforeldre" tabindex="0">
+              <span class="project-meta">Figma · Mitt første kreative case</span>
+              <h3 class="project-title">Aleneforeldre-app</h3>
+            </article>
+            <article class="project-card project-card--minor" data-project="webprosjekt" tabindex="0">
+              <span class="project-meta">HTML/CSS</span>
+              <h3 class="project-title">Kreativt webprosjekt</h3>
+            </article>
+          </div>
+
+        </div>
+
+        <div class="project-detail" data-project-detail hidden>
+          <button class="back-btn small" data-project-back type="button">← Tilbake til prosjekter</button>
+          <div class="detail-content" id="detailContent"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- APP: ARBEIDSERFARING -->
+    <section class="app-view" id="app-arbeidserfaring" data-app-view>
+      <header class="app-header">
+        <button class="back-btn" data-close type="button">← Tilbake</button>
+        <h2>Arbeidserfaring</h2>
+      </header>
+      <div class="app-content">
+        <ul class="experience-list">
+          <li class="experience-item">
+            <h3>Tømrer</h3>
+            <p>Fagbrev. Presisjon fra tegning til ferdig produkt.</p>
+          </li>
+          <li class="experience-item">
+            <h3>Montør</h3>
+            <p>Bygg/anlegg og akustikk. Detaljene ingen ser, men alle hører.</p>
+          </li>
+          <li class="experience-item">
+            <h3>Andre oppdrag</h3>
+            <p>Salg under press på festivaler (Killnoise), og løpende oppdrag via nettverket.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- APP: KURS & FAG -->
+    <section class="app-view" id="app-kurs" data-app-view>
+      <header class="app-header">
+        <button class="back-btn" data-close type="button">← Tilbake</button>
+        <h2>Kurs &amp; Fag</h2>
+      </header>
+      <div class="app-content">
+        <div class="chip-group" data-chip-group>
+          <button class="chip" type="button">Innholdskommunikasjon</button>
+          <button class="chip" type="button">Markedsføring &amp; forbrukeratferd</button>
+          <button class="chip" type="button">Kreative innovasjoner</button>
+          <button class="chip" type="button">Kreativt webprosjekt</button>
+          <button class="chip" type="button">Interaksjonsdesign</button>
+          <button class="chip" type="button">Reklame &amp; visuell kommunikasjon</button>
+          <button class="chip" type="button">Digitale verktøy</button>
+          <button class="chip" type="button">Kvantitativ metode</button>
+          <button class="chip" type="button">Etikk/bærekraft &amp; samfunnsansvar</button>
+          <button class="chip" type="button">AI i praksis</button>
+          <button class="chip" type="button">Samfunnsvitenskapelig metode</button>
+          <button class="chip" type="button">Bedriftsøkonomi</button>
+        </div>
+        <p class="chip-placeholder" id="kursPlaceholder">Klikk på et fag for en kort beskrivelse.</p>
+      </div>
+    </section>
+
+    <!-- APP: OM MEG -->
+    <section class="app-view" id="app-ommeg" data-app-view>
+      <header class="app-header">
+        <button class="back-btn" data-close type="button">← Tilbake</button>
+        <h2>Om meg</h2>
+      </header>
+      <div class="app-content">
+        <p class="ommeg-intro">Jeg bygger rundt det som faktisk kjennes. Som brand strateg leter jeg etter sammenhengen mellom det rå og det gjennomtenkte: systemet under overflaten, og følelsen som gjør at noen bryr seg i utgangspunktet. Det som er slitt, dramatisk og ekte slår alltid det som er polert og tomt.</p>
+
+        <div class="interlude-band">
+          <p>Jeg lærer ikke for å samle vitnemål — jeg lærer for å kunne bruke det. Bandet var det som fikk meg til å ville forstå markedsføring i utgangspunktet. Håndverket — tømrer, montør — er grunnen til at jeg i dag kan bygge mitt eget musikkrom med akustikk som faktisk fungerer. Alt henger sammen, fordi jeg ikke tåler at det ikke gjør det.</p>
+        </div>
+
+        <div class="chip-group" data-chip-group>
+          <button class="chip" type="button">Band &amp; låtskriving</button>
+          <button class="chip" type="button">Trening</button>
+          <button class="chip" type="button">Historie &amp; mytologi</button>
+        </div>
+        <p class="chip-placeholder" id="ommegPlaceholder">Klikk på en interesse for litt mer.</p>
+
+        <a class="btn-download" href="assets/cv-placeholder.txt" download="CV-Anders-Hollekim.txt">Last ned CV</a>
+
+        <div class="contact-footer">
+          <h3 class="contact-footer-heading">Kontakt meg</h3>
+          <div class="contact-card">
+            <p class="contact-label">E-post</p>
+            <p class="contact-value">[fyll inn e-post]</p>
+          </div>
+          <div class="contact-card">
+            <p class="contact-label">LinkedIn</p>
+            <a class="contact-value contact-link" href="#">[fyll inn LinkedIn-lenke]</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- APP: VERKTØY -->
+    <section class="app-view" id="app-verktoy" data-app-view>
+      <header class="app-header">
+        <button class="back-btn" data-close type="button">← Tilbake</button>
+        <h2>Verktøy</h2>
+      </header>
+      <div class="app-content">
+        <div class="tool-group">
+          <h3>Design</h3>
+          <div class="tool-grid">
+            <span class="tool-item">Adobe Creative Cloud (Illustrator, Photoshop, InDesign, After Effects)</span>
+            <span class="tool-item">Figma</span>
+            <span class="tool-item">Canva</span>
+          </div>
+        </div>
+        <div class="tool-group">
+          <h3>SEO &amp; analyse</h3>
+          <div class="tool-grid">
+            <span class="tool-item">RankMath / SEO</span>
+            <span class="tool-item">Google Analytics</span>
+            <span class="tool-item">Google Search Console</span>
+          </div>
+        </div>
+        <div class="tool-group">
+          <h3>Web &amp; utvikling</h3>
+          <div class="tool-grid">
+            <span class="tool-item">WordPress</span>
+            <span class="tool-item">VS Code</span>
+          </div>
+        </div>
+        <div class="tool-group">
+          <h3>AI &amp; produktivitet</h3>
+          <div class="tool-grid">
+            <span class="tool-item">Klang.ai</span>
+            <span class="tool-item">Claude &amp; ChatGPT</span>
+            <span class="tool-item">Obsidian</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+      </div><!-- /.portal-page -->
+      </div><!-- /.screen -->
+
+      </div><!-- /.workspace -->
+
+    </div><!-- /.device -->
+  </div><!-- /.device-tilt -->
+</div><!-- /.intro-scene -->
+      <div class="device-topbar">
+        <span class="wordmark" id="wordmark">
+          <span class="wordmark-letter">A</span><span class="wordmark-letter">N</span><span class="wordmark-letter">N</span><span class="wordmark-letter">I</span><span class="wordmark-letter">S</span><span class="wordmark-letter">J</span>
+        </span>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Bytt fargetema" title="Bytt fargetema">◐</button>
+      </div>
+      <!-- Viewport-relative hand: independent of the table camera. -->
+      <div class="desktop" id="desktop">
+        <div class="desktop-icons">
+
+          <div class="desktop-vortex" aria-hidden="true"></div>
+
+          <!-- Bordet: one hand of cards, fanned out as if held up in front
+               of you — not several separate piles. Each card is its own
+               destination; there's no pile/pick step anymore. -->
+          <div class="card-hand">
+            <div class="hand-card hand-card--prosjekter">
+              <button class="sub-card" data-app="prosjekter" type="button">
+                <span class="sub-card-title">Prosjekter</span>
+              </button>
+            </div>
+            <div class="hand-card hand-card--arbeidserfaring">
+              <button class="sub-card" data-app="arbeidserfaring" type="button">
+                <span class="sub-card-title">Arbeidserfaring</span>
+              </button>
+            </div>
+            <div class="hand-card hand-card--kurs">
+              <button class="sub-card" data-app="kurs" type="button">
+                <span class="sub-card-title">Kurs &amp; Fag</span>
+              </button>
+            </div>
+            <div class="hand-card hand-card--verktoy">
+              <button class="sub-card" data-app="verktoy" type="button">
+                <span class="sub-card-title">Verktøy</span>
+              </button>
+            </div>
+            <div class="hand-card hand-card--ommeg">
+              <button class="sub-card sub-card--ommeg" data-app="ommeg" type="button">
+                <span class="sub-card-title">Om meg</span>
+                <span class="sub-card-footer">Kontakt meg</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /.desktop -->
+</main>
+
+<!-- TEMPORARY dev nav: jump back to the tap phase, or skip past it -->
+<div class="dev-nav">
+  <button type="button" id="introBack" class="dev-nav-btn" title="Tilbake til tap-fasen" aria-label="Tilbake til tap-fasen">◀</button>
+  <button type="button" id="introForward" class="dev-nav-btn" title="Hopp forbi tap-fasen" aria-label="Hopp forbi tap-fasen">▶</button>
+</div>
+
+<script>
+window.addEventListener('error', (e) => {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;top:0;left:0;z-index:999999;background:#fff;color:#c00;font:12px monospace;padding:8px;white-space:pre-wrap;max-width:100vw;';
+  box.textContent = 'JS ERROR: ' + e.message + '\n' + (e.filename || '') + ':' + e.lineno + ':' + e.colno + '\n' + (e.error && e.error.stack || '');
+  document.body.appendChild(box);
+});
+</script>
+<script src="portal-effects.js"></script>
+<script src="portal-depth.js"></script>
+<script src="script.js"></script>
+<script src="dev/arrange.js"></script></body>
+</html>

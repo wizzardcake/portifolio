@@ -1,0 +1,277 @@
+/* Physical aperture, recessed walls and the material that becomes a page. */
+.device { background: transparent; animation: none; }
+/* The material owns its 3D rendering. A flat wrapper preserves the camera
+   perspective without letting its empty plane intercept the seal's input. */
+.device-tilt {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  transform-style: flat;
+  /* The approach ends at this seated position. Do not shrink the table and
+     hand together: the hand now has its own viewport coordinate system. */
+  transform: translate(var(--camera-pan-x, 0px), var(--camera-pan-y, 0px));
+  transition: transform 1.5s cubic-bezier(.32, .6, .2, 1);
+}
+body:not(.intro-active) .intro-scene { position: fixed; inset: 0; perspective: 1400px; }
+/* Unlocking keeps the same seated camera and stationary tabletop. */
+body.portal-unlocked .device-tilt { transition: transform 1.5s cubic-bezier(.4, .85, .3, 1); }
+/* Approach and resting poses share the table's composition anchor. */
+.device-tilt.intro-pose, .device-tilt.intro-pose-zoomed {
+  transform-origin: 50% 58%;
+  animation: none;
+}
+/* A straight dolly toward a stationary table, not a rotating object. */
+.device-tilt.intro-pose {
+  transform: translateZ(-3600px);
+}
+.device-tilt.intro-walking { transition: none; }
+body.intro-active .device { animation: none; }
+body.intro-active .intro-orbit { visibility: hidden; }
+/* The same table at arm's reach. Its local plane remains horizontal after
+   unlocking too; only the material rises off it. */
+.device-tilt.intro-pose-zoomed {
+  transform: translateZ(0);
+}
+.screen, body.intro-active .screen {
+  --view-pitch: 62deg;
+  --view-yaw: 0deg;
+  position: absolute; left: 50%; top: 58%;
+  width: min(68vw, 136dvh); height: auto; aspect-ratio: 8 / 5;
+  display: flex; flex: none;
+  align-self: center; justify-self: center;
+  transform-style: preserve-3d;
+  transform: translate(-50%, -50%) perspective(1300px) rotateX(var(--view-pitch));
+  background: none;
+  border: 2px solid transparent;
+  border-radius: 0;
+  filter: none;
+  box-shadow: none;
+  animation: none;
+  isolation: auto;
+}
+.screen.hidden { display: flex; }
+.portal-table {
+  position: absolute; inset: -24% -20% -44%;
+  transform-style: preserve-3d; pointer-events: none;
+  background: none; box-shadow: none;
+}
+.portal-table-top {
+  position: absolute; inset: 0; border-radius: 4%;
+  background:
+    radial-gradient(ellipse 7% 27% at 10.94% 52%, #438b8224, transparent),
+    radial-gradient(ellipse 7% 27% at 89.06% 52%, #71609724, transparent),
+    repeating-linear-gradient(4deg, #a9926507 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(96deg, transparent 0 43px, #06070728 44px 45px),
+    linear-gradient(125deg, #38352b, #25241f 45%, #302b22);
+  /* Only this ring contains table material. The opening is empty. */
+  clip-path: polygon(evenodd, 0 0,100% 0,100% 100%,0 100%,0 0,
+    10.9375% 14.2857%,10.9375% 85.7143%,89.0625% 85.7143%,89.0625% 14.2857%,10.9375% 14.2857%);
+  box-shadow: inset 0 0 0 2px #9e8f6b32, inset 0 0 24px #0006;
+}
+.portal-table::after {
+  content: ''; position: absolute; top: 100%; left: 2%; right: 2%; height: 18px;
+  transform-origin: top; transform: rotateX(-90deg);
+  background: linear-gradient(#29261e, #131411); border-radius: 0 0 5px 5px;
+}
+.table-leg {
+  position: absolute; width: 18px; height: clamp(70px, 9vw, 125px);
+  transform-origin: top; transform: rotateX(-90deg);
+  background: linear-gradient(90deg, #131611, #333127 40%, #151812);
+  border-radius: 0 0 7px 7px;
+}
+.table-leg--back-left { left: 5%; top: 7%; }
+.table-leg--back-right { right: 5%; top: 7%; }
+.table-leg--front-left { left: 5%; top: 94%; }
+.table-leg--front-right { right: 5%; top: 94%; }
+.intro-floor { display: none; }
+.screen::before, .screen::after { content: none; }
+/* Keep the aperture on its own plane and let the material lift out of it.
+   Only this local branch preserves depth; the outer device remains flat
+   so its empty bounding box cannot intercept pointer input. */
+body.portal-unlocked .screen {
+  isolation: auto;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+body.portal-unlocked .screen .app-view.active,
+body.portal-unlocked .screen .portal-retrieve { pointer-events: auto; }
+body.portal-unlocked .screen.is-projecting .app-view { pointer-events: none; }
+.screen-tunnel, body.intro-active .screen-tunnel,
+:where(body.intro-done) .screen-tunnel, .screen-tunnel.approach {
+  overflow: visible; opacity: 1; background: none; box-shadow: none;
+  z-index: auto; border-radius: 0; transform: none;
+  transform-style: preserve-3d; pointer-events: none;
+}
+.screen.portal-active .screen-tunnel { animation: none; }
+.screen-tunnel::after { content: none; }
+/* Actual vertical faces: upper edges at Z=0, lower edges below the table. */
+.portal-wall {
+  position: absolute; backface-visibility: hidden; pointer-events: none;
+  --wall-material: #343126 0px, #25251f 15px, #11191c 18px,
+    #0c1720 30%, #050a10 70%, transparent 100%;
+}
+.portal-wall--top {
+  top: 0; left: 0; width: 100%; height: var(--well-depth, 200px);
+  transform-origin: top; transform: rotateX(-90deg);
+  background: linear-gradient(180deg, var(--wall-material));
+}
+.portal-wall--bottom {
+  bottom: 0; left: 0; width: 100%; height: var(--well-depth, 200px);
+  transform-origin: bottom; transform: rotateX(90deg);
+  background: linear-gradient(0deg, var(--wall-material));
+}
+.portal-wall--left {
+  top: 0; left: 0; width: var(--well-depth, 200px); height: 100%;
+  transform-origin: left; transform: rotateY(90deg);
+  background: linear-gradient(90deg, var(--wall-material));
+  clip-path: polygon(0 0,100% 0,100% var(--wall-front-cut, 55%),0 100%);
+}
+.portal-wall--right {
+  top: 0; right: 0; width: var(--well-depth, 200px); height: 100%;
+  transform-origin: right; transform: rotateY(-90deg);
+  background: linear-gradient(270deg, var(--wall-material));
+  clip-path: polygon(0 0,100% 0,100% 100%,0 var(--wall-front-cut, 55%));
+}
+.portal-depth-layer {
+  position: absolute; left: 50%; top: 50%; pointer-events: none;
+  transform: translate(-50%, -50%) translate3d(var(--layer-x, 0px), var(--layer-y, 0px), var(--layer-z, -300px))
+    rotateX(calc(var(--view-pitch) * -1));
+}
+.portal-abyss {
+  width: 160%; height: 95%;
+  background: radial-gradient(ellipse, #010207 25%, #020309 53%, transparent 72%);
+}
+.portal-stars { width: 130%; height: 66%; }
+.portal-stars i {
+  position: absolute; width: var(--star-size); height: var(--star-size);
+  border-radius: 50%; background: #b4c5db; opacity: var(--star-alpha);
+}
+.portal-fog { width: 98%; height: 44%;
+  background: radial-gradient(ellipse at 23% 50%, #276e6966, transparent 35%),
+    radial-gradient(ellipse at 76% 46%, #58407a66, transparent 35%);
+}
+.portal-fog--deep { width: 110%; height: 58%; }
+.portal-depth { display: none; width: 100%; height: 100%; pointer-events: none; }
+.portal-fog.webgl { background: none; }
+.portal-fog.webgl .portal-depth { display: block; }
+.portal-particles { position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none; }
+.portal-mote {
+  position: absolute; left: 50%; top: 50%; border-radius: 50%;
+  width: var(--mote-size); height: var(--mote-size); background: var(--mote-color);
+  transform: translate(-50%, -50%) translate3d(var(--mote-x), var(--mote-y), var(--mote-z))
+    rotateX(calc(var(--view-pitch) * -1));
+}
+/* Retain the intro's layout reference, without a disc across the opening. */
+.intro-indicator-track {
+  visibility: hidden;
+  width: calc(var(--indicator-radius) * 1.9); height: calc(var(--indicator-radius) * 1.9);
+  margin: calc(var(--indicator-radius) * -.95); border: 7px solid transparent;
+  transform-style: preserve-3d;
+}
+.portal-origin { position: absolute; top: 50%; left: 50%; width: 0; height: 0; pointer-events: none; }
+.portal-contact {
+  /* A hovering orb casts no reflection onto an open void. */
+  display: none;
+}
+.portal-matter {
+  position: absolute; z-index: 4; pointer-events: none;
+  left: 50%; top: 50%; width: calc(var(--indicator-radius) * 1.76); aspect-ratio: 1;
+  transform: translate(-50%, -50%) translateZ(var(--matter-height, 0px))
+    rotateY(var(--matter-face-yaw, 0deg)) rotateX(var(--matter-face-pitch, 0deg));
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 30% 23%, #adb9a0, #567f76 21%, #243e39 46%, #090e12 78%);
+  box-shadow: inset -15px -20px 26px #0008, 0 12px 24px #0008;
+}
+.portal-matter canvas { display: block; width: 100%; height: 100%; }
+.portal-matter.webgl { background: none; box-shadow: none; border-radius: 0; }
+.portal-matter.is-liquid:not(.webgl) { animation: liquid-shape 6s ease-in-out infinite alternate; }
+.intro-indicator {
+  width: var(--seal-size); height: var(--seal-size); margin: 0;
+  /* The extra calc() term must match #portalMatter's own yOffset
+     (portal-effects.js) so the invisible grab target stays lined up with
+     the visible ball instead of drifting from it. */
+  transform: translate(-50%, calc(-50% + var(--seal-y-offset, 0px))) translateZ(var(--seal-height)) rotateX(calc(var(--view-pitch) * -1));
+  background: none; box-shadow: none; overflow: visible; z-index: 5;
+}
+.intro-indicator .ball-globe { opacity: .16; }
+.portal-matter.webgl ~ .intro-indicator .ball-globe { display: none; }
+.intro-indicator:focus-visible { outline: 2px solid #d2b783; outline-offset: 8px; }
+body.portal-unlocked .intro-indicator { pointer-events: none; visibility: hidden; }
+body.portal-unlocked .portal-matter { filter: drop-shadow(0 22px 20px #0007); }
+.portal-hint {
+  position: absolute; bottom: 6%; left: 0; width: 100%; text-align: center;
+  color: #b6c2ba; font: 400 10px var(--font-body); letter-spacing: .13em;
+  z-index: 4; pointer-events: none; transition: opacity .3s;
+}
+body.portal-unlocked .portal-hint { opacity: 0; }
+.desktop-vortex { display: none; }
+/* Empty card wrappers must not cover the projected page's exposed controls.
+   Visible cards retain their hit areas and the existing drag handlers. */
+body:has(.screen.portal-active) .desktop { pointer-events: none; }
+body:has(.screen.portal-active) .hand-card .sub-card { pointer-events: auto; }
+/* Only the thrown card's lifecycle hides it. Keep the rest of the hand. */
+body:not(.intro-done) .hand-card { visibility: hidden; pointer-events: none; }
+body:not(.intro-done) .theme-toggle { visibility: hidden; }
+.portal-flight {
+  position: fixed !important; z-index: 200; margin: 0 !important; pointer-events: none !important;
+  animation: none !important; translate: none !important; rotate: none !important; scale: none !important;
+  transform-origin: center; will-change: transform, opacity;
+}
+/* The page is emitted above the table, facing the reader. It does not
+   stand the physical portal up or change the position of the tabletop. */
+.portal-page {
+  position: absolute; left: 50%; top: 50%; z-index: 5; pointer-events: none;
+  width: var(--page-width, 100%); height: var(--page-size, 480px);
+  /* --page-y-offset matches #portalMatter's own JS-computed y compensation
+     (portal-effects.js) — without it the page lifts up off the top of the
+     viewport at any real lift amount, since this element is positioned by
+     its own CSS transform rather than that JS rect. */
+  transform: translate(-50%, calc(-50% + var(--page-y-offset, 0px))) translateZ(var(--page-lift, 80px)) rotateX(calc(var(--view-pitch) * -1));
+}
+.screen .app-view {
+  position: absolute; inset: 5%; z-index: 5; border-radius: 14px 18px 12px 16px;
+  background: radial-gradient(ellipse at 20% 0, rgba(var(--portal-glow-rgb, 40,85,76), .16), transparent 65%),
+    linear-gradient(155deg, #24333085, #101918ba 40%, #13131cba);
+  border: 1px solid #a0b1a34a;
+  box-shadow: inset 1px 2px 1px #dae9c620, inset -2px -3px 6px #0009, 0 14px 20px #0008;
+  opacity: 0; transform: perspective(900px) translateZ(12px) scale(.97);
+  transition: opacity .5s, transform .7s cubic-bezier(.2,.7,.2,1);
+}
+.screen .app-view.active { opacity: 1; transform: translateZ(2px) scale(1); }
+.screen.is-projecting .app-view { opacity: 0; pointer-events: none; }
+.screen.is-projecting .portal-retrieve { visibility: hidden; }
+.screen .app-view.active .app-header, .screen .app-view.active .app-content {
+  animation: projected-content .65s both;
+}
+.screen .app-view.active .app-content { animation-delay: .1s; }
+.screen .app-view .app-content { padding-bottom: 76px; }
+.screen .app-content { scrollbar-width: thin; scrollbar-color: #74877a66 #0c131333; }
+.portal-retrieve { z-index: 7; bottom: 7%; border-color: #8a9c8155; background: #18221ff2; transform: translateZ(6px); }
+.portal-retrieve:hover { transform: translate3d(0, -2px, 6px); }
+body.scene-interacting .device { animation-play-state: paused; }
+@keyframes projected-content {
+  from { opacity: 0; filter: blur(5px); transform: translateY(15px); }
+  to { opacity: 1; filter: blur(0); transform: translateY(0); }
+}
+@keyframes liquid-shape {
+  from { border-radius: 30% 70% 62% 38% / 58% 30% 70% 42%; }
+  to { border-radius: 70% 30% 26% 74% / 34% 66% 34% 66%; }
+}
+@media (max-width: 899px) {
+  .screen, body.intro-active .screen { width: 66vw; aspect-ratio: 4 / 5; top: 64%; font-size: 14px; }
+  .portal-table { bottom: -90%; }
+  .hand-card { width: clamp(130px, 22dvh, 180px); }
+  .hand-card .sub-card { font-size: 12px; }
+  .device-topbar { inset: 18px 16px auto; }
+  .screen .app-view { inset: 4%; }
+  .portal-hint { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .device, .device-tilt, .portal-matter, .app-header, .app-content { animation: none !important; }
+  .screen .app-view { transition-duration: .01s; }
+  .device-tilt, body.portal-unlocked .device-tilt { transition-duration: .01s; }
+}
+/* A short phone landscape viewport uses the wide composition. */
+@media (max-width: 899px) and (min-aspect-ratio: 1/1) {
+  .screen, body.intro-active .screen { width: min(68vw, 136dvh); aspect-ratio: 8 / 5; top: 58%; }
+  .portal-table { bottom: -44%; }
+  .hand-card { width: 25dvh; bottom: -6dvh; }
+}

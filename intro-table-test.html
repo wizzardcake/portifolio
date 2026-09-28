@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<title>Intro-bord — test</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #sceneContainer { width: 100%; height: 100%; position: relative; }
+  #sceneContainer canvas.dragging { cursor: grabbing !important; }
+  #panel {
+    position: fixed; top: 12px; left: 12px; z-index: 10;
+    font: 12px/1.5 monospace; color: #cfe; background: rgba(0,0,0,0.6);
+    padding: 12px 14px; border-radius: 8px; display: flex; flex-direction: column; gap: 10px;
+    width: 250px;
+  }
+  #panel h2 { font-size: 12px; margin: 0; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.06em; }
+  #status { border-top: 1px solid rgba(255,255,255,0.15); padding-top: 8px; opacity: 0.85; }
+  #status div { display: flex; justify-content: space-between; }
+  #hint { position: fixed; bottom: 10px; left: 12px; z-index: 10; font: 11px monospace; color: #7a9; opacity: 0.7; }
+</style>
+</head>
+<body>
+  <div id="sceneContainer"></div>
+  <div id="hint">dra kulen for å spinne den opp</div>
+
+  <div id="panel">
+    <h2>Intro-bord (Three.js)</h2>
+    <div id="status">
+      <div><span>spinIntensity</span><span id="statSpin">0.00</span></div>
+      <div><span>rotasjonshastighet</span><span id="statRot">0.00</span></div>
+      <div><span>fluiditet (noise-amp)</span><span id="statNoise">0.000</span></div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import { createIntroTableScene } from './scene.js';
+
+    const container = document.getElementById('sceneContainer');
+    const handle = createIntroTableScene(container);
+
+    const statSpin = document.getElementById('statSpin');
+    const statRot = document.getElementById('statRot');
+    const statNoise = document.getElementById('statNoise');
+    (function statusLoop() {
+      requestAnimationFrame(statusLoop);
+      statSpin.textContent = handle.state.spinIntensity.toFixed(2);
+      statRot.textContent = handle.status.rotationSpeed.toFixed(2);
+      statNoise.textContent = handle.status.noiseAmp.toFixed(3);
+    })();
+  </script>
+</body>
+</html>

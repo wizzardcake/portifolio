@@ -9,11 +9,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="portal.css">
+<link rel="stylesheet" href="room.css">
 </head>
-<body class="intro-active">
+<body class="intro-active table-covered">
 
 <main class="experience" id="experience" aria-label="Interaktiv portfolio">
 <div class="intro-scene" id="introScene">
+  <div class="room-shell" id="roomShell" aria-hidden="true"><canvas id="roomCanvas"></canvas></div>
   <div class="intro-floor"></div>
 
   <div class="device-tilt intro-pose" id="deviceTilt">
@@ -43,10 +45,14 @@
            portal itself. -->
       <div class="screen hidden" id="screen">
 
-        <div class="portal-table" aria-hidden="true">
-          <div class="portal-table-top"></div>
-          <i class="table-leg table-leg--back-left"></i><i class="table-leg table-leg--back-right"></i>
-          <i class="table-leg table-leg--front-left"></i><i class="table-leg table-leg--front-right"></i>
+        <div class="portal-table">
+          <div class="portal-table-top" aria-hidden="true"></div>
+          <i class="table-leg table-leg--back-left" aria-hidden="true"></i><i class="table-leg table-leg--back-right" aria-hidden="true"></i>
+          <i class="table-leg table-leg--front-left" aria-hidden="true"></i><i class="table-leg table-leg--front-right" aria-hidden="true"></i>
+          <!-- Hit area and keyboard control of the cloth covering the table;
+               room-scene.js draws the cloth, inscription included. The words
+               here only show on the CSS stand-in when WebGL is unavailable. -->
+          <button class="table-cloth" id="tableCloth" type="button" aria-label="Ikke dra i teppet – dra duken av bordet for å avdekke portalen"><span class="cloth-words" aria-hidden="true">ikke dra<br>i teppet</span></button>
         </div>
 
         <!-- An empty aperture at Z=0. Walls and atmosphere are separate
@@ -65,7 +71,7 @@
         <span class="portal-origin" aria-hidden="true"></span>
         <div class="portal-contact" aria-hidden="true"></div>
         <div class="portal-matter" id="portalMatter" aria-hidden="true"><canvas></canvas></div>
-        <p class="portal-hint" id="portalHint">Drei kulen for å åpne</p>
+        <p class="portal-hint" id="portalHint"></p>
 
         <!-- Boot-ritual charge dial — lives on the screen itself (like a
              display embedded in it), not floating loose around the device. -->
@@ -270,6 +276,8 @@
 
     </div><!-- /.device -->
   </div><!-- /.device-tilt -->
+  <!-- Furniture between the viewer and the table: layered above the CSS table. -->
+  <div class="room-front" id="roomFront" aria-hidden="true"><canvas id="roomFrontCanvas"></canvas></div>
 </div><!-- /.intro-scene -->
       <div class="device-topbar">
         <span class="wordmark" id="wordmark">
@@ -333,8 +341,11 @@ window.addEventListener('error', (e) => {
   document.body.appendChild(box);
 });
 </script>
+<script src="scene-camera.js"></script>
 <script src="portal-effects.js"></script>
 <script src="portal-depth.js"></script>
+<script src="portal-impact.js"></script>
 <script src="script.js"></script>
+<script type="module" src="room-scene.js"></script>
 <script src="dev/arrange.js"></script></body>
 </html>

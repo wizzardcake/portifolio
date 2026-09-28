@@ -17,28 +17,24 @@ body.portal-unlocked .device-tilt { transition: transform 1.5s cubic-bezier(.4, 
 .device-tilt.intro-pose, .device-tilt.intro-pose-zoomed {
   transform-origin: 50% 58%;
   animation: none;
+  transform: none;
 }
-/* A straight dolly toward a stationary table, not a rotating object. */
-.device-tilt.intro-pose {
-  transform: translateZ(-3600px);
-}
+/* scene-camera.js owns both dolly endpoints; this wrapper never zooms them. */
 .device-tilt.intro-walking { transition: none; }
 body.intro-active .device { animation: none; }
 body.intro-active .intro-orbit { visibility: hidden; }
 /* The same table at arm's reach. Its local plane remains horizontal after
    unlocking too; only the material rises off it. */
-.device-tilt.intro-pose-zoomed {
-  transform: translateZ(0);
-}
 .screen, body.intro-active .screen {
-  --view-pitch: 62deg;
+  --view-pitch: 75deg;
   --view-yaw: 0deg;
-  position: absolute; left: 50%; top: 58%;
+  position: absolute; left: 50%; top: var(--scene-origin-y, 58%);
   width: min(68vw, 136dvh); height: auto; aspect-ratio: 8 / 5;
   display: flex; flex: none;
   align-self: center; justify-self: center;
   transform-style: preserve-3d;
-  transform: translate(-50%, -50%) perspective(1300px) rotateX(var(--view-pitch));
+  transform: translate(-50%, -50%) perspective(var(--scene-focal, 1300px))
+    translate3d(0, var(--table-view-y, 0px), var(--table-view-z, 0px)) rotateX(var(--view-pitch));
   background: none;
   border: 2px solid transparent;
   border-radius: 0;
@@ -48,22 +44,28 @@ body.intro-active .intro-orbit { visibility: hidden; }
   isolation: auto;
 }
 .screen.hidden { display: flex; }
+/* The tabletop is the aperture (.screen) plus a rim: --rim-x per side as a
+   fraction of the aperture width, back/front as fractions of its depth.
+   The legs derive from the same values; the camera does not (scene-camera.js). */
 .portal-table {
-  position: absolute; inset: -24% -20% -44%;
+  --rim-x: .06; --rim-back: .08; --rim-front: .096;
+  position: absolute;
+  inset: calc(-100% * var(--rim-back)) calc(-100% * var(--rim-x)) calc(-100% * var(--rim-front));
   transform-style: preserve-3d; pointer-events: none;
   background: none; box-shadow: none;
 }
 .portal-table-top {
   position: absolute; inset: 0; border-radius: 4%;
   background:
-    radial-gradient(ellipse 7% 27% at 10.94% 52%, #438b8224, transparent),
-    radial-gradient(ellipse 7% 27% at 89.06% 52%, #71609724, transparent),
+    radial-gradient(ellipse 16% 64% at 5.4% 55%, #4ac4b83b, transparent),
+    radial-gradient(ellipse 16% 64% at 94.6% 55%, #7c56be33, transparent),
     repeating-linear-gradient(4deg, #a9926507 0 1px, transparent 1px 7px),
     repeating-linear-gradient(96deg, transparent 0 43px, #06070728 44px 45px),
     linear-gradient(125deg, #38352b, #25241f 45%, #302b22);
-  /* Only this ring contains table material. The opening is empty. */
+  /* Only this ring contains table material. The opening is empty.
+     Pre-script fallback; portal-depth.js cuts the exact aperture. */
   clip-path: polygon(evenodd, 0 0,100% 0,100% 100%,0 100%,0 0,
-    10.9375% 14.2857%,10.9375% 85.7143%,89.0625% 85.7143%,89.0625% 14.2857%,10.9375% 14.2857%);
+    5.3571% 6.8027%,5.3571% 91.8367%,94.6429% 91.8367%,94.6429% 6.8027%,5.3571% 6.8027%);
   box-shadow: inset 0 0 0 2px #9e8f6b32, inset 0 0 24px #0006;
 }
 .portal-table::after {
@@ -71,16 +73,45 @@ body.intro-active .intro-orbit { visibility: hidden; }
   transform-origin: top; transform: rotateX(-90deg);
   background: linear-gradient(#29261e, #131411); border-radius: 0 0 5px 5px;
 }
+/* Each leg is centred in its rim corner, never under the opening. */
 .table-leg {
-  position: absolute; width: 18px; height: clamp(70px, 9vw, 125px);
+  --rim-w: calc(100% * var(--rim-x) / (1 + 2 * var(--rim-x)));
+  --rim-depth: (1 + var(--rim-back) + var(--rim-front));
+  --leg-w: min(18px, var(--rim-w) * .7);
+  --leg-x: calc(var(--rim-w) / 2 - var(--leg-w) / 2);
+  position: absolute; width: var(--leg-w); height: var(--table-leg-length, 125px);
   transform-origin: top; transform: rotateX(-90deg);
   background: linear-gradient(90deg, #131611, #333127 40%, #151812);
   border-radius: 0 0 7px 7px;
 }
-.table-leg--back-left { left: 5%; top: 7%; }
-.table-leg--back-right { right: 5%; top: 7%; }
-.table-leg--front-left { left: 5%; top: 94%; }
-.table-leg--front-right { right: 5%; top: 94%; }
+.table-leg--back-left, .table-leg--front-left { left: var(--leg-x); }
+.table-leg--back-right, .table-leg--front-right { right: var(--leg-x); }
+.table-leg--back-left, .table-leg--back-right { top: calc(50% * var(--rim-back) / var(--rim-depth)); }
+.table-leg--front-left, .table-leg--front-right { top: calc(100% - 50% * var(--rim-front) / var(--rim-depth)); }
+/* Hit area and keyboard control of the cloth over the table. room-scene.js
+   draws the cloth itself above the table; this button lies in the tabletop
+   plane and only shows its own velvet when WebGL is unavailable. */
+.table-cloth {
+  position: absolute; inset: -4% -3%; margin: 0; padding: 0; border: 0; border-radius: 3%;
+  transform: translateZ(4px); cursor: grab; pointer-events: none; touch-action: none;
+  background: radial-gradient(ellipse at 50% 45%, #2c1f36, #150e1c 72%);
+  box-shadow: inset 0 0 0 9px #150e1c, inset 0 0 0 11px #8a6d4466, inset 0 0 40px #000a;
+  transition: opacity .9s ease, transform 1.2s cubic-bezier(.55, 0, .8, .45);
+}
+.table-cloth.is-webgl { background: none; box-shadow: none; }
+.table-cloth.is-pulling { cursor: grabbing; }
+.table-cloth:focus-visible { outline: 2px solid #d2b783; outline-offset: 6px; }
+body.table-covered #deviceTilt[data-approach="ready"] .table-cloth { pointer-events: auto; }
+.table-cloth.is-removed { opacity: 0; transform: translate3d(0, 55%, 4px); pointer-events: none; }
+/* The stand-in's inscription, lying in the tabletop plane like the cloth's. */
+.cloth-words {
+  display: block; width: 70%; margin: auto; text-align: center; line-height: 1.1;
+  font: 600 clamp(30px, 7.5vw, 110px) 'Cinzel', Georgia, serif; letter-spacing: .06em;
+  color: #d8b36d; text-shadow: 0 0 14px #8f6ad6aa, 0 0 30px #4fd6a266;
+  /* Stretched along the table's depth, like the cloth's own, to read upright. */
+  transform: scaleY(2.2);
+}
+.table-cloth.is-webgl .cloth-words { visibility: hidden; }
 .intro-floor { display: none; }
 .screen::before, .screen::after { content: none; }
 /* Keep the aperture on its own plane and let the material lift out of it.
@@ -100,6 +131,9 @@ body.portal-unlocked .screen.is-projecting .app-view { pointer-events: none; }
   z-index: auto; border-radius: 0; transform: none;
   transform-style: preserve-3d; pointer-events: none;
 }
+/* Under the cloth the portal lies dormant; its depths wake as it is uncovered. */
+.screen-tunnel { transition: opacity 1.6s ease .2s; }
+body.table-covered .screen-tunnel { opacity: 0; }
 .screen.portal-active .screen-tunnel { animation: none; }
 .screen-tunnel::after { content: none; }
 /* Actual vertical faces: upper edges at Z=0, lower edges below the table. */
@@ -159,6 +193,26 @@ body.portal-unlocked .screen.is-projecting .app-view { pointer-events: none; }
   transform: translate(-50%, -50%) translate3d(var(--mote-x), var(--mote-y), var(--mote-z))
     rotateX(calc(var(--view-pitch) * -1));
 }
+/* Impact reaction (portal-impact.js): rings, glow and embers on the aperture
+   plane; portal-impact.js animates their size, position and opacity. */
+.portal-impact { position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none; }
+/* The surface (rings, glow pool) is clipped to the opening, which flattens it
+   onto the aperture plane; flare and embers stay in 3D beside it. */
+.portal-impact i { position: absolute; left: 0; top: 0; display: block; pointer-events: none; opacity: 0; }
+.portal-impact > .portal-impact-surface {
+  width: 100%; height: 100%; opacity: 1;
+  transform: translateZ(-1px); clip-path: inset(0);
+}
+.portal-impact .portal-impact-pool { width: 100%; height: 100%; }
+.portal-impact-ring { border-radius: 50%; }
+.portal-impact-ring--wave { border: 2px solid #8cf0dcd9; box-shadow: 0 0 14px #6fe3d099, inset 0 0 10px #b995f580; }
+.portal-impact-ring--pull { border: 1.5px solid #ffc46bcc; box-shadow: 0 0 12px #ff8a4a80, inset 0 0 14px #b995f580; }
+.portal-impact-ring--after { border: 1px solid #b995f5b3; box-shadow: 0 0 20px #6fe3d066; }
+.portal-impact-flare {
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff6dcf2 0, #ffcf7ad9 11%, #ff8f5a66 25%, #b58cf04d 42%, #4fd6c233 58%, transparent 70%);
+}
+.portal-impact-ember { border-radius: 50%; }
 /* Retain the intro's layout reference, without a disc across the opening. */
 .intro-indicator-track {
   visibility: hidden;
@@ -183,18 +237,9 @@ body.portal-unlocked .screen.is-projecting .app-view { pointer-events: none; }
 .portal-matter canvas { display: block; width: 100%; height: 100%; }
 .portal-matter.webgl { background: none; box-shadow: none; border-radius: 0; }
 .portal-matter.is-liquid:not(.webgl) { animation: liquid-shape 6s ease-in-out infinite alternate; }
-.intro-indicator {
-  width: var(--seal-size); height: var(--seal-size); margin: 0;
-  /* The extra calc() term must match #portalMatter's own yOffset
-     (portal-effects.js) so the invisible grab target stays lined up with
-     the visible ball instead of drifting from it. */
-  transform: translate(-50%, calc(-50% + var(--seal-y-offset, 0px))) translateZ(var(--seal-height)) rotateX(calc(var(--view-pitch) * -1));
-  background: none; box-shadow: none; overflow: visible; z-index: 5;
-}
-.intro-indicator .ball-globe { opacity: .16; }
-.portal-matter.webgl ~ .intro-indicator .ball-globe { display: none; }
-.intro-indicator:focus-visible { outline: 2px solid #d2b783; outline-offset: 8px; }
-body.portal-unlocked .intro-indicator { pointer-events: none; visibility: hidden; }
+/* The spin-to-unlock seal is retired: pulling the cloth off the table now
+   opens the portal and wakes the orb (see .table-cloth). */
+.intro-indicator { display: none; }
 body.portal-unlocked .portal-matter { filter: drop-shadow(0 22px 20px #0007); }
 .portal-hint {
   position: absolute; bottom: 6%; left: 0; width: 100%; text-align: center;
@@ -256,8 +301,8 @@ body.scene-interacting .device { animation-play-state: paused; }
   to { border-radius: 70% 30% 26% 74% / 34% 66% 34% 66%; }
 }
 @media (max-width: 899px) {
-  .screen, body.intro-active .screen { width: 66vw; aspect-ratio: 4 / 5; top: 64%; font-size: 14px; }
-  .portal-table { bottom: -90%; }
+  .screen, body.intro-active .screen { width: 66vw; aspect-ratio: 4 / 5; font-size: 14px; }
+  .portal-table { --rim-front: .35; }
   .hand-card { width: clamp(130px, 22dvh, 180px); }
   .hand-card .sub-card { font-size: 12px; }
   .device-topbar { inset: 18px 16px auto; }
@@ -271,7 +316,7 @@ body.scene-interacting .device { animation-play-state: paused; }
 }
 /* A short phone landscape viewport uses the wide composition. */
 @media (max-width: 899px) and (min-aspect-ratio: 1/1) {
-  .screen, body.intro-active .screen { width: min(68vw, 136dvh); aspect-ratio: 8 / 5; top: 58%; }
-  .portal-table { bottom: -44%; }
+  .screen, body.intro-active .screen { width: min(68vw, 136dvh); aspect-ratio: 8 / 5; }
+  .portal-table { --rim-front: .096; }
   .hand-card { width: 25dvh; bottom: -6dvh; }
 }

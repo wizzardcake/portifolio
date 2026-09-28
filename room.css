@@ -1,0 +1,15 @@
+/* Architectural renderer only. Its canvas never participates in layout/input. */
+.intro-scene { background: #17191c; }
+.room-shell { position: absolute; inset: 0; pointer-events: none; }
+.room-shell canvas { display: block; width: 100%; height: 100%; }
+.device-tilt { pointer-events: none; }
+body.intro-active .intro-indicator { pointer-events: auto; }
+.room-shell:not(.is-ready) {
+  background: linear-gradient(155deg,#292621,#151b25 48%,#292522);
+}
+.room-shell.room-fallback { background: url('./assets/room-fallback.svg') center / 100% 100% no-repeat; }
+.room-fallback canvas { display: none; }
+/* Transparent furniture layer over the CSS table and under the held cards. */
+.room-front { position: absolute; inset: 0; pointer-events: none; }
+.room-front canvas { display: block; width: 100%; height: 100%; }
+.room-front:not(.is-ready) { display: none; }

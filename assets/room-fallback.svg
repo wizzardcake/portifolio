@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1000" preserveAspectRatio="none">
+  <!-- Texture-free architectural fallback when WebGL is unavailable: the seated
+       view of the shell with the left alcove window and the round right tower. -->
+  <defs>
+    <linearGradient id="floor" x2="0" y2="1"><stop stop-color="#272727"/><stop offset="1" stop-color="#382f23"/></linearGradient>
+    <linearGradient id="left"><stop stop-color="#40372b"/><stop offset="1" stop-color="#2a2826"/></linearGradient>
+    <linearGradient id="tower"><stop stop-color="#2c2d33"/><stop offset=".55" stop-color="#262830"/><stop offset="1" stop-color="#1e1b22"/></linearGradient>
+  </defs>
+  <path fill="#2a241e" d="M0 0H1920V1000H0Z"/>
+  <path fill="url(#left)" d="M0 0L527 65Q600 86 667 90L704 464Q640 468 589 487L0 870Z"/>
+  <path fill="#303031" d="M667 90H1093L1076 465H912L907 224Q880 150 803 125Q736 150 710 224L732 465H704Z"/>
+  <path fill="#1d1c1c" d="M732 465L710 224Q736 150 803 125Q880 150 907 224L912 465Z"/>
+  <path fill="#141e2e" d="M780 385L771 258Q776 212 823 180Q878 212 883 258L886 385Z"/>
+  <path fill="#505155" d="M770 386H896V398H770Z"/>
+  <path fill="url(#tower)" d="M1093 90Q1240 130 1400 104Q1560 70 1700 0H1920V880L1448 579L1554 546L1492 489Q1420 455 1348 452Q1270 438 1207 441L1076 465Z"/>
+  <!-- Lancets stepped up with the spiral stair, which climbs leftward out of view. -->
+  <g fill="#141e2e">
+    <path d="M1408 362V170Q1412 128 1432 104Q1452 128 1456 170V362Z"/>
+    <path d="M1318 318V112Q1322 64 1344 38Q1366 64 1370 112V318Z"/>
+    <path d="M1240 262V60Q1244 10 1266 -14Q1288 10 1292 60V262Z"/>
+  </g>
+  <path fill="#6f685f" d="M1330 485H1400v-39h-20v-39h-20v-39h-20v-39h-20v-39h-20v-39h-20v-39h-20v-39h-20v-39h-20v-39h-20v-39H1110L1330 485Z"/>
+  <g stroke="#111" fill="none">
+    <path stroke-width="5" d="M1406 392L1196 -24"/>
+    <path stroke-width="3" d="M1400 440V380M1360 400V300M1320 322V222M1280 243V143M1240 164V64M1200 85V-15"/>
+  </g>
+  <path fill="url(#floor)" d="M0 870L589 487Q640 468 704 464H1076L1207 441Q1270 438 1348 452Q1420 455 1492 489L1554 546L1448 579L1920 880V1000H0Z"/>
+  <g stroke="#17191b" stroke-width="2" fill="none">
+    <path d="M704 464L0 1000M800 464L360 1000M900 464L700 1000M1000 464L1000 1000M1100 462L1330 1000M1250 450L1660 1000"/>
+  </g>
+  <g stroke="#1a1612" fill="none">
+    <path stroke-width="16" d="M527 70Q800 92 1093 88"/>
+    <path stroke-width="22" d="M1093 84Q1240 118 1400 96Q1560 62 1700 -6"/>
+  </g>
+  <path fill="#4a4a4e" d="M1066 465H1086L1100 90H1082Z"/>
+  <path fill="#4a4a4e" d="M1440 580H1462L1590 0H1562Z"/>
+</svg>

@@ -17,8 +17,9 @@
   const flash = document.getElementById('powerFlash');
   const wordmark = document.getElementById('wordmark');
   const screenEl = document.getElementById('screen');
+  const clothControl = document.getElementById('tableCloth');
 
-  if (!introScene || !deviceTilt || !indicator || !indicatorTrack || !veil || !flash || !wordmark || !screenEl) return;
+  if (!introScene || !deviceTilt || !indicator || !indicatorTrack || !veil || !flash || !wordmark || !screenEl || !clothControl) return;
 
   // The five presets are now just the endpoints of one continuous ramp —
   // every degree you drag interpolates brightness/saturate/etc smoothly
@@ -53,9 +54,10 @@
   function cancelApproach() {
     approachAnimation?.cancel();
     approachAnimation = null;
+    window.sceneCamera.setApproach(1);
     deviceTilt.classList.remove('intro-walking');
     deviceTilt.dataset.approach = 'ready';
-    indicator.removeAttribute('aria-disabled');
+    clothControl.removeAttribute('aria-disabled');
   }
 
   function runApproach() {
@@ -68,28 +70,31 @@
       setPose('intro-pose-zoomed');
       void deviceTilt.offsetHeight;
       deviceTilt.classList.remove('intro-walking');
-      indicator.tabIndex = 0;
+      clothControl.tabIndex = 0;
       return;
     }
     setPose('intro-pose');
     deviceTilt.dataset.approach = 'walking';
-    indicator.setAttribute('aria-disabled', 'true');
-    indicator.tabIndex = -1;
-    const frames = [
-      { transform: 'translateZ(-3600px)' },
-      { transform: 'translateZ(0)' },
-    ];
-    const animation = deviceTilt.animate(frames, {
-      duration: 5400, easing: 'cubic-bezier(.25,.1,.35,1)', fill: 'both',
-    });
+    clothControl.setAttribute('aria-disabled', 'true');
+    clothControl.tabIndex = -1;
+    // A real camera dolly shared by the room and CSS portal. Keep the eye
+    // height, downward angle and FOV fixed instead of zooming a flat wrapper.
+    let frame;
+    const started = performance.now();
+    const animation = {cancel: () => cancelAnimationFrame(frame)};
     approachAnimation = animation;
-    animation.onfinish = () => {
+    const step = now => {
       if (approachAnimation !== animation) return;
-      setPose('intro-pose-zoomed');
-      void deviceTilt.offsetHeight;
-      cancelApproach();
-      indicator.tabIndex = 0;
+      const t = Math.min(1, (now - started) / 5400);
+      window.sceneCamera.setApproach(t * t * (3 - 2 * t));
+      if (t < 1) frame = requestAnimationFrame(step);
+      else {
+        setPose('intro-pose-zoomed');
+        cancelApproach();
+        clothControl.tabIndex = 0;
+      }
     };
+    step(started);
   }
   reducedMotion.addEventListener('change', () => {
     if (reducedMotion.matches && approachAnimation) runApproach();
@@ -265,6 +270,71 @@
     runFinishingSequence();
   });
 
+  // ---- The covered table. Pull the cloth in any direction to draw it off,
+  // or click it / press Enter; a short pull lets it settle back. Uncovering
+  // wakes the portal, and the orb then rises out of it (runFinishingSequence).
+  // The spin-to-unlock seal above is no longer reachable (hidden in CSS).
+  let clothPull = null;
+  const clothReady = () => !finishing && !approachAnimation && document.body.classList.contains('table-covered');
+
+  function stripCloth(dx, dy, instant) {
+    clothPull = null;
+    clothControl.classList.remove('is-pulling');
+    clothControl.classList.add('is-removed');
+    clothControl.tabIndex = -1;
+    clothControl.blur();
+    const sliding = window.portalCloth
+      ? window.portalCloth.slideOff(dx, dy, instant)
+      : new Promise(done => window.setTimeout(done, instant || reducedMotion.matches ? 0 : 1200));
+    // The portal's depths and glow return while the cloth slides away.
+    document.body.classList.remove('table-covered');
+    const myGen = sequenceGen;
+    sliding.then(() => {
+      if (sequenceGen === myGen) runFinishingSequence(instant ? 1800 : 3400);
+    });
+  }
+
+  function uncoverTable(dx = 0, dy = 1) {
+    if (finishing) return;
+    finishing = true;
+    stripCloth(dx, dy, false);
+  }
+
+  clothControl.addEventListener('pointerdown', (event) => {
+    if (!clothReady() || event.button !== 0) return;
+    event.preventDefault();
+    const r = clothControl.getBoundingClientRect();
+    clothPull = {x: event.clientX, y: event.clientY, w: r.width, h: r.height, fx: 0, fy: 0, moved: 0};
+    clothControl.classList.add('is-pulling');
+  });
+  // On the window: a real pull leaves the cloth's footprint almost at once.
+  window.addEventListener('pointermove', (event) => {
+    if (!clothPull) return;
+    const dx = event.clientX - clothPull.x, dy = event.clientY - clothPull.y;
+    clothPull.moved = Math.max(clothPull.moved, Math.hypot(dx, dy));
+    clothPull.fx = dx / clothPull.w;
+    clothPull.fy = dy / clothPull.h;
+    window.portalCloth?.pull(clothPull.fx, clothPull.fy);
+  });
+  function releaseCloth() {
+    if (!clothPull) return;
+    const {fx, fy, moved} = clothPull;
+    clothPull = null;
+    clothControl.classList.remove('is-pulling');
+    // A click, or a decisive pull, takes the cloth off toward wherever it was
+    // drawn (a click draws it toward the viewer); a hesitant one settles back.
+    if (moved < 6) uncoverTable(0, 1);
+    else if (Math.hypot(fx, fy) > .16) uncoverTable(fx, fy);
+    else window.portalCloth?.settle();
+  }
+  window.addEventListener('pointerup', releaseCloth);
+  window.addEventListener('pointercancel', releaseCloth);
+  clothControl.addEventListener('keydown', (event) => {
+    if (!clothReady() || !['Enter', ' '].includes(event.key)) return;
+    event.preventDefault();
+    uncoverTable(0, 1);
+  });
+
   // ---- Keep the dial's own circle sized to fit inside the screen (not the
   // old, deliberately oversized tap-timing orbit) — re-measured each frame
   // so it tracks correctly through the pose transitions and any viewport
@@ -392,7 +462,9 @@
     document.getElementById('portalHint').textContent = 'Dra et kort inn i portalen';
   }
 
-  function runFinishingSequence() {
+  // Runs once the portal is uncovered: summons the orb up out of it, lets it
+  // settle, then sends the text and the cards out of the portal.
+  function runFinishingSequence(riseDuration) {
     indicator.removeEventListener('pointerdown', onIndicatorDown);
     deviceTilt.style.setProperty('--charge-brightness', '1.15');
 
@@ -405,14 +477,13 @@
     indicator.classList.remove('dragging');
     indicator.tabIndex = -1;
     document.body.classList.add('scene-interacting');
-    window.portalMatter?.unlock();
+    const rise = window.portalMatter?.unlock(riseDuration) ?? Promise.resolve(true);
     deviceTilt.style.setProperty('--charge-brightness', '1');
     deviceTilt.style.setProperty('--charge-saturate', '1');
     deviceTilt.style.setProperty('--pulse-dur', NORMAL_PULSE_DUR + 's');
     deviceTilt.style.setProperty('--spark-dur', NORMAL_SPARK_DUR + 's');
-    // Let the seal visibly lift before pulling the camera back. All flights
-    // then share a stationary viewport coordinate system, including letters.
-    window.setTimeout(() => {
+    // All flights share a stationary viewport coordinate system, letters too.
+    rise.then(() => {
       if (sequenceGen !== myGen) return;
       setPose(null);
       window.setTimeout(() => {
@@ -424,8 +495,8 @@
           document.body.classList.remove('intro-textreveal');
           revealScene();
         }, myGen);
-      }, reducedMotion.matches ? 20 : 1550);
-    }, reducedMotion.matches ? 0 : 850);
+      }, reducedMotion.matches ? 20 : 700);
+    });
   }
 
   // --------------------------------------------------------------------
@@ -452,7 +523,12 @@
     window.portalMatter?.reset();
     document.body.classList.remove('scene-interacting');
     indicator.tabIndex = 0;
-    document.getElementById('portalHint').textContent = 'Drei kulen for å åpne';
+    document.getElementById('portalHint').textContent = '';
+    // Cover the table again; the orb is back asleep below the aperture.
+    document.body.classList.add('table-covered');
+    clothControl.classList.remove('is-removed', 'is-pulling');
+    clothPull = null;
+    window.portalCloth?.reset();
     finishing = false;
     cumulativeDrag = 0;
     cancelInertia();
@@ -505,7 +581,7 @@
     deviceTilt.style.setProperty('--spark-dur', NORMAL_SPARK_DUR + 's');
     deviceTilt.style.setProperty('--charge-brightness', '1');
     deviceTilt.style.setProperty('--charge-saturate', '1');
-    runFinishingSequence();
+    stripCloth(0, 1, true);
   }
 
   const introBackBtn = document.getElementById('introBack');

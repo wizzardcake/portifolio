@@ -8,7 +8,7 @@
   // Scripted poses only. Hover never changes the portal's orientation.
   // Lower pitch = the tabletop opens up more toward the viewer, i.e. the
   // camera sits higher above the table and looks further down onto it.
-  const camera = {yaw: 0, pitch: 62};
+  const camera = window.sceneCamera.camera;
 
   const vertex = `attribute vec2 position; varying vec2 uv;
     void main(){uv=position*.5+.5;gl_Position=vec4(position,0.,1.);}`;
@@ -125,59 +125,24 @@
   });
 
   let mode = 'locked', charge = 0, spin = 0, fluid = 0, morph = 0;
+  matter.dataset.state = mode;
   let transition = null, rect = null, lastTime = 0;
   let tint = [.27, .55, .46];
   function targetRect(nextMode) {
     const w = screen.clientWidth, h = screen.clientHeight;
     if (nextMode === 'locked') {
-      const size = Math.min(w, h);
-      // Sized to actually seat in the socket rather than tower over it (see
-      // the shell/track sizing in portal.css, tuned to match this radius).
-      //
-      // height: tried ≈0 (ball's centre level with the tabletop, matching
-      // the now-real recessed floor) per spec, and it reproduces the exact
-      // flat-cut-through-the-equator bug this pass was meant to fix — even
-      // with .portal-shell, .intro-indicator-track, .screen-tunnel and
-      // .portal-table ALL hidden, so it isn't any of those occluding it.
-      // Confirmed the shader's own dome-rim math (see fragment shader,
-      // domeOpen/rimS) only survives at this larger lift — something about
-      // how the counter-rotated (--matter-face-pitch) billboard composes
-      // with the ancestor's perspective()+rotateX() changes what's actually
-      // visible at different translateZ offsets, not fully root-caused.
-      // Left at the value that empirically renders a curved rim.
-      const d = size * .60, height = size * .24;
-      // A sphere seated in the socket: its centre is above the tabletop,
-      // with its lower cap inside the hole. Match the grab surface to it.
-      screen.style.setProperty('--seal-size', d + 'px');
-      screen.style.setProperty('--seal-height', height + 'px');
-      // Lifting the ball off the tilted tabletop plane (to dodge the flat-cut
-      // bug documented above) also shifts its on-screen footprint up/back —
-      // a point raised off a tilted plane projects higher on screen than
-      // the same point at z=0. Pulling the pre-transform anchor back down
-      // by roughly that same amount (calibrated to 1.15x the lift against
-      // real getBoundingClientRect measurements at 1440x1000 — closed a
-      // ~62px gap down to <1px) puts the equator back at the socket's rim
-      // instead of hovering above it with a visible gap.
-      // #introIndicator (the invisible grab target) needs the identical
-      // correction — it has its own CSS transform, not this JS rect, so the
-      // value is handed over as a custom property instead (see portal.css).
-      const yOffset = height * 1.15;
-      screen.style.setProperty('--seal-y-offset', yOffset + 'px');
-      return {x: w / 2, y: h / 2 + yOffset, z: height, w: d, h: d};
+      // Dormant: the orb waits unseen inside the shaft, below the aperture,
+      // until the cloth comes off. unlock() then raises it into its hover.
+      const idle = targetRect('idle');
+      return {...idle, z: -idle.w * .9};
     }
     // Reserve an upper viewport reader above the held cards. Invert the
     // table rotation at a modest camera-space depth; the same coordinates
     // drive both the orb's morph target and the HTML page. This replaces
     // the old fixed 600px lift, which depended on a heavily zoomed-out stage.
-    const pitch = camera.pitch * Math.PI / 180;
-    const cameraDepth = 180;
-    const projectionScale = 1300 / (1300 - cameraDepth);
-    const pageWidth = Math.min(1000, innerWidth * .88) / projectionScale;
-    const pageHeight = Math.min(620, innerHeight * .56) / projectionScale;
-    const viewportY = innerHeight * .35;
-    const projectedY = (viewportY - screen.offsetTop) / projectionScale;
-    const pageLift = -projectedY * Math.sin(pitch) + cameraDepth * Math.cos(pitch);
-    const pageYOffset = projectedY * Math.cos(pitch) + cameraDepth * Math.sin(pitch);
+    const reader = window.sceneCamera.reader();
+    const pageWidth = reader.width, pageHeight = reader.height;
+    const pageLift = reader.z, pageYOffset = reader.y;
     screen.style.setProperty('--page-width', pageWidth + 'px');
     screen.style.setProperty('--page-size', pageHeight + 'px');
     screen.style.setProperty('--page-lift', pageLift + 'px');
@@ -192,16 +157,18 @@
     if (transition) transition.resolve(false);
     matter.style.opacity = '1';
     const from = rect || targetRect(mode);
+    const emerging = mode === 'locked' && nextMode !== 'locked';
     mode = nextMode;
     matter.dataset.state = mode;
     matter.classList.toggle('is-liquid', mode === 'idle');
     return new Promise(resolve => {
-      transition = {from: {...from}, fluid, morph, start: performance.now(), duration: reducedMotion.matches ? 80 : duration, resolve};
+      transition = {from: {...from}, fluid, morph, emerging, start: performance.now(), duration: reducedMotion.matches ? 80 : duration, resolve};
     });
   }
   function animate(now) {
     requestAnimationFrame(animate);
     if (document.hidden || (now - lastTime < 32 && !transition)) return;
+    if (window.sceneCamera.appliedPitch !== camera.pitch) window.sceneCamera.update();
     lastTime = now;
     // One fixed table plane before, during and after the intro. Neither
     // unlocking, projecting a page nor pointer movement tilts the portal.
@@ -219,6 +186,10 @@
         rect.z += Math.sin(t * Math.PI) * 12;
       }
     } else rect = target;
+    // Dormant it is not drawn at all; emerging, it materialises in the shaft
+    // during the first third of its rise.
+    matter.style.visibility = mode === 'locked' && !transition ? 'hidden' : '';
+    if (transition?.emerging) matter.style.opacity = String(Math.min(1, t / .35));
     const drift = mode === 'idle' && !transition && !reducedMotion.matches ? Math.sin(now * .0009) * 4 : 0;
     matter.style.left = rect.x + 'px'; matter.style.top = rect.y + 'px';
     matter.style.width = rect.w + 'px'; matter.style.height = rect.h + 'px';
@@ -259,7 +230,8 @@
   requestAnimationFrame(animate);
   window.portalMatter = {
     charge(value, rotation = 0) { charge = value; spin = rotation * Math.PI / 180; },
-    unlock() { document.body.classList.add('portal-unlocked'); return transitionTo('idle', 2400); },
+    // Summons the orb up out of the uncovered portal into its idle hover.
+    unlock(duration = 3400) { document.body.classList.add('portal-unlocked'); return transitionTo('idle', duration); },
     async project(appId) {
       tint = appId === 'ommeg' ? [.52,.21,.28] : ['prosjekter','arbeidserfaring'].includes(appId) ? [.57,.42,.21] : [.24,.56,.49];
       screen.classList.add('is-projecting');

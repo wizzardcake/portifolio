@@ -106,7 +106,7 @@
     screen.style.setProperty('--well-depth', wellDepth + 'px');
     // Clip each side face to the front sightline so its lower corner cannot
     // leak out below the table apron. The top ring handles rim occlusion.
-    const cameraZ = 1300 * Math.cos(pitch), cameraY = 1300 * Math.sin(pitch);
+    const {localEyeZ: cameraZ, localEyeY: cameraY} = window.sceneCamera;
     const frontCut = Math.max(.1, 1 - wellDepth * (cameraY - height / 2) / cameraZ / height - .03);
     screen.style.setProperty('--wall-front-cut', frontCut * 100 + '%');
     const x = -table.offsetLeft, y = -table.offsetTop, w = table.clientWidth, h = table.clientHeight, c = 5;
@@ -121,12 +121,12 @@
   function geometry() {
     // Deep space lies beyond the end of the physical shaft. Its location
     // compensates for the downward view, so it remains visible in the hole.
-    const slope = Math.tan(pitch);
+    const slope = window.sceneCamera.localEyeY / window.sceneCamera.localEyeZ;
     place(abyss, height * 1.9, 0, -height * 1.9 * slope);
     place(stars, height * 1.6, view.x * width * .008, height * (-1.6 * slope + .1) + view.y * height * .008);
     place(fogs[0], height * (.98 + Math.sin(elapsed * .10) * .025), view.x * width * .04, height * (-.98 * slope + .12) + view.y * height * .025);
     place(fogs[1], height * (.58 + Math.sin(elapsed * .14) * .035), view.x * width * .085, height * (-.58 * slope + .32) + view.y * height * .06);
-    const cameraZ = 1300 * Math.cos(pitch), cameraY = 1300 * Math.sin(pitch);
+    const {localEyeZ: cameraZ, localEyeY: cameraY} = window.sceneCamera;
     for (const mote of motes) {
       const cycle = (mote.phase + elapsed / mote.period) % 1;
       const depth = height * (.98 - cycle * .89);
@@ -142,6 +142,7 @@
     }
   }
   new ResizeObserver(() => {dirty = true;}).observe(screen);
+  addEventListener('scene-camera-change', () => {dirty = true;});
   new IntersectionObserver(entries => {visible = entries[0].isIntersecting; dirty = true;}).observe(screen);
   document.addEventListener('pointermove', event => {
     if (!finePointer.matches || reducedMotion.matches || event.buttons) return;

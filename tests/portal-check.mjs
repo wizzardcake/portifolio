@@ -120,6 +120,16 @@ try {
       'The dragged card must follow the pointer without jumping out of the fan');
     await cdp('Input.dispatchMouseEvent', {type:'mouseReleased', x:target.x, y:target.y,button:'left',clickCount:1});
   }
+  // Pull the cloth off the covered table: press on it and draw it toward the viewer.
+  async function pullCloth(distance = 264) {
+    const cloth = await bounds('#tableCloth');
+    await cdp('Input.dispatchMouseEvent', {type:'mousePressed',x:cloth.x,y:cloth.y,button:'left',buttons:1,clickCount:1});
+    for (let i=1;i<=12;i++) {
+      await cdp('Input.dispatchMouseEvent', {type:'mouseMoved',x:cloth.x,y:cloth.y+distance*i/12,buttons:1});
+      await sleep(25);
+    }
+    await cdp('Input.dispatchMouseEvent', {type:'mouseReleased',x:cloth.x,y:cloth.y+distance,button:'left',clickCount:1});
+  }
   async function assertViewport() {
     const state = await evaluate(`(() => {
       const r=document.querySelector('#experience').getBoundingClientRect();
@@ -142,7 +152,50 @@ try {
   async function assertRemainingHand() {
     assert.equal(await evaluate(`[...document.querySelectorAll('.hand-card .sub-card')].filter(e=>getComputedStyle(e).visibility==='visible' && +getComputedStyle(e).opacity>0).length`),4,'Exactly the active card leaves the hand');
   }
-  if (process.argv.includes('--foundation-only') || process.argv.includes('--controls-only')) {
+  if (process.argv.includes('--environment-only')) {
+    for(const [width,height] of [[1920,910],[1440,1000],[390,844]]) {
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+      await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+      await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/`});
+      await until(`!!window.studyRoom && document.querySelector('#deviceTilt').dataset.approach==='ready'`);
+      await click('#introForward');
+      await until(`document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight')`);
+      await sleep(500);await shot('room-'+width);
+      await assertViewport();await assertHeldHand();
+      console.log('Room',width,await evaluate(`({camera:{fov:studyRoom.camera.fov,eye:studyRoom.camera.position.toArray(),origin:sceneCamera.originY},calls:studyRoom.renderer.info.render.calls,triangles:studyRoom.renderer.info.render.triangles,cssOrigin:document.querySelector('.portal-origin').getBoundingClientRect().toJSON(),worldOrigin:studyRoom.project(0,sceneCamera.tableHeight,0)})`));
+      const registration=await evaluate(`(() => {
+        const s=document.querySelector('#screen'),r=s.getBoundingClientRect(),t=document.querySelector('.portal-table').getBoundingClientRect(),o=document.querySelector('.portal-origin').getBoundingClientRect(),p=studyRoom.project(0,sceneCamera.tableHeight,0);
+        return {error:Math.hypot(o.x-p.x,o.y-p.y),table:t.toJSON(),portal:r.toJSON(),
+          calls:studyRoom.renderer.info.render.calls,triangles:studyRoom.renderer.info.render.triangles,pixels:roomCanvas.width*roomCanvas.height,
+          opening:studyRoom.scene.getObjectByName('back wall with through opening').geometry.parameters.shapes.holes.length,
+          thickness:studyRoom.dimensions.wall,ceiling:studyRoom.project(0,studyRoom.dimensions.height,studyRoom.dimensions.back).y};
+      })()`);
+      assert.ok(registration.error<1,'CSS and Three camera projections agree');
+      assert.ok(registration.table.left>=width*.02 && registration.table.right<=width*.98,'Both outer table edges leave visible floor');
+      assert.ok(registration.table.bottom<height*.88,'The near table edge is visible above the bottom of the viewport');
+      const {portal,table}=registration;
+      assert.ok(portal.left>table.left && portal.right<table.right && portal.top>table.top && portal.bottom<table.bottom,'The portal is contained inside the tabletop');
+      assert.ok(registration.ceiling>0 && registration.ceiling<height*.4,'The ceiling/wall junction is in frame');
+      assert.equal(registration.opening,1,'The gothic window cuts through the actual wall geometry');
+      assert.ok(registration.thickness>.2 && registration.calls<30 && registration.triangles<10000 && registration.pixels<=2600000,'Architectural depth stays within the room rendering budget');
+      const frame=await evaluate(`studyRoom.renderer.info.render.frame`);await sleep(250);
+      assert.equal(await evaluate(`studyRoom.renderer.info.render.frame`),frame,'A settled room does not render continuously');
+      await evaluate(`studyRoom.clay(true)`);await sleep(150);await shot('room-clay-'+width);
+      await evaluate(`studyRoom.clay(false)`);
+      await drag('.hand-card--prosjekter .sub-card',await bounds('.portal-origin'));
+      await until(`document.querySelector('#app-prosjekter').classList.contains('active')`);
+      await sleep(650);await shot('room-page-'+width);
+      await assertRemainingHand();await click('#portalRetrieve');await sleep(650);
+    }
+    await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type.includes('webgl')?null:original.call(this,type,...args)}`});
+    await cdp('Page.reload');await until(`document.querySelector('.room-fallback') && document.querySelector('#deviceTilt').dataset.approach==='ready'`);
+    await click('#introForward');await until(`document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight')`);
+    await assertViewport();await drag('.hand-card--prosjekter .sub-card',await bounds('.portal-origin'));
+    await until(`document.querySelector('#app-prosjekter').classList.contains('active')`);
+    await sleep(650);await assertRemainingHand();await click('#portalRetrieve');
+    await shot('room-no-webgl');
+    assert.equal(errors.length,0,JSON.stringify(errors));
+  } else if (process.argv.includes('--foundation-only') || process.argv.includes('--controls-only')) {
     const sizes=process.argv.includes('--controls-only') ? [[844,390]] : [[1920,910],[1440,1000],[1366,768],[390,844],[844,390]];
     for (const [width,height] of sizes) {
       await cdp('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:false});
@@ -192,14 +245,20 @@ try {
     await click('#themeToggle');
     assert.notEqual(await evaluate(`document.documentElement.dataset.theme`),themeBefore,'Theme toggle remains interactive in the viewport header');
     const ball=await bounds('#themeToggle');
+    // Establish hover after resizing, then send a continuous pointer path.
+    await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:ball.x,y:ball.y,buttons:0});
+    await sleep(30);
     await cdp('Input.dispatchMouseEvent',{type:'mousePressed',x:ball.x,y:ball.y,button:'left',buttons:1,clickCount:1});
-    await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:ball.x-70,y:ball.y+90,buttons:1});
-    await sleep(100);
+    for(let i=1;i<=10;i++) {
+      await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:ball.x-70*i/10,y:ball.y+90*i/10,buttons:1});
+      await sleep(16);
+    }
     await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',x:ball.x-70,y:ball.y+90,button:'left',clickCount:1});
     const rolled=await bounds('#themeToggle');
     assert.ok(Math.hypot(rolled.x-ball.x+70,rolled.y-ball.y-90)<3,'Theme ball drag uses viewport coordinates: '+JSON.stringify({ball,rolled,style:await evaluate(`document.querySelector('#themeToggle').getAttribute('style')`)}));
     await assertViewport();
     assert.equal(errors.length,0, JSON.stringify(errors));
+    console.log('PASS: live viewport resize, focus, theme toggle and theme drag');
   } else if (process.argv.includes('--retrieval-only')) {
     await cdp('Emulation.setDeviceMetricsOverride', {width:1440,height:1000,deviceScaleFactor:1,mobile:false});
     await cdp('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion',value:'reduce'}]});
@@ -247,7 +306,7 @@ try {
     await shot('depth-geometry');
     await evaluate(`geometryOnly.remove()`);
     const table=await bounds('.portal-table');
-    assert.ok(table.left<0 && table.right>1440 && table.bottom>=980,'The near table reaches the viewport edges');
+    assert.ok(table.left>0 && table.right<1440 && table.bottom<880,'The whole table silhouette leaves room for surrounding floor');
     const pose=await evaluate(`getComputedStyle(document.querySelector('#screen')).transform`);
     await cdp('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
     await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:80,y:100,buttons:0});
@@ -257,7 +316,7 @@ try {
     await sleep(1300); await shot('depth-right');
     const nearRight=await bounds('.portal-fog--near'), farRight=await bounds('.portal-stars');
     const nearShift=Math.abs(nearRight.x-nearLeft.x), farShift=Math.abs(farRight.x-farLeft.x);
-    assert.ok(nearShift>30 && nearShift>farShift*5,'Near fog must move visibly more than distant stars');
+    assert.ok(nearShift>15 && nearShift>farShift*5,'Near fog must move visibly more than distant stars at the farther seated distance');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#screen')).transform`),pose,'The rim remains fixed during internal parallax');
     const readFog=`new Promise(resolve=>requestAnimationFrame(()=>{
       const c=document.querySelector('.portal-depth'),gl=c.getContext('webgl');
@@ -287,7 +346,7 @@ try {
     await sleep(500); await shot('depth-mobile');
     const mobileTable=await bounds('.portal-table');
     const mobileOpening=await bounds('#screen');
-    assert.ok(mobileTable.bottom>800 && mobileOpening.left>=0 && mobileOpening.right<=390,'Mobile retains the opening while the near table fills the foreground');
+    assert.ok(mobileTable.left>=0 && mobileTable.right<=390 && mobileTable.bottom<844*.88 && mobileOpening.left>=0 && mobileOpening.right<=390,'Mobile keeps the table edges and opening visible');
     assert.ok(await evaluate(`[...document.querySelectorAll('.portal-depth')].reduce((n,c)=>n+c.width*c.height,0)<=550000`));
     assert.equal(errors.length,0,JSON.stringify(errors));
     console.log('PASS: cutout, recessed wall geometry, separate depth layers, camera framing, parallax, transparent fog, reduced motion, context recovery and mobile', {nearShift,farShift,pixels});
@@ -304,13 +363,7 @@ try {
   await cdp('Page.navigate', {url:`http://127.0.0.1:${port}/`});
   await until(`!!window.portalMatter`);
   await until(`document.querySelector('#deviceTilt').dataset.approach === 'ready'`);
-  const wideSeal = await bounds('#introIndicator');
-  await cdp('Input.dispatchMouseEvent', {type:'mousePressed',x:wideSeal.x,y:wideSeal.y,button:'left',buttons:1,clickCount:1});
-  for (let i=0;i<40;i++) {
-    await cdp('Input.dispatchMouseEvent', {type:'mouseMoved',x:wideSeal.x+(i%2 ? 48 : -48),y:wideSeal.y,buttons:1});
-    await sleep(20);
-  }
-  await cdp('Input.dispatchMouseEvent', {type:'mouseReleased',x:wideSeal.x,y:wideSeal.y,button:'left',clickCount:1});
+  await pullCloth();
   await until(`document.body.classList.contains('portal-unlocked')`);
   await until(`document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight')`, 20000);
   await sleep(300);
@@ -333,50 +386,45 @@ try {
   await until(`!!window.portalMatter`);
   await sleep(700); await shot('00-approach'); // still across the room, first beat of the walk in
   const farPortal = await bounds('#screen');
-  const tablePose = await evaluate(`getComputedStyle(document.querySelector('#screen')).transform`);
-  assert.equal(await evaluate(`document.querySelector('#introIndicator').getAttribute('aria-disabled')`), 'true');
+  const approachPitch = await evaluate(`sceneCamera.camera.pitch`);
+  const farDistance = await evaluate(`sceneCamera.distance`);
+  assert.equal(await evaluate(`document.querySelector('#tableCloth').getAttribute('aria-disabled')`), 'true');
   await sleep(2000); await shot('00a-approach-mid');
   const middlePortal = await bounds('#screen');
   await sleep(900); await shot('00b-approach-near');
   await until(`document.querySelector('#deviceTilt').dataset.approach === 'ready'`);
-  assert.equal(await evaluate(`document.querySelector('#introIndicator').tabIndex`), 0);
+  assert.equal(await evaluate(`document.querySelector('#tableCloth').tabIndex`), 0);
   const initial = await bounds('#screen');
   console.log('Intro bounds', JSON.stringify(initial));
   assert.ok(Math.abs(initial.x-720)<45, 'Intro portal must be centered');
   assert.ok(initial.top>20 && initial.bottom<980, 'Intro portal must fit vertically');
   assert.ok(farPortal.w < middlePortal.w && middlePortal.w <= initial.w, 'The walk must move progressively closer');
   assert.ok(initial.w / initial.h > 2.4, 'The portal must read as a horizontal landscape surface');
-  assert.equal(await evaluate(`getComputedStyle(document.querySelector('#screen')).transform`), tablePose, 'The tabletop must not rotate during the approach');
+  assert.equal(await evaluate(`sceneCamera.camera.pitch`), approachPitch, 'The tabletop must not rotate during the approach');
+  assert.ok(await evaluate(`sceneCamera.distance`) < farDistance, 'The approach physically moves the camera toward the table');
+  assert.equal(await evaluate(`studyRoom.camera.fov`),72,'The approach does not substitute FOV zoom for camera movement');
+  const tablePose = await evaluate(`getComputedStyle(document.querySelector('#screen')).transform`);
   console.log('Material', await evaluate(`document.getElementById('portalMatter').className`));
-  await shot('01-locked');
-  const seal = await bounds('#introIndicator');
-  const sealedBall = await bounds('#portalMatter'), socket = await bounds('.intro-indicator-track');
-  assert.ok(Math.abs(sealedBall.w / sealedBall.h - 1) < .03, 'The seated ball must remain round above the tilted tabletop');
-  // Threshold lowered from 1.8: --view-pitch went from 60deg to 46deg in a
-  // later pass (shallower camera angle, requested separately), which
-  // foreshortens the socket less. Measured ~1.58 at the current pitch.
-  assert.ok(socket.w / socket.h > 1.4 && sealedBall.y < socket.y, 'The ball must stand above a hole in the horizontal plane');
-  assert.ok(await evaluate(`document.elementFromPoint(${sealedBall.x},${sealedBall.y - sealedBall.h * .25})?.closest('#introIndicator') !== null`), 'The raised upper half of the ball must be draggable');
-  console.log('Seal hit test', seal, await evaluate(`(() => {const e=document.elementFromPoint(${seal.x},${seal.y});return {tag:e?.tagName,id:e?.id,classes:e?.className,pointer:getComputedStyle(document.querySelector('#introIndicator')).pointerEvents,body:document.body.className}})()`));
-  await cdp('Input.dispatchMouseEvent', {type:'mousePressed',x:seal.x,y:seal.y,button:'left',buttons:1,clickCount:1});
-  console.log('Seal dragging', await evaluate(`document.querySelector('#introIndicator').className`));
-  // Swing amplitude must stay inside the ball's own radius: CDP's synthetic
-  // input dispatches by hit-testing at each (x,y), and doesn't honor
-  // setPointerCapture() the way a real OS-level drag does — so a swing that
-  // wanders outside the element (this used to be 120px, back when the ball
-  // was sized ~.84 of the portal instead of today's ~.52) lands on nothing,
-  // and the drag silently stops accumulating. Measured radius here is
-  // ~109px; 45px keeps a wide margin while still exercising the
-  // back-and-forth/oscillating case (unsigned distance must not cancel).
-  // 40 moves of alternating ±48px covers ~48+39*96=3792px of unsigned
-  // distance, clearing the 3600px charge threshold with real margin
-  // (45px landed at 99% — too tight to be a stable regression check).
-  for (let i=0;i<40;i++) {
-    await cdp('Input.dispatchMouseEvent', {type:'mouseMoved',x:seal.x+(i%2 ? 48 : -48),y:seal.y,buttons:1});
-    await sleep(35);
-  }
-  await cdp('Input.dispatchMouseEvent', {type:'mouseReleased',x:seal.x,y:seal.y,button:'left',clickCount:1});
-  assert.ok(await evaluate(`document.body.classList.contains('portal-unlocked')`), 'Spinning the real seal must unlock: ' + await evaluate(`document.querySelector('#introIndicator').getAttribute('aria-label')`));
+  await shot('01-covered');
+  // The table starts under its cloth: the portal lies dormant and no orb hovers.
+  assert.equal(await evaluate(`window.portalCloth.covered`), true, 'The table starts covered');
+  assert.equal(await evaluate(`getComputedStyle(document.querySelector('#portalMatter')).visibility`), 'hidden', 'No orb before the reveal');
+  assert.equal(await evaluate(`getComputedStyle(document.querySelector('.screen-tunnel')).opacity`), '0', 'The portal lies dormant under the cloth');
+  const origin = await bounds('.portal-origin');
+  assert.equal(await evaluate(`document.elementFromPoint(${origin.x},${origin.y})?.id`), 'tableCloth', 'The cloth covers the portal and takes the pull');
+  // A hesitant tug lets the cloth settle back where it lay.
+  await cdp('Input.dispatchMouseEvent', {type:'mousePressed',x:origin.x,y:origin.y,button:'left',buttons:1,clickCount:1});
+  await cdp('Input.dispatchMouseEvent', {type:'mouseMoved',x:origin.x,y:origin.y+18,buttons:1});
+  await cdp('Input.dispatchMouseEvent', {type:'mouseReleased',x:origin.x,y:origin.y+18,button:'left',clickCount:1});
+  await sleep(700);
+  assert.ok(await evaluate(`window.portalCloth.covered && document.body.classList.contains('table-covered')`), 'A short tug must not uncover the table');
+  // A real pull draws the cloth off; the orb then rises out of the portal.
+  await pullCloth();
+  await until(`document.body.classList.contains('portal-unlocked')`);
+  assert.equal(await evaluate(`window.portalCloth.covered`), false, 'Pulling removes the cloth');
+  assert.ok(await evaluate(`parseFloat(getComputedStyle(document.querySelector('#portalMatter')).getPropertyValue('--matter-height')) < 0`), 'The orb starts its rise below the aperture');
+  // The portal reacts where it lost its grip on the cloth (portal-impact.js).
+  await until(`!!document.querySelector('.portal-impact .portal-impact-ring')`, 4000);
   // Latch the very first letter's launch point from inside the page: polling
   // for it races the flight animation, which has already carried the ghost
   // most of the way to its slot by the time a poll can catch it.
@@ -465,7 +513,7 @@ try {
   await until(`document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight')`);
   await shot('08-mobile-idle');
   const mobileTable = await bounds('.portal-table');
-  assert.ok(mobileTable.bottom>800,'The mobile table also reaches the foreground');
+  assert.ok(mobileTable.bottom<844*.88,'The mobile table leaves floor in the foreground');
   await assertViewport(); await assertHeldHand();
   await drag('.hand-card--prosjekter .sub-card', await bounds('#screen'));
   await until(`document.querySelector('#app-prosjekter').classList.contains('active')`);

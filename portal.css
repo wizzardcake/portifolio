@@ -136,6 +136,22 @@ body.portal-unlocked .screen.is-projecting .app-view { pointer-events: none; }
 body.table-covered .screen-tunnel { opacity: 0; }
 .screen.portal-active .screen-tunnel { animation: none; }
 .screen-tunnel::after { content: none; }
+/* The pond (portal-surface.js): a living liquid surface in the aperture just
+   below the rim, above the shaft's depths and below the impact layers (-1px).
+   Dormant under the cloth, it wakes with the depths. */
+.portal-surface {
+  position: absolute; inset: 0; pointer-events: none;
+  transform: translateZ(-3px);
+  transition: opacity 1.6s ease .2s;
+}
+body.table-covered .portal-surface { opacity: 0; }
+.portal-surface canvas { display: block; width: 100%; height: 100%; }
+/* Without WebGL: still, dark water tinted with the same colours. */
+.portal-surface:not(.webgl) canvas { display: none; }
+.portal-surface:not(.webgl) {
+  background: radial-gradient(ellipse 60% 70% at 38% 55%, #2a7f7430, transparent 70%),
+    radial-gradient(ellipse 50% 60% at 68% 42%, #6a44b02a, transparent 70%), #05101473;
+}
 /* Actual vertical faces: upper edges at Z=0, lower edges below the table. */
 .portal-wall {
   position: absolute; backface-visibility: hidden; pointer-events: none;

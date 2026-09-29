@@ -720,6 +720,12 @@ if (renderer) {
     return hit;
   }
   const clothCount=clothGeometry.attributes.position.count;
+  // Laid shape (lay), and what stirHem needs to bring its hanging folds to
+  // life, per vertex: how much it hangs free toward the hem, its outward
+  // direction, position along its edge, fold phase, fold depth and laid fold.
+  const laid=new Float32Array(clothCount*3),hemWeight=new Float32Array(clothCount);
+  const hemOut=new Float32Array(clothCount*2),hemAlong=new Float32Array(clothCount),hemPhase=new Float32Array(clothCount);
+  const hemFold=new Float32Array(clothCount),hemLaidFold=new Float32Array(clothCount);
   const loose=new Float32Array(clothCount*3),reachP=new Float32Array(clothCount),reachT=new Float32Array(clothCount);
   const reachN=new Float32Array(clothCount*2),reachId=new Uint8Array(clothCount),hit={};
   const push=new Float32Array(4),spanMin=new Float32Array(4),spanMax=new Float32Array(4);
@@ -733,6 +739,7 @@ if (renderer) {
       let x=cx+ox+fx,z=cz+oz+fz,y=top+.0015*Math.sin(fx*11+fz*7);
       const ex=Math.max(cx-hx,Math.min(cx+hx,x)),ez=Math.max(cz-hz,Math.min(cz+hz,z));
       const d=Math.hypot(x-ex,z-ez);
+      hemWeight[i]=hemFold[i]=hemLaidFold[i]=0;
       if(d>1e-6) {
         const nx=(x-ex)/d,nz=(z-ez)/d,bend=edge*Math.PI/2;
         let out,drop;
@@ -741,9 +748,14 @@ if (renderer) {
           // Hangs, flaring a little, in folds that deepen toward the hem;
           // whatever reaches the floor lies on it.
           const hanging=d-bend,fall=Math.min(hanging,top-edge-.006),pool=hanging-fall;
-          const along=Math.abs(nx)>Math.abs(nz)?fz:fx;
-          out=edge+fall*.08+Math.sin(along*30+nx*2+nz*3)*.016*Math.min(1,fall/.12)+pool;
+          const along=Math.abs(nx)>Math.abs(nz)?fz:fx,phase=nx*2+nz*3,depth=Math.min(1,fall/.12);
+          const fold=Math.sin(along*30+phase)*.016*depth;
+          out=edge+fall*.08+fold+pool;
           drop=edge+fall;
+          // The hanging folds come alive in stirHem; still where it lies on the floor.
+          hemWeight[i]=Math.min(1,fall/hang)**1.4*Math.max(0,1-pool/.06);
+          hemFold[i]=depth*Math.max(0,1-pool/.06);hemLaidFold[i]=fold;
+          hemOut[i*2]=nx;hemOut[i*2+1]=nz;hemAlong[i]=along;hemPhase[i]=phase;
         }
         x=ex+nx*out;z=ez+nz*out;y=top-drop;
       }
@@ -774,6 +786,53 @@ if (renderer) {
         const beside=Math.max(0,Math.max(spanMin[id]-t,t-spanMax[id]));
         const near=(1+k/.3)**2*Math.max(0,1-beside/.3)*Math.min(1,push[id]/.3);
         y+=near*(.09+.02*Math.sin(t*9));
+      }
+      // Fabric pressed against or bunched near a wall keeps its laid folds.
+      if(k>-.08) hemWeight[i]=hemFold[i]=0;
+      laid[i*3]=x;laid[i*3+1]=y;laid[i*3+2]=z;
+    }
+    stirHem(performance.now());
+  }
+  // ---- The hanging hem's idle life: its scalloped folds are a living wave.
+  // The laid folds (lay: one in/out fold every ~21 cm) are replaced by the
+  // same folds in motion: the pattern travels along each edge, each section's
+  // folds swell and flatten in turn, and a slowly drifting phase lets
+  // neighbouring sections run a little ahead or behind, so the pattern
+  // stretches and bunches as it goes. Crests swell out and hang lower while
+  // troughs tuck in and lift, and each point circles a little along the edge,
+  // so the silhouette itself changes shape. (From the chair the hem is seen
+  // from above: out-and-up motion would run along the line of sight and
+  // vanish; out-and-down crosses it.) The tabletop never moves.
+  // Applied on top of the laid shape, so dragging, settling and the flight's
+  // starting shape all carry it without a jump; while dragged it eases back
+  // to the laid folds.
+  //   amplitude     metres of in/out fold depth (the laid folds are .016)
+  //   wavelength    metres from one scallop to the next
+  //   speed         metres per second the pattern travels along the hem
+  //   irregularity  0 = one even wave; 1 = sections clearly out of step
+  //   swell         0..1, how much each section's folds deepen and flatten
+  //   droop         metres the hem drops per metre of outward fold
+  //   sideways      metres of along-the-edge travel per metre of fold
+  //   fadeOut / fadeIn  how fast it yields to a drag and returns (per second)
+  const hem={amplitude:.04,wavelength:.25,speed:.15,irregularity:1,swell:.5,droop:.9,sideways:.5,fadeOut:4,fadeIn:1.2};
+  const hemStill=matchMedia('(prefers-reduced-motion: reduce)');
+  let hemGain=1,hemClock=0,hemHeld=false;
+  function stirHem(now) {
+    const dt=hemClock?Math.min(.1,(now-hemClock)/1000):0;hemClock=now;
+    // Yields while the cloth is being dragged, and rests for reduced motion.
+    const target=hemHeld||hemStill.matches?0:1;
+    hemGain+=(target-hemGain)*Math.min(1,dt*(target<hemGain?hem.fadeOut:hem.fadeIn));
+    const p=clothGeometry.attributes.position,t=now/1000,k=2*Math.PI/hem.wavelength;
+    for(let i=0;i<p.count;i++) {
+      let x=laid[i*3],y=laid[i*3+1],z=laid[i*3+2];
+      if(hemFold[i]>0&&hemGain>0) {
+        const s=hemAlong[i],phase=hemPhase[i],nx=hemOut[i*2],nz=hemOut[i*2+1];
+        const drift=hem.irregularity*(1.2*Math.sin(s*2.1+.37*t+phase)+.7*Math.sin(s*5.3-.23*t));
+        const depth=1-hem.swell+hem.swell*Math.sin(s*3.7+.5*t+phase*1.3);
+        const angle=k*(s-hem.speed*t)+phase+drift,size=hem.amplitude*hemFold[i]*depth;
+        const fold=size*Math.sin(angle),change=(fold-hemLaidFold[i])*hemGain;
+        const along=hem.sideways*size*Math.cos(angle)*hemGain*hemWeight[i];
+        x+=nx*change-nz*along;z+=nz*change+nx*along;y-=hem.droop*fold*hemGain*hemWeight[i];
       }
       p.setXYZ(i,x,y,z);
     }
@@ -964,10 +1023,12 @@ if (renderer) {
     // Drag offset as fractions of the cloth's on-screen size.
     pull(fx,fz) {
       if(clothMotion||!cloth.visible) return;
+      hemHeld=true;
       const [W,D]=clothSize();drape.ox=fx*W;drape.oz=fz*D;lay();invalidate();
     },
     // A short pull lets the heavy cloth settle back where it lay.
     settle() {
+      hemHeld=false;
       const fromX=drape.ox,fromZ=drape.oz;
       return animateCloth(420,t=>{const e=1-(1-t)**3;drape.ox=fromX*(1-e);drape.oz=fromZ*(1-e);});
     },
@@ -975,13 +1036,14 @@ if (renderer) {
     // stair (flyAway). Resolves once it has lifted clear of the table, while
     // the flight goes on, so the portal can wake meanwhile.
     slideOff(dx=0,dz=1,instant=false) {
+      hemHeld=false;
       if(instant||matchMedia('(prefers-reduced-motion: reduce)').matches) {
         clothMotion=null;cloth.visible=false;setGlow(1);invalidate();return Promise.resolve(true);
       }
       return flyAway(glow);
     },
     reset() {
-      clothMotion=null;airborne=false;drape.ox=drape.oz=0;cloth.visible=true;cloth.layers.set(1);
+      clothMotion=null;airborne=false;hemHeld=false;drape.ox=drape.oz=0;cloth.visible=true;cloth.layers.set(1);
       clothMaterial.opacity=1;tugLight.intensity=0;setGlow(0);lay();invalidate();
     },
   };
@@ -1059,15 +1121,17 @@ if (renderer) {
     front.render(scene,camera);
     scene.background=background;camera.layers.set(0);frontHost.classList.add('is-ready');
   }
-  // The inscription's glow breathes and drifts while the cloth lies on the
-  // table. Only the foreground layer redraws for it, at about 30 fps; in its
-  // flight the cloth is redrawn with the room anyway. Still for reduced motion.
+  // The inscription's glow breathes and drifts, and the hem sways, while the
+  // cloth lies on the table. Only the foreground layer redraws for it, at about
+  // 30 fps; in its flight the cloth is redrawn with the room anyway (and moved
+  // by the flight alone). Still for reduced motion.
   const stillMotion=matchMedia('(prefers-reduced-motion: reduce)');
   let lastPulse=0;
   function pulse(now) {
     requestAnimationFrame(pulse);
     if(!cloth.visible||document.hidden||lost||stillMotion.matches||now-lastPulse<33) return;
     lastPulse=now;inscription.uTime.value=now/1000;
+    if(!airborne&&!clothMotion) stirHem(now);
     if(cloth.layers.isEnabled(1)) renderFront();
   }
   requestAnimationFrame(pulse);
@@ -1088,7 +1152,8 @@ if (renderer) {
   canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();lost=true;host.classList.remove('is-ready');});
   canvas.addEventListener('webglcontextrestored',()=>{lost=false;resize();});
   // Used by the local geometry/registration check and dev inspection.
-  window.studyRoom={camera,scene,renderer,front,chair,shell,placement,
+  // hem: the cloth hem wave's parameters, live-tunable from the console.
+  window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,
     // Room extents in scene (table-relative) coordinates; the plan objects
     // after it (window, tower, alcove, corner) are in plan coordinates.
     dimensions:{...room,back:room.back-placement.forward,front:room.front-placement.forward},

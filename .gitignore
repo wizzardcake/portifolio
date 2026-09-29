@@ -1,2 +1,21 @@
 .qa/
 Microsoft/
+
+# Dependencies
+node_modules/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

@@ -1,0 +1,50 @@
+/* Additive presentation layer: no layout, input targets or portal surface. */
+.portal-aura { position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none; visibility: hidden; }
+.portal-aura i { position: absolute; display: block; pointer-events: none; }
+.aura-rim { opacity: var(--aura-rim-alpha, 0); transform: translateZ(.6px); filter: blur(3px); }
+.aura-rim--left, .aura-rim--right { top: -4%; bottom: -4%; width: 10%; }
+.aura-rim--left {
+  left: -5%;
+  background: radial-gradient(ellipse 40% 46% at 50% 34%, #53d6b9b0, #2b958947 38%, transparent 100%),
+    radial-gradient(ellipse 40% 24% at 50% 81%, #81cb9f88, transparent 100%);
+}
+.aura-rim--right {
+  right: -5%;
+  background: radial-gradient(ellipse 40% 43% at 50% 64%, #9770d9b0, #72569945 45%, transparent 100%),
+    radial-gradient(ellipse 36% 23% at 50% 15%, #628bcb77, transparent 100%);
+}
+.aura-rim--back, .aura-rim--front { left: -3%; right: -3%; height: 14%; }
+.aura-rim--back {
+  top: -7%;
+  background: radial-gradient(ellipse 25% 38% at 22% 50%, #53d6b980, transparent 100%),
+    radial-gradient(ellipse 22% 35% at 79% 50%, #976fcb77, transparent 100%);
+}
+.aura-rim--front {
+  bottom: -7%;
+  background: radial-gradient(ellipse 26% 36% at 27% 50%, #81d4a794, transparent 100%),
+    radial-gradient(ellipse 24% 36% at 80% 50%, #9770d994, transparent 100%);
+}
+.aura-wisp, .aura-mote, .aura-shimmer { left: 50%; top: 50%; }
+.aura-wisp {
+  mask-image: var(--aura-haze-mask); mask-size: 100% 100%; mask-repeat: no-repeat;
+  filter: blur(.45px); opacity: 0;
+}
+.aura-wisp--teal { background: linear-gradient(100deg, #379283, #72c7b5 55%, #529787); }
+.aura-wisp--purple { background: linear-gradient(90deg, #5663ad, #ac85d2 60%, #8267ac); }
+.aura-wisp--green { background: linear-gradient(100deg, #499b85, #8ec7a2 50%, #65aaaa); }
+.aura-mote { border-radius: 50%; box-shadow: 0 0 4px #69bca94a; opacity: 0; }
+.aura-shimmer {
+  backdrop-filter: url('#portal-aura-refraction');
+  mask-image: radial-gradient(ellipse, #0009, transparent 70%);
+  opacity: 0;
+}
+.portal-aura-apron {
+  position: absolute; display: block; top: 100%; left: 2%; right: 2%; height: 18px;
+  transform-origin: top; transform: rotateX(-90deg) translateZ(.2px);
+  pointer-events: none; opacity: 0; border-radius: 0 0 5px 5px;
+  background: radial-gradient(ellipse 34% 110% at 22% 0, #4dceb97d, transparent),
+    radial-gradient(ellipse 32% 100% at 82% 0, #8c5cd982, transparent);
+}
+@media (prefers-reduced-motion: reduce), (max-width: 899px) {
+  .aura-shimmer { display: none; }
+}

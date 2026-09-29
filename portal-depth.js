@@ -1,183 +1,199 @@
-/* A cut tabletop and a CSS 3D shaft. There is no drawable surface at Z=0.
-   Only two transparent fog billboards use WebGL. Walls, stars and motes
-   are separate geometry below the table, sharing its camera perspective. */
+/* Shallow physical lining, then an optically deep interior. One opaque
+   billboard just below the lining composites every depth layer in a single
+   shader pass; depth-volume.js owns its material and projection. The liquid
+   surface, orb, lights and interactions remain independent. */
 (() => {
-  const screen = document.getElementById('screen');
-  const aperture = screen.querySelector('.screen-tunnel');
-  const table = screen.querySelector('.portal-table');
-  const tabletop = table.querySelector('.portal-table-top');
-  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-  const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
-  const abyss = aperture.querySelector('.portal-abyss');
-  const stars = aperture.querySelector('.portal-stars');
-  const fogs = [...aperture.querySelectorAll('.portal-fog')];
-  let seed = 73;
-  const random = () => { seed = seed * 16807 % 2147483647; return seed / 2147483647; };
-  for (let i = 0; i < 86; i++) {
-    const star = document.createElement('i');
-    star.style.cssText = `left:${random() * 100}%;top:${random() * 100}%;--star-size:${1 + random() * 1.9}px;--star-alpha:${.25 + random() * .6}`;
-    stars.appendChild(star);
-  }
-  const motes = Array.from({length: 20}, () => {
-    const element = document.createElement('i'); element.className = 'portal-mote';
-    element.style.cssText = `--mote-size:${1.7 + random() * 1.7}px;--mote-color:${random() > .55 ? '#86bcb0' : '#9c89bc'}`;
-    aperture.querySelector('.portal-particles').appendChild(element);
-    return {element, x: (random() - .5) * .82, y: random() * .5 - .4, phase: random(), period: 42 + random() * 35};
-  });
-  const vertex = `attribute vec2 position; varying vec2 uv;
-    void main(){uv=position*.5+.5;gl_Position=vec4(position,0.,1.);}`;
-  // Reuse the existing cloud treatment. No shaft, rim, floor or stars are
-  // painted here: each canvas contains transparent wisps at its own depth.
-  const fragment = `precision highp float;
-    varying vec2 uv;
-    uniform float time, aspect, layer;
-    float hash(vec2 p) {
-      vec3 q=fract(vec3(p.xyx)*vec3(.1031,.1030,.0973));
-      q+=dot(q,q.yzx+33.33); return fract((q.x+q.y)*q.z);
-    }
-    float noise(vec2 p) {
-      vec2 i=floor(p), f=fract(p); f=f*f*f*(f*(f*6.-15.)+10.);
-      return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.)),f.x),f.y);
-    }
-    float cloud(vec2 p, float z) {
-      p+=vec2(sin(p.y*1.8+z+time*.025),cos(p.x*1.4-z-time*.02))*.32;
-      mat2 turn=mat2(.8,-.6,.6,.8); vec2 q=p*3.2;
-      float value=noise(q+z)*.55;
-      q=turn*q*2.03; value+=noise(q-z)*.25;
-      q=turn*q*2.01; value+=noise(q+z)*.13;
-      q=turn*q*2.07; value+=noise(q-z)*.07; return value;
-    }
-    void main() {
-      vec2 p=(uv*2.-1.)*vec2(aspect,1.);
-      float left=exp(-dot((p-vec2(-aspect*.43,.03))*vec2(.85,1.9),(p-vec2(-aspect*.43,.03))*vec2(.85,1.9)));
-      float right=exp(-dot((p-vec2(aspect*.43,-.07))*vec2(.85,1.9),(p-vec2(aspect*.43,-.07))*vec2(.85,1.9)));
-      float n=cloud(p+vec2(layer*.13,time*.016),layer-time*.045);
-      float wisps=smoothstep(.38,.66,n)*(.65+sin(p.y*6.+layer*3.-time*.09)*.35);
-      float edge=(1.-smoothstep(.76,1.,abs(p.x/aspect)))*(1.-smoothstep(.6,1.,abs(p.y)));
-      float alpha=wisps*(left+right)*edge*.64;
-      vec3 color=mix(vec3(.085,.36,.34),vec3(.23,.10,.36),right/(left+right+.001));
-      vec3 exposed=1.-exp(-color*1.15);
-      vec3 displayColor=mix(exposed*12.92,1.055*pow(exposed,vec3(1./2.4))-.055,step(vec3(.0031308),exposed));
-      gl_FragColor=vec4(displayColor,alpha);
-    }`;
-
-  let width = 1, height = 1, pitch = 46 * Math.PI / 180;
-  let dirty = true, visible = true, last = 0, elapsed = 0, measured = -1000, sampledDpr = 0;
-  const pointer = {x: 0, y: 0}, view = {x: 0, y: 0};
-  const renderers = fogs.map((element, i) => ({element, canvas: element.querySelector('canvas'), layer: i === 0 ? 3.2 : 1.1, gl: null}));
-  function initialize(renderer) {
-    const {canvas, element} = renderer;
+  const screen=document.getElementById('screen'),volume=window.portalDepthVolume;
+  if(!screen||!volume)return;
+  const aperture=screen.querySelector('.screen-tunnel'),table=screen.querySelector('.portal-table');
+  const tabletop=table.querySelector('.portal-table-top'),camera=window.sceneCamera;
+  const motion=matchMedia('(prefers-reduced-motion: reduce)');
+  const finePointer=matchMedia('(hover: hover) and (pointer: fine)');
+  const settings={...volume.defaults},clamp=volume.clamp,TAU=Math.PI*2,FRAME=1000/30;
+  aperture.classList.add('portal-interior');
+  // The short lining no longer screens the space under the back rim. The back
+  // legs are only ever seen through the opening, so portal-depth.css hides them.
+  screen.classList.add('has-portal-interior');
+  const abyss=aperture.querySelector('.portal-abyss'),canvas=abyss.querySelector('canvas');
+  const plane={element:abyss};
+  // Optical depths in aperture heights. Seen through a fixed opening, a layer
+  // slides with the pointer in proportion to depth/(eye height + depth).
+  const layers=[
+    {name:'throat',d:4.2,drift:0,phase:0},
+    {name:'far-stars',d:3.1,drift:.004,phase:3.4},
+    {name:'stars',d:1.9,drift:.006,phase:1.8},
+    {name:'deep-energy',d:.86,drift:.014,phase:2.9},
+    {name:'dark-mist',d:.48,drift:.018,phase:4.7},
+    {name:'near-mist',d:.27,drift:.012,phase:.6},
+  ].map(layer=>({...layer,x:0,y:0}));
+  const PARALLAX=.05; // aperture half-widths an infinitely deep layer slides
+  let seed=73;
+  const random=()=>{seed=seed*16807%2147483647;return seed/2147483647;};
+  const motes=Array.from({length:volume.MOTES},()=>({angle:random()*TAU,radius:.27+random()*.2,
+    phase:random(),period:34+random()*30,size:1.1+random()*1.1,violet:random()>.55}));
+  const moteData=new Float32Array(volume.MOTES*4),offsets=new Float32Array(12),shifts=new Float32Array(4);
+  const phases={nearFlow:0,nearTurn:0,deepFlow:0,deepTurn:0};
+  let gl=null,uniforms=null,width=1,height=1,dirty=true,visible=true,active=false,raf=0,last=0;
+  let elapsed=0,particleTime=0,sampledDpr=0,frames=0,wallDepthPx=0,pixel=1,jx=[1,0],jy=[0,1];
+  const pointer={x:0,y:0},view={x:0,y:0};
+  const moteCount=()=>gl?(innerWidth<600?12:volume.MOTES):0;
+  function initialize() {
     try {
-      const gl = canvas.getContext('webgl', {alpha: true, premultipliedAlpha: false, antialias: false, depth: false, stencil: false});
-      if (!gl) throw new Error('WebGL unavailable');
-      const compile = (type, source) => {
-        const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader);
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {const reason = gl.getShaderInfoLog(shader); gl.deleteShader(shader); throw new Error(reason);}
+      gl=canvas.getContext('webgl',{alpha:true,premultipliedAlpha:false,antialias:false,depth:false,stencil:false});
+      if(!gl)throw new Error('WebGL unavailable');
+      const compile=(type,source)=>{
+        const shader=gl.createShader(type);gl.shaderSource(shader,source);gl.compileShader(shader);
+        if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){const message=gl.getShaderInfoLog(shader);gl.deleteShader(shader);throw new Error(message);}
         return shader;
       };
-      const program = gl.createProgram(), vs = compile(gl.VERTEX_SHADER, vertex), fs = compile(gl.FRAGMENT_SHADER, fragment);
-      gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program);
-      gl.deleteShader(vs); gl.deleteShader(fs);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+      const program=gl.createProgram(),vs=compile(gl.VERTEX_SHADER,volume.vertex),fs=compile(gl.FRAGMENT_SHADER,volume.fragment);
+      gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);gl.deleteShader(vs);gl.deleteShader(fs);
+      if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program));
       gl.useProgram(program);
-      const buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
-      const pos = gl.getAttribLocation(program, 'position'); gl.enableVertexAttribArray(pos); gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
-      Object.assign(renderer, {gl, program, buffer, uniforms: Object.fromEntries(['time','aspect','layer'].map(key => [key, gl.getUniformLocation(program, key)]))});
-      element.classList.add('webgl');
-    } catch (error) {
-      console.warn('Portal fog uses CSS fallback:', error.message);
-      renderer.gl = null; element.classList.remove('webgl');
-    }
-    aperture.classList.toggle('has-depth', renderers.every(r => r.gl)); dirty = true;
+      gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());
+      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+      const pos=gl.getAttribLocation(program,'position');gl.enableVertexAttribArray(pos);gl.vertexAttribPointer(pos,2,gl.FLOAT,false,0,0);
+      const keys=['time','fogDensity','centralDarkness','swirlAmount','deepGlowIntensity','phase',
+        'planeSize','apertureSize','eye','basis','planeCenter','offset','starShift','pixel','motes',
+        'impactPoint','impactPull','impactWave','impactRadius'];
+      uniforms=Object.fromEntries(keys.map(key=>[key,gl.getUniformLocation(program,key)]));
+      abyss.classList.add('webgl');
+    } catch(error) {console.warn('Portal interior uses CSS fallback:',error.message);gl=null;abyss.classList.remove('webgl');}
+    aperture.classList.toggle('has-depth',!!gl);invalidate();
   }
-  renderers.forEach(renderer => {
-    renderer.canvas.addEventListener('webglcontextlost', event => {
-      event.preventDefault(); renderer.gl = null;
-      renderer.element.classList.remove('webgl'); aperture.classList.remove('has-depth'); dirty = true;
-    });
-    renderer.canvas.addEventListener('webglcontextrestored', () => initialize(renderer));
-    initialize(renderer);
-  });
   function measure() {
-    width = screen.clientWidth; height = screen.clientHeight;
-    pitch = (parseFloat(getComputedStyle(screen).getPropertyValue('--view-pitch')) || 46) * Math.PI / 180;
-    const wellDepth = height * .48;
-    screen.style.setProperty('--well-depth', wellDepth + 'px');
-    // Clip each side face to the front sightline so its lower corner cannot
-    // leak out below the table apron. The top ring handles rim occlusion.
-    const {localEyeZ: cameraZ, localEyeY: cameraY} = window.sceneCamera;
-    const frontCut = Math.max(.1, 1 - wellDepth * (cameraY - height / 2) / cameraZ / height - .03);
-    screen.style.setProperty('--wall-front-cut', frontCut * 100 + '%');
-    const x = -table.offsetLeft, y = -table.offsetTop, w = table.clientWidth, h = table.clientHeight, c = 5;
-    tabletop.style.clipPath = `path(evenodd, "M0 0 H${w} V${h} H0 Z M${x+c} ${y} H${x+width-c} L${x+width} ${y+c} V${y+height-c} L${x+width-c} ${y+height} H${x+c} L${x} ${y+height-c} V${y+c} Z")`;
-    sampledDpr = devicePixelRatio || 1;
-  }
-  function place(element, depth, x, y) {
-    element.style.setProperty('--layer-z', -depth + 'px');
-    element.style.setProperty('--layer-x', x + 'px');
-    element.style.setProperty('--layer-y', y + 'px');
+    width=screen.clientWidth;height=screen.clientHeight;sampledDpr=devicePixelRatio||1;
+    wallDepthPx=Math.min(48,Math.max(8,height*settings.wallDepth));
+    screen.style.setProperty('--well-depth',wallDepthPx+'px');
+    const {localEyeZ:ez,localEyeY:ey}=camera;
+    const frontCut=Math.max(.1,1-wallDepthPx*(ey-height/2)/ez/height-.03);
+    screen.style.setProperty('--wall-front-cut',frontCut*100+'%');
+    // Preserve the existing table cut exactly; only its inner lining shortens.
+    const x=-table.offsetLeft,y=-table.offsetTop,w=table.clientWidth,h=table.clientHeight,c=5;
+    tabletop.style.clipPath=`path(evenodd, "M0 0 H${w} V${h} H0 Z M${x+c} ${y} H${x+width-c} L${x+width} ${y+c} V${y+height-c} L${x+width-c} ${y+height} H${x+c} L${x} ${y+height-c} V${y+c} Z")`;
+    // The billboard starts where the lining ends; it bleeds 3% under the rim.
+    volume.project(plane,width,height,camera,wallDepthPx+Math.max(6,height*.02),.03);
+    const box=abyss.getBoundingClientRect();
+    pixel=box.width>0?plane.width/box.width:1;
+    // How one aperture unit maps into the plane, for the screen-aligned stars.
+    const at=(ax,ay)=>volume.toLocal(plane,camera,ax*width/2,ay*height/2,0);
+    const [r,l,f,b]=[at(.05,0),at(-.05,0),at(0,.05),at(0,-.05)];
+    jx=[(r[0]-l[0])*10,(r[1]-l[1])*10];jy=[(f[0]-b[0])*10,(f[1]-b[1])*10];
+    const budget=innerWidth<600?180000:600000;
+    const ratio=Math.min(sampledDpr,Math.sqrt(budget/Math.max(1,box.width*box.height)));
+    const cw=Math.max(1,Math.floor(box.width*ratio)),ch=Math.max(1,Math.floor(box.height*ratio));
+    if(canvas.width!==cw||canvas.height!==ch){canvas.width=cw;canvas.height=ch;}
   }
   function geometry() {
-    // Deep space lies beyond the end of the physical shaft. Its location
-    // compensates for the downward view, so it remains visible in the hole.
-    const slope = window.sceneCamera.localEyeY / window.sceneCamera.localEyeZ;
-    place(abyss, height * 1.9, 0, -height * 1.9 * slope);
-    place(stars, height * 1.6, view.x * width * .008, height * (-1.6 * slope + .1) + view.y * height * .008);
-    place(fogs[0], height * (.98 + Math.sin(elapsed * .10) * .025), view.x * width * .04, height * (-.98 * slope + .12) + view.y * height * .025);
-    place(fogs[1], height * (.58 + Math.sin(elapsed * .14) * .035), view.x * width * .085, height * (-.58 * slope + .32) + view.y * height * .06);
-    const {localEyeZ: cameraZ, localEyeY: cameraY} = window.sceneCamera;
-    for (const mote of motes) {
-      const cycle = (mote.phase + elapsed / mote.period) % 1;
-      const depth = height * (.98 - cycle * .89);
-      const x = mote.x * width + view.x * width * .055 / (1 + depth / height);
-      const y = mote.y * height + view.y * height * .04;
-      const surfaceX = x * cameraZ / (cameraZ + depth);
-      const surfaceY = (y * cameraZ + cameraY * depth) / (cameraZ + depth);
-      const inside = Math.abs(surfaceX) < width * .475 && Math.abs(surfaceY) < height * .46;
-      mote.element.style.setProperty('--mote-x', x + 'px');
-      mote.element.style.setProperty('--mote-y', y + 'px');
-      mote.element.style.setProperty('--mote-z', -depth + 'px');
-      mote.element.style.opacity = inside ? String(Math.min(1, cycle * 8, (1 - cycle) * 6) * .8) : '0';
+    const {localEyeZ:ez,localEyeY:ey}=camera,still=motion.matches,strength=PARALLAX*settings.parallaxStrength;
+    layers.forEach((layer,i)=>{
+      const t=elapsed*(layer.name==='near-mist'?.083:.047),drift=still?0:layer.drift,depth=layer.d*height;
+      const reach=strength*depth/(ez+depth);
+      layer.x=view.x*reach+Math.sin(t+layer.phase)*drift;
+      layer.y=view.y*reach*.6+Math.cos(t*.73+layer.phase)*drift*.6;
+      offsets[i*2]=layer.x;offsets[i*2+1]=layer.y;
+    });
+    for(const [k,i] of [[0,1],[2,2]]) {
+      const {x,y}=layers[i];shifts[k]=jx[0]*x+jy[0]*y;shifts[k+1]=jx[1]*x+jy[1]*y;
+    }
+    // Motes sink and gather toward the throat's axis, fading as they go.
+    const slope=ey/ez,count=moteCount();
+    for(let i=0;i<motes.length;i++) {
+      const mote=motes[i],o=i*4;
+      if(i>=count){moteData[o+3]=0;continue;}
+      const f=(mote.phase+particleTime/mote.period)%1;
+      const depth=height*(.10+f*2.4),t=ez/(ez+depth),gather=1-settings.inwardPull*f*.85;
+      const angle=mote.angle+(f*.45+elapsed*.004)*settings.swirlAmount,reach=strength*depth/ez;
+      const x=Math.cos(angle)*width*mote.radius*gather+view.x*reach*width/2;
+      const y=Math.sin(angle)*height*mote.radius*.78*gather-depth*slope+view.y*reach*.6*height/2;
+      const sx=x*t,sy=y*t+ey*(1-t);
+      const edge=clamp((.48-Math.abs(sx/width))/.07)*clamp((.46-Math.abs(sy/height))/.07);
+      // Brightest just below the lining; gone into the dark long before the axis.
+      const life=clamp(f/.13)*clamp((1-f)/.25)*clamp((t-.14)/.5)**1.3;
+      const [lx,ly]=volume.toLocal(plane,camera,x,y,-depth);
+      moteData[o]=lx;moteData[o+1]=ly;
+      moteData[o+2]=(mote.violet?-1:1)*mote.size*(.5+.5*t)*pixel;
+      moteData[o+3]=edge*life*.9;
     }
   }
-  new ResizeObserver(() => {dirty = true;}).observe(screen);
-  addEventListener('scene-camera-change', () => {dirty = true;});
-  new IntersectionObserver(entries => {visible = entries[0].isIntersecting; dirty = true;}).observe(screen);
-  document.addEventListener('pointermove', event => {
-    if (!finePointer.matches || reducedMotion.matches || event.buttons) return;
-    pointer.x = Math.max(-1, Math.min(1, event.clientX / innerWidth * 2 - 1));
-    pointer.y = Math.max(-1, Math.min(1, event.clientY / innerHeight * 2 - 1));
-  }, {passive: true});
-  document.documentElement.addEventListener('pointerleave', () => {pointer.x = pointer.y = 0;});
-  reducedMotion.addEventListener('change', () => {pointer.x = pointer.y = view.x = view.y = 0; dirty = true;});
+  function draw(now) {
+    if(!gl)return;
+    const impact=window.portalReaction?.sample(now); // read-only optional adapter
+    const u=uniforms;
+    gl.viewport(0,0,canvas.width,canvas.height);
+    gl.uniform1f(u.time,motion.matches?0:elapsed);
+    for(const key of ['fogDensity','centralDarkness','swirlAmount','deepGlowIntensity'])gl.uniform1f(u[key],settings[key]);
+    gl.uniform4f(u.phase,phases.nearFlow,phases.nearTurn,phases.deepFlow,phases.deepTurn);
+    gl.uniform2f(u.planeSize,plane.width,plane.height);gl.uniform2f(u.apertureSize,width,height);
+    gl.uniform2f(u.eye,camera.localEyeY,camera.localEyeZ);gl.uniform2f(u.basis,plane.s,plane.c);
+    gl.uniform3f(u.planeCenter,plane.cx,plane.cy,plane.cz);
+    gl.uniform2fv(u.offset,offsets);gl.uniform4fv(u.starShift,shifts);gl.uniform1f(u.pixel,pixel);
+    gl.uniform4fv(u.motes,moteData);
+    gl.uniform2f(u.impactPoint,(impact?.x??.5)*2-1,(impact?.y??.5)*2-1);
+    gl.uniform1f(u.impactPull,impact?.pull||0);gl.uniform1f(u.impactWave,impact?.wave||0);gl.uniform1f(u.impactRadius,impact?.radius||0);
+    gl.drawArrays(gl.TRIANGLES,0,6);
+  }
+  function advance(dt) {
+    // Phases wrap on the shader's noise periods, so hours of idle stay seamless.
+    const {flow,nearTurns,deepTurns}=volume.periods;
+    elapsed+=dt;particleTime+=dt*settings.particleDepthSpeed;
+    phases.nearFlow=(phases.nearFlow+dt*.077*settings.inwardPull)%flow;
+    phases.deepFlow=(phases.deepFlow+dt*.2*settings.inwardPull)%flow;
+    phases.nearTurn=(phases.nearTurn+dt*.086*settings.swirlAmount)%nearTurns;
+    phases.deepTurn=(phases.deepTurn+dt*.26*settings.swirlAmount)%deepTurns;
+  }
   function render(now) {
-    requestAnimationFrame(render);
-    if (document.hidden || !visible) {last = now; return;}
-    if (now - last < 33) return;
-    const dt = Math.min((now - last) / 1000, .1); last = now;
-    if (sampledDpr !== devicePixelRatio) dirty = true;
-    if (reducedMotion.matches && !dirty) return;
-    if (dirty || now - measured > 180) {measure(); measured = now;}
-    if (width < 2 || height < 2) return;
-    if (!reducedMotion.matches) elapsed += dt;
-    const ease = 1 - Math.exp(-dt * 3);
-    view.x += (pointer.x - view.x) * ease; view.y += (pointer.y - view.y) * ease;
-    geometry();
-    for (const renderer of renderers) {
-      const {gl, canvas, element, uniforms} = renderer;
-      if (!gl) continue;
-      const r = element.getBoundingClientRect();
-      const budget = innerWidth < 600 ? 275000 : 900000;
-      const ratio = Math.min(sampledDpr * 1.15, 2, Math.sqrt(budget / Math.max(1, r.width * r.height)), 2400 / Math.max(1, r.width));
-      const w = Math.max(1, Math.floor(r.width * ratio)), h = Math.max(1, Math.floor(r.height * ratio));
-      if (canvas.width !== w || canvas.height !== h) {canvas.width = w; canvas.height = h;}
-      gl.viewport(0, 0, w, h);
-      gl.uniform1f(uniforms.time, reducedMotion.matches ? 0 : elapsed);
-      gl.uniform1f(uniforms.aspect, element.clientWidth / element.clientHeight);
-      gl.uniform1f(uniforms.layer, renderer.layer); gl.drawArrays(gl.TRIANGLES, 0, 6);
-    }
-    dirty = false;
+    raf=0;if(!active)return;
+    if(now-last<FRAME-3&&!dirty){schedule();return;}
+    const dt=last?Math.min(.1,(now-last)/1000):0;last=now;
+    if(sampledDpr!==(devicePixelRatio||1))dirty=true;
+    if(dirty)measure();if(width<2||height<2)return;
+    if(!motion.matches)advance(dt);
+    const ease=1-Math.exp(-dt*3);
+    view.x+=(pointer.x-view.x)*ease;view.y+=(pointer.y-view.y)*ease;
+    geometry();draw(now);frames++;dirty=false;
+    // The CSS fallback is static; only the shader has continuous life.
+    if(!motion.matches&&gl)schedule();
   }
-  measure(); geometry(); requestAnimationFrame(render);
+  function schedule(){if(!raf&&active)raf=requestAnimationFrame(render);}
+  function invalidate(){dirty=true;schedule();}
+  function sync() {
+    active=!document.hidden&&visible&&!document.body.classList.contains('table-covered');
+    if(raf)cancelAnimationFrame(raf);raf=0;last=0;
+    if(motion.matches)pointer.x=pointer.y=view.x=view.y=0;
+    invalidate();
+  }
+  canvas.addEventListener('webglcontextlost',event=>{
+    event.preventDefault();gl=null;abyss.classList.remove('webgl');aperture.classList.remove('has-depth');invalidate();
+  });
+  canvas.addEventListener('webglcontextrestored',initialize);
+  initialize();
+  new ResizeObserver(invalidate).observe(screen);
+  addEventListener('scene-camera-change',invalidate);
+  // A pixel-ratio change need not resize anything (another monitor), and a
+  // static reduced-motion frame has no loop to notice it.
+  (function watchPixelRatio() {
+    matchMedia(`(resolution: ${devicePixelRatio||1}dppx)`).addEventListener('change',()=>{invalidate();watchPixelRatio();},{once:true});
+  })();
+  new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;sync();}).observe(screen);
+  new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['class']});
+  document.addEventListener('visibilitychange',sync);motion.addEventListener('change',sync);
+  document.addEventListener('pointermove',event=>{
+    if(!finePointer.matches||motion.matches||event.buttons)return;
+    pointer.x=clamp(event.clientX/innerWidth*2-1,-1,1);pointer.y=clamp(event.clientY/innerHeight*2-1,-1,1);
+  },{passive:true});
+  document.documentElement.addEventListener('pointerleave',()=>{pointer.x=pointer.y=0;});
+  window.portalDepth={defaults:volume.defaults,
+    configure(values={}) {
+      for(const [key,value] of Object.entries(values))if(volume.limits[key]&&Number.isFinite(value))settings[key]=clamp(value,...volume.limits[key]);
+      invalidate();return {...settings};
+    },
+    get settings(){return {...settings};},
+    get stats(){return {frames,active,reducedMotion:motion.matches,wallDepthPx,
+      particles:moteCount(),visibleParticles:gl?motes.filter((_,i)=>moteData[i*4+3]>.05).length:0,
+      glContexts:gl?1:0,renderPixels:gl?canvas.width*canvas.height:0,
+      plane:{depth:plane.depth,maxZ:plane.maxZ,width:plane.width,height:plane.height},
+      layers:layers.map(l=>({name:l.name,depth:l.d*height,x:l.x*width/2,y:l.y*height/2}))};},
+  };
+  measure();geometry();sync();
 })();

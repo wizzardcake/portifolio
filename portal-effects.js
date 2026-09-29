@@ -154,6 +154,7 @@
     return {x: w / 2, y: h / 2, z: d * .75, w: d, h: d};
   }
   function transitionTo(nextMode, duration) {
+    window.portalReaction?.cancel('orb-transition');
     if (transition) transition.resolve(false);
     matter.style.opacity = '1';
     const from = rect || targetRect(mode);
@@ -167,7 +168,7 @@
   }
   function animate(now) {
     requestAnimationFrame(animate);
-    if (document.hidden || (now - lastTime < 32 && !transition)) return;
+    if (document.hidden || (now - lastTime < 32 && !transition && !window.portalReaction?.active)) return;
     if (window.sceneCamera.appliedPitch !== camera.pitch) window.sceneCamera.update();
     lastTime = now;
     // One fixed table plane before, during and after the intro. Neither
@@ -190,10 +191,12 @@
     // during the first third of its rise.
     matter.style.visibility = mode === 'locked' && !transition ? 'hidden' : '';
     if (transition?.emerging) matter.style.opacity = String(Math.min(1, t / .35));
-    const drift = mode === 'idle' && !transition && !reducedMotion.matches ? Math.sin(now * .0009) * 4 : 0;
+    const reaction = mode === 'idle' && !transition ? window.portalReaction?.sample(now) : null;
+    const drift = mode === 'idle' && !transition && !reducedMotion.matches
+      ? Math.sin(now * .0009) * 4 * (1 - (reaction?.orbInfluence || 0)) : 0;
     matter.style.left = rect.x + 'px'; matter.style.top = rect.y + 'px';
     matter.style.width = rect.w + 'px'; matter.style.height = rect.h + 'px';
-    matter.style.setProperty('--matter-height', (rect.z + drift) + 'px');
+    matter.style.setProperty('--matter-height', (rect.z + drift + (reaction?.orbOffset || 0) * rect.w) + 'px');
     // Keep the rendered sphere round even while it seals the socket.
     // The tabletop is foreshortened; the volume must never be flattened
     // into that plane. The ray marcher supplies the surface's actual depth.
@@ -229,6 +232,8 @@
   }
   requestAnimationFrame(animate);
   window.portalMatter = {
+    // Reaction offsets are sampled additively; no second owner of the orb pose.
+    get canReact() { return mode === 'idle' && !transition; },
     charge(value, rotation = 0) { charge = value; spin = rotation * Math.PI / 180; },
     // Summons the orb up out of the uncovered portal into its idle hover.
     unlock(duration = 3400) { document.body.classList.add('portal-unlocked'); return transitionTo('idle', duration); },
@@ -241,6 +246,7 @@
     },
     restore() { screen.classList.remove('is-projecting'); return transitionTo('idle', 950); },
     reset() {
+      window.portalReaction?.cancel('reset');
       document.body.classList.remove('portal-unlocked'); screen.classList.remove('is-projecting');
       if (transition) transition.resolve(false);
       transition = null; mode = 'locked'; fluid = morph = charge = spin = 0; rect = targetRect(mode);

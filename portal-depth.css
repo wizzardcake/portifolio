@@ -1,0 +1,45 @@
+/* Interior only. The surface, rim, orb, aura and shared 3D parent keep their
+   existing rendering. The one deep billboard carries its own aperture clip. */
+.portal-interior .portal-wall {
+  /* A short lit cut through the tabletop that sinks into the abyss. */
+  --wall-material: #5d5544 0px, #4a4335 2px, #3a3529 22%, #29271f 42%,
+    #151a1acc 64%, #080d1255 84%, transparent 100%;
+}
+/* The side linings catch the room's jade and violet portal light. */
+.portal-interior .portal-wall--left {
+  --wall-material: #53594a 0px, #414638 2px, #313a31 22%, #22302c 42%,
+    #11201ecc 64%, #07121255 84%, transparent 100%;
+}
+.portal-interior .portal-wall--right {
+  --wall-material: #58505a 0px, #453e48 2px, #363141 22%, #28263a 42%,
+    #16162acc 64%, #0b0b1a55 84%, transparent 100%;
+}
+.portal-interior .portal-wall--top,
+.portal-interior .portal-wall--bottom {
+  mask-image: linear-gradient(90deg, #0003, #000 8%, #000 92%, #0003);
+}
+.portal-interior .portal-wall--left,
+.portal-interior .portal-wall--right {
+  mask-image: linear-gradient(0deg, #0003, #000 8%, #000 92%, #0003);
+}
+/* Fading the preserve-3d tunnel itself flattens it: the depth stayed black
+   for the whole fade, then popped in. Its flat children fade instead. */
+.screen-tunnel.portal-interior { transition: none; }
+.portal-interior > .portal-abyss,
+.portal-interior > .portal-wall { transition: opacity 1.6s ease .2s; }
+body.table-covered .portal-interior > .portal-abyss,
+body.table-covered .portal-interior > .portal-wall { opacity: 0; }
+/* Only ever visible through the opening, which the lining no longer screens. */
+.has-portal-interior .table-leg--back-left,
+.has-portal-interior .table-leg--back-right { visibility: hidden; }
+.portal-interior .portal-abyss {
+  /* CSS fallback. Opaque even at its edges: the short lining must never
+     expose the room below. Dark throat, faint lit haze toward the lining. */
+  background:
+    radial-gradient(ellipse 34% 38% at 50% 56%, #000104, #01030acc 55%, transparent),
+    radial-gradient(ellipse 55% 75% at 14% 46%, #1f5c5838, transparent 70%),
+    radial-gradient(ellipse 55% 75% at 86% 50%, #4b346f33, transparent 70%),
+    radial-gradient(ellipse at 50% 52%, #02050b 25%, #07101a 72%, #0a1520 100%);
+}
+.portal-interior .portal-abyss.webgl { background: #010207; }
+.portal-abyss.webgl .portal-depth { display: block; }

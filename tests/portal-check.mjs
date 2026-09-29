@@ -299,10 +299,13 @@ try {
     assert.equal(construction.style,'preserve-3d');
     assert.ok(construction.cut.includes('evenodd'),'The tabletop has a physical cutout');
     assert.ok(construction.depths.every(d=>d.z < -80),'Every visual layer lies below the table');
-    assert.equal(new Set(construction.depths.map(d=>d.z)).size,4,'Abyss, stars and both fog banks occupy separate depths');
+    // One billboard composites the optical layers; each keeps its own depth.
+    const optical=await evaluate(`portalDepth.stats`);
+    assert.ok(new Set(optical.layers.map(l=>Math.round(l.depth))).size>=4 && optical.plane.maxZ < -optical.wallDepthPx,
+      'Throat, stars, energy and mists occupy separate optical depths below the short lining');
     assert.ok(construction.walls.every(t=>t.startsWith('matrix3d')),'Walls are rotated 3D faces');
     // The geometry must still read as a hole with every cosmic visual hidden.
-    await evaluate(`window.geometryOnly=document.createElement('style');geometryOnly.textContent='.portal-fog,.portal-stars,.portal-particles{visibility:hidden!important}';document.head.appendChild(geometryOnly)`);
+    await evaluate(`window.geometryOnly=document.createElement('style');geometryOnly.textContent='.portal-abyss{visibility:hidden!important}';document.head.appendChild(geometryOnly)`);
     await shot('depth-geometry');
     await evaluate(`geometryOnly.remove()`);
     const table=await bounds('.portal-table');
@@ -311,29 +314,31 @@ try {
     await cdp('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
     await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:80,y:100,buttons:0});
     await sleep(1300); await shot('depth-left');
-    const nearLeft=await bounds('.portal-fog--near'), farLeft=await bounds('.portal-stars');
+    const layerX=name=>evaluate(`portalDepth.stats.layers.find(l=>l.name==='${name}').x`);
+    const nearLeft=await layerX('near-mist'), farLeft=await layerX('stars');
     await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:1360,y:880,buttons:0});
     await sleep(1300); await shot('depth-right');
-    const nearRight=await bounds('.portal-fog--near'), farRight=await bounds('.portal-stars');
-    const nearShift=Math.abs(nearRight.x-nearLeft.x), farShift=Math.abs(farRight.x-farLeft.x);
-    assert.ok(nearShift>15 && nearShift>farShift*5,'Near fog must move visibly more than distant stars at the farther seated distance');
+    const nearRight=await layerX('near-mist'), farRight=await layerX('stars');
+    const nearShift=Math.abs(nearRight-nearLeft), farShift=Math.abs(farRight-farLeft);
+    assert.ok(farShift>8 && farShift>nearShift,'Seen past the fixed rim, distant stars slide visibly further than the near mist');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#screen')).transform`),pose,'The rim remains fixed during internal parallax');
-    const readFog=`new Promise(resolve=>requestAnimationFrame(()=>{
+    const readAbyss=`new Promise(resolve=>requestAnimationFrame(()=>{
       const c=document.querySelector('.portal-depth'),gl=c.getContext('webgl');
       const p=new Uint8Array(c.width*c.height*4);gl.readPixels(0,0,c.width,c.height,gl.RGBA,gl.UNSIGNED_BYTE,p);
-      let visible=0,transparent=0,maxAlpha=0;
-      for(let i=3;i<p.length;i+=4){if(p[i]>8)visible++;if(p[i]<3)transparent++;maxAlpha=Math.max(maxAlpha,p[i]);}
-      resolve({visible,transparent,maxAlpha,total:c.width*c.height,error:gl.getError()});
+      let drawn=0,lit=0,dark=0;
+      for(let i=0;i<p.length;i+=4){if(p[i+3]===255)drawn++;const v=Math.max(p[i],p[i+1],p[i+2]);if(v>64)lit++;if(v<16)dark++;}
+      resolve({drawn,lit,dark,total:c.width*c.height,error:gl.getError()});
     }))`;
     let pixels;
-    for(let i=0;i<12;i++){pixels=await evaluate(readFog);if(pixels.visible)break;await sleep(35);}
-    assert.ok(pixels.visible>pixels.total*.05 && pixels.transparent>pixels.total*.25,'Fog has real transparent gaps, never an opaque surface');
+    for(let i=0;i<12;i++){pixels=await evaluate(readAbyss);if(pixels.drawn)break;await sleep(35);}
+    assert.equal(pixels.drawn,pixels.total,'The abyss is opaque: the room below never shows through the short lining');
+    assert.ok(pixels.lit>pixels.total*.03 && pixels.dark>pixels.total*.05,'Lit mist and a near-black throat both occupy the volume: '+JSON.stringify(pixels));
     assert.equal(pixels.error,0);
     await cdp('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion',value:'reduce'}]});
     await sleep(150);
     await evaluate(`window.depthDraws=0;document.querySelectorAll('.portal-depth').forEach(c=>{const gl=c.getContext('webgl'),draw=gl.drawArrays.bind(gl);gl.drawArrays=(...args)=>{depthDraws++;return draw(...args)}})`);
     await sleep(250);
-    assert.equal(await evaluate(`window.depthDraws`),0,'Reduced motion freezes both fog renderers');
+    assert.equal(await evaluate(`window.depthDraws`),0,'Reduced motion freezes the abyss renderer');
     await cdp('Emulation.setDeviceMetricsOverride', {width:1440,height:1000,deviceScaleFactor:2,mobile:false});
     await sleep(400); await shot('depth-retina');
     assert.ok(await evaluate(`depthDraws>0 && [...document.querySelectorAll('.portal-depth')].reduce((n,c)=>n+c.width*c.height,0)<=1800000`));
@@ -349,7 +354,7 @@ try {
     assert.ok(mobileTable.left>=0 && mobileTable.right<=390 && mobileTable.bottom<844*.88 && mobileOpening.left>=0 && mobileOpening.right<=390,'Mobile keeps the table edges and opening visible');
     assert.ok(await evaluate(`[...document.querySelectorAll('.portal-depth')].reduce((n,c)=>n+c.width*c.height,0)<=550000`));
     assert.equal(errors.length,0,JSON.stringify(errors));
-    console.log('PASS: cutout, recessed wall geometry, separate depth layers, camera framing, parallax, transparent fog, reduced motion, context recovery and mobile', {nearShift,farShift,pixels});
+    console.log('PASS: cutout, short lining, separate optical depths, camera framing, rim-anchored parallax, opaque abyss, reduced motion, context recovery and mobile', {nearShift,farShift,pixels});
   } else {
   if (!process.argv.includes('--mobile-only')) {
   // Regression check at 1920x910 (run first, own fresh page load, so it's

@@ -10,6 +10,9 @@
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="portal.css">
 <link rel="stylesheet" href="room.css">
+<link rel="stylesheet" href="portal-aura.css">
+<link rel="stylesheet" href="portal-reaction.css">
+<link rel="stylesheet" href="portal-depth.css">
 </head>
 <body class="intro-active table-covered">
 
@@ -58,11 +61,7 @@
         <!-- An empty aperture at Z=0. Walls and atmosphere are separate
              objects below it, visible through the cut in the tabletop. -->
         <div class="screen-tunnel" aria-hidden="true">
-          <div class="portal-abyss portal-depth-layer"></div>
-          <div class="portal-stars portal-depth-layer"></div>
-          <div class="portal-fog portal-fog--deep portal-depth-layer"><canvas class="portal-depth"></canvas></div>
-          <div class="portal-fog portal-fog--near portal-depth-layer"><canvas class="portal-depth"></canvas></div>
-          <div class="portal-particles"></div>
+          <div class="portal-abyss portal-depth-layer"><canvas class="portal-depth"></canvas></div>
           <div class="portal-wall portal-wall--top"></div>
           <div class="portal-wall portal-wall--right"></div>
           <div class="portal-wall portal-wall--bottom"></div>
@@ -343,9 +342,13 @@ window.addEventListener('error', (e) => {
 </script>
 <script src="scene-camera.js"></script>
 <script src="portal-effects.js"></script>
+<script src="portal-depth-volume.js"></script>
 <script src="portal-depth.js"></script>
 <script src="portal-impact.js"></script>
+<script src="portal-reaction.js"></script>
 <script src="script.js"></script>
 <script type="module" src="room-scene.js"></script>
+<script type="module" src="portal-aura.js"></script>
+<script src="dev/portal-impact.js"></script>
 <script src="dev/arrange.js"></script></body>
 </html>

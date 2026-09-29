@@ -115,9 +115,12 @@ try {
       await cdp('Input.dispatchMouseEvent', {type:'mouseMoved', x:from.x+(target.x-from.x)*i/18,y:from.y+(target.y-from.y)*i/18,buttons:1});
       await sleep(16);
     }
-    const atTarget = await bounds(selector);
+    // The front card is aimed with a spectral ghost (the card stays in the
+    // hand); any other card is moved itself to re-sort the hand.
+    const ghosted = await evaluate(`!!document.querySelector('.card-ghost')`);
+    const atTarget = await bounds(ghosted ? '.card-ghost' : selector);
     assert.ok(Math.hypot(atTarget.x-target.x,atTarget.y-target.y)<12,
-      'The dragged card must follow the pointer without jumping out of the fan');
+      'The dragged card (or its ghost) must follow the pointer without jumping out of the fan');
     await cdp('Input.dispatchMouseEvent', {type:'mouseReleased', x:target.x, y:target.y,button:'left',clickCount:1});
   }
   // Pull the cloth off the covered table: press on it and draw it toward the viewer.

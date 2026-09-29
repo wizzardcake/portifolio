@@ -260,6 +260,27 @@ body:not(.intro-done) .theme-toggle { visibility: hidden; }
   animation: none !important; translate: none !important; rotate: none !important; scale: none !important;
   transform-origin: center; will-change: transform, opacity;
 }
+/* A card throw (script.js): the spectral ghost that aims it, and the real
+   card in flight. Both are fixed to the viewport above the scene and moved
+   frame by frame, so no transition may smooth their transform. */
+.card-ghost, .card-throw {
+  position: fixed; margin: 0; pointer-events: none; z-index: 190;
+  animation: none !important; translate: none !important; rotate: none !important; scale: none !important;
+  transform-origin: center; will-change: transform, opacity; transition: none;
+}
+.card-throw { z-index: 191; }
+.card-ghost {
+  opacity: .5;
+  background: rgba(var(--card-glow-rgb, var(--relic-teal-rgb)), .1);
+  border-color: rgba(var(--card-glow-rgb, var(--relic-teal-rgb)), .8);
+  filter: drop-shadow(0 0 14px rgba(var(--card-glow-rgb, var(--relic-teal-rgb)), .85)) brightness(1.3) saturate(1.3);
+  transition: opacity .25s ease, filter .25s ease;
+}
+/* Released here, the throw is valid: the ghost burns brighter. */
+.card-ghost.is-aimed {
+  opacity: .75;
+  filter: drop-shadow(0 0 26px rgba(var(--card-glow-rgb, var(--relic-teal-rgb)), 1)) brightness(1.6) saturate(1.4);
+}
 /* The page is emitted above the table, facing the reader. It does not
    stand the physical portal up or change the position of the tabletop. */
 .portal-page {

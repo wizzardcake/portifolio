@@ -989,9 +989,10 @@ layoutHand();
   }
 
   // Only one card can be inside the portal at a time — refuses if
-  // something else is already in there (it must be retrieved first).
+  // something else is already in there (it must be retrieved first). A card
+  // in flight has already claimed the portal (claimPortal) and is let in.
   function activate(appId, cardEl, glowVar) {
-    if (activeCard) return false;
+    if (activeCard && activeCard !== cardEl) return false;
     activeCard = cardEl;
     const generation = ++activationGen;
     screenEl.classList.add('portal-active');
@@ -1009,6 +1010,15 @@ layoutHand();
     return true;
   }
 
+  // A committed throw reserves the portal at release, so nothing else can be
+  // thrown while the card is in the air; it only activates on arrival.
+  function claimPortal(cardEl) {
+    if (activeCard) return false;
+    activeCard = cardEl;
+    activationGen++;
+    return true;
+  }
+
   function deactivate() {
     activationGen++;
     activeCard = null;
@@ -1018,6 +1028,130 @@ layoutHand();
     resetIntensity();
     closeApp();
     document.body.classList.remove('scene-interacting');
+  }
+
+  // ---- The throw: an invisible hand's magical flick. The front card is
+  // aimed with a spectral ghost that follows the pointer while the real card
+  // stays in the hand, lifting and leaning as if weighed for a throw. A valid
+  // release commits it: the real card rises and draws back toward the
+  // viewer, cocks and gathers itself, is flicked off by an invisible thumb,
+  // arcs up over the table and drops into the portal. Only then does the
+  // portal take it (activate), and 'card-portal-arrival' goes out on window
+  // for the portal's own reaction. Seconds, viewport px and degrees:
+  const THROW = {
+    prepareDuration: .42,   // rise, draw back and cock before the flick
+    pullBack: .1,           // drawn toward the viewer: extra size at full pull
+    prepareLift: 46,        // px the card rises while preparing
+    cock: 18,               // degrees it tips back into the throwing angle
+    flickAcceleration: 1.2, // extra speed at the flick (0 = an even pace)
+    arcHeight: 170,         // px the apex rises above the higher end of the path
+    flightDuration: .95,    // from the flick to reaching the portal
+    spinAmount: 150,        // degrees of flick spin over the flight
+    spinSpeed: 2.4,         // how early the spin is spent (1 = evenly)
+    landingScale: .3,       // size on reaching the portal, relative to the hand
+    targetOffset: {x: 0, y: 14}, // px from the portal centre where it lands
+    aimLift: 22,            // px the real card lifts while its ghost is aimed
+  };
+  const throwSmooth = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+  const setThrowState = state => {
+    if (state) document.body.dataset.cardThrow = state; else delete document.body.dataset.cardThrow;
+  };
+
+  // A fixed-position copy of a hand card at its exact place on screen: the
+  // spectral ghost while aiming, or the real card itself in flight (the one
+  // in the hand is hidden meanwhile, so it is the same card to the eye).
+  function detachedCard(subCard, className) {
+    const handCard = subCard.closest('.hand-card');
+    const r = subCard.getBoundingClientRect(), w = subCard.offsetWidth, h = subCard.offsetHeight;
+    const turn = element => parseFloat(element && getComputedStyle(element).rotate) || 0;
+    const copy = subCard.cloneNode(true);
+    copy.removeAttribute('id');
+    copy.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
+    copy.classList.add(className);
+    copy.setAttribute('aria-hidden', 'true');
+    copy.inert = true;
+    const style = getComputedStyle(subCard);
+    copy.style.setProperty('--card-glow-rgb', getComputedStyle(handCard || subCard).getPropertyValue('--card-glow-rgb'));
+    // Padding is a percentage of the containing block: resolved here, or the
+    // viewport-fixed copy would take 10% of the whole viewport.
+    Object.assign(copy.style, {width: w + 'px', height: h + 'px', padding: style.padding, font: style.font, color: style.color,
+      left: (r.left + r.width / 2 - w / 2) + 'px', top: (r.top + r.height / 2 - h / 2) + 'px'});
+    document.body.appendChild(copy);
+    return {el: copy, x: r.left + r.width / 2, y: r.top + r.height / 2, rotation: turn(handCard) + turn(subCard)};
+  }
+
+  // Prepare, flick and arc the card from where it lies to the portal. Resolves
+  // true on arrival, or false if the throw was cancelled (retrieval, reset).
+  function flickIntoPortal(subCard) {
+    const card = detachedCard(subCard, 'card-throw');
+    subCard.style.visibility = 'hidden';
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const prepare = reduced ? 0 : THROW.prepareDuration, flight = reduced ? .25 : THROW.flightDuration;
+    const c = portalCenter(), target = {x: c.x + THROW.targetOffset.x, y: c.y + THROW.targetOffset.y};
+    // Wound up leaning away from the throw, a quarter of the way to its heading.
+    const heading = Math.atan2(target.x - card.x, card.y - target.y) * 180 / Math.PI;
+    const windUp = card.rotation - .25 * heading;
+    const lifted = {x: card.x, y: card.y - (reduced ? 0 : THROW.prepareLift)};
+    // Quadratic arc from the lifted card to the portal; its apex is arcHeight
+    // above the higher of the two ends.
+    const control = {x: (lifted.x + target.x) / 2, y: Math.min(lifted.y, target.y) - 2 * (reduced ? 0 : THROW.arcHeight)};
+    const along = (u, key) => (1 - u) ** 2 * lifted[key] + 2 * u * (1 - u) * control[key] + u * u * target[key];
+    const slope = (u, key) => 2 * (1 - u) * (control[key] - lifted[key]) + 2 * u * (target[key] - control[key]);
+    const place = (x, y, scale, rotateZ, rotateX, rotateY, opacity) => {
+      card.el.style.transform = `translate(${x - card.x}px, ${y - card.y}px) perspective(900px) ` +
+        `rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg) scale(${scale})`;
+      card.el.style.opacity = opacity;
+    };
+    place(card.x, card.y, 1, card.rotation, 0, 0, 1);
+    setThrowState('prepare');
+    return new Promise(resolve => {
+      const begin = performance.now();
+      const step = now => {
+        if (!card.el.isConnected) { resolve(false); return; } // cancelled
+        const t = (now - begin) / 1000;
+        if (t < prepare) {
+          // Rise, draw back toward the viewer and cock; tension gathers in a
+          // faint tremor just before the flick.
+          const p = t / prepare, e = throwSmooth(p), tremor = p > .7 ? Math.sin(p * 46) * 1.2 * (p - .7) / .3 : 0;
+          place(card.x, card.y - THROW.prepareLift * e + 6 * Math.sin(Math.PI * e), 1 + THROW.pullBack * e,
+            card.rotation + (windUp - card.rotation) * e + tremor, -THROW.cock * e, 0, 1);
+          requestAnimationFrame(step);
+          return;
+        }
+        setThrowState('flight');
+        const q = Math.min(1, (t - prepare) / flight);
+        // The flick: launched faster than the flight's average pace, easing
+        // into it by the apex.
+        const u = Math.min(1, q + THROW.flickAcceleration * q * (1 - q) ** 2);
+        const x = along(u, 'x'), y = along(u, 'y');
+        // Spin spent mostly early (the thumb's impulse), plus a lean into the
+        // direction of travel; the card tips flat as it drops into the opening.
+        const spin = THROW.spinAmount * (1 - (1 - q) ** THROW.spinSpeed);
+        const travel = Math.atan2(slope(u, 'x'), -slope(u, 'y')) * 180 / Math.PI;
+        const rotateZ = windUp * (1 - q) + spin + .12 * travel * Math.sin(Math.PI * q);
+        const rotateX = -THROW.cock * (1 - throwSmooth(q / .3)) + 64 * throwSmooth((q - .55) / .45);
+        const scale = (1 + THROW.pullBack) + (THROW.landingScale - 1 - THROW.pullBack) * u ** .85;
+        place(x, y, scale, rotateZ, rotateX, 10 * Math.sin(Math.PI * q), 1 - throwSmooth((q - .86) / .14));
+        if (q < 1) { requestAnimationFrame(step); return; }
+        const dt = .016 / flight;
+        card.velocity = {x: (along(1, 'x') - along(1 - dt, 'x')) / .016, y: (along(1, 'y') - along(1 - dt, 'y')) / .016};
+        card.el.remove();
+        resolve(card);
+      };
+      requestAnimationFrame(step);
+    }).then(result => {
+      if (!result) return false;
+      // The hook for the portal's reaction: where and how fast it arrived,
+      // also as a fraction of the portal's on-screen bounds (approximate).
+      const bounds = screenEl.getBoundingClientRect();
+      window.dispatchEvent(new CustomEvent('card-portal-arrival', {detail: {
+        appId: subCard.dataset.app, card: subCard,
+        screen: {x: target.x, y: target.y}, velocity: result.velocity,
+        aperture: {x: (target.x - bounds.left) / bounds.width, y: (target.y - bounds.top) / bounds.height},
+      }}));
+      setThrowState(null);
+      return true;
+    });
   }
 
   // ---- The hand's cards (Prosjekter / Arbeidserfaring / Kurs & Fag /
@@ -1046,6 +1180,23 @@ layoutHand();
     let grabbedCenter = null;
     let pickupX = 0;
     let pickupY = 0;
+    let pointerId = null;
+    let ghost = null;   // the spectral aim of the front card (see THROW above)
+    let aiming = false; // this drag aims a ghost rather than moving the card
+
+    // The real card's response while its ghost is aimed: it lifts, more as
+    // the ghost nears the portal, and leans toward it.
+    function weigh(dx, t) {
+      subCard.style.transition = 'translate .25s ease-out, rotate .25s ease-out';
+      subCard.style.translate = `0px ${-THROW.aimLift * (.45 + .55 * t)}px`;
+      subCard.style.rotate = `${Math.max(-7, Math.min(7, dx * .03))}deg`;
+    }
+    function settleCard() {
+      subCard.style.transition = 'translate .35s ease, rotate .35s ease';
+      subCard.style.translate = `${baseX}px ${baseY}px`;
+      subCard.style.rotate = '';
+      subCard.style.animation = '';
+    }
 
     // Normally 1 for the viewport hand; measuring also supports arrange mode.
     function viewportScale() {
@@ -1058,8 +1209,13 @@ layoutHand();
       if (activeCard) return; // something is already inside the portal
       dragging = true;
       moved = false;
+      pointerId = e.pointerId;
       startX = e.clientX;
       startY = e.clientY;
+      // Only the front card can be thrown: it is aimed with a ghost. Any
+      // other card is picked up and moved itself, to re-sort the hand.
+      aiming = handOrder[0] === subCard.dataset.app;
+      if (aiming) dragScale = 1; // the ghost moves in plain viewport pixels
       const grabbed = subCard.getBoundingClientRect();
       grabbedCenter = {x: grabbed.left + grabbed.width / 2, y: grabbed.top + grabbed.height / 2};
       subCard.style.transition = 'none';
@@ -1067,10 +1223,30 @@ layoutHand();
       document.body.classList.add('scene-interacting');
     });
 
-    subCard.addEventListener('pointermove', (e) => {
-      if (!dragging) return;
+    // On the window: an aimed ghost leaves the card's own footprint at once.
+    window.addEventListener('pointermove', (e) => {
+      if (!dragging || e.pointerId !== pointerId) return;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
+      if (aiming) {
+        if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+          moved = true;
+          subCard.style.animation = 'none';
+          ghost = detachedCard(subCard, 'card-ghost');
+          setThrowState('aim');
+        }
+        if (!moved) return;
+        // The ghost's centre follows the pointer, straightening as it leaves
+        // the fan and shrinking a little as it nears the portal.
+        const c = portalCenter(), gx = ghost.x + dx, gy = ghost.y + dy;
+        const dist = Math.hypot(gx - c.x, gy - c.y);
+        setIntensity(dist);
+        const t = 1 - Math.min(1, Math.max(0, (dist - ACTIVATE_RADIUS) / (APPROACH_RADIUS - ACTIVATE_RADIUS)));
+        ghost.el.style.transform = `translate(${dx}px, ${dy}px) rotate(${ghost.rotation * (1 - Math.min(1, Math.hypot(dx, dy) / 120))}deg) scale(${1 - .14 * t})`;
+        ghost.el.classList.toggle('is-aimed', dist <= ACTIVATE_RADIUS);
+        weigh(dx, t);
+        return;
+      }
       if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
         moved = true;
         // The idle float keyframes drive this same `translate` property —
@@ -1104,12 +1280,16 @@ layoutHand();
     // Reverses the throw — used when the "Få tilbake kort" button
     // retrieves the card that's currently inside the portal.
     subCard._retrieveFromPortal = function () {
+      // A throw still in the air is called off: its flying card vanishes.
+      document.querySelectorAll('.card-throw').forEach(el => el.remove());
+      setThrowState(null);
       subCard.style.visibility = '';
       baseX = 0;
       baseY = 0;
       subCard.style.transition =
         'translate 0.55s cubic-bezier(0.22, 1, 0.36, 1), scale 0.55s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease';
       subCard.style.translate = '0px 0px';
+      subCard.style.rotate = '';
       subCard.style.scale = '';
       subCard.style.opacity = '';
       window.setTimeout(() => { if (!dragging && activeCard !== subCard) subCard.style.animation = ''; }, 570);
@@ -1121,8 +1301,21 @@ layoutHand();
       }
     };
 
+    // Commits the throw: the card claims the portal now, is flicked in, and
+    // only activates it on arrival (unless retrieved or reset meanwhile).
+    function throwIn() {
+      if (!claimPortal(subCard)) return false;
+      const generation = activationGen;
+      subCard.style.animation = 'none';
+      if (handCard) handCard.classList.add('is-thrown');
+      flickIntoPortal(subCard).then(arrived => {
+        if (arrived && activeCard === subCard && activationGen === generation) activate(subCard.dataset.app, subCard, glowVar);
+      });
+      return true;
+    }
+
     function endDrag(e) {
-      if (!dragging) return;
+      if (!dragging || e.pointerId !== pointerId) return;
       dragging = false;
       if (subCard.hasPointerCapture(e.pointerId)) subCard.releasePointerCapture(e.pointerId);
       if (!moved) { document.body.classList.remove('scene-interacting'); return; }
@@ -1131,31 +1324,29 @@ layoutHand();
       const id = subCard.dataset.app;
       const isFront = handOrder[0] === id;
       let nearPortal = false;
-      let r, c;
-      if (isFront) {
-        r = subCard.getBoundingClientRect();
-        c = portalCenter();
-        nearPortal = Math.hypot(r.left + r.width / 2 - c.x, r.top + r.height / 2 - c.y) <= ACTIVATE_RADIUS;
+      if (aiming && ghost) {
+        const c = portalCenter();
+        nearPortal = Math.hypot(ghost.x + e.clientX - startX - c.x, ghost.y + e.clientY - startY - c.y) <= ACTIVATE_RADIUS;
       }
 
-      if (e.type !== 'pointercancel' && isFront && nearPortal && activate(id, subCard, glowVar)) {
-        // Thrown in: sink down into the portal rather than just shrinking to
-        // a point on its surface — carry the motion an extra distance past
-        // the center (the portal's own depth) before it fades, so it reads
-        // as dropping into the opening instead of collapsing onto it.
-        const SINK_DISTANCE = 140;
-        const current = subCard.style.translate.split(' ').map(parseFloat);
-        const targetX = (current[0] || 0) + (c.x - (r.left + r.width / 2)) / dragScale;
-        const targetY = (current[1] || 0) + (c.y - (r.top + r.height / 2) + SINK_DISTANCE) / dragScale;
-        subCard.style.transition =
-          'translate 0.6s cubic-bezier(0.4, 0, 0.7, 1), scale 0.6s cubic-bezier(0.4, 0, 0.7, 1), opacity 0.45s ease 0.25s';
-        subCard.style.translate = `${targetX}px ${targetY}px`;
-        subCard.style.scale = '0.1';
-        subCard.style.opacity = '0';
-        // Track only this card's flight. Other cards stay in the hand.
-        if (handCard) handCard.classList.add('is-thrown');
-        window.setTimeout(() => { if (activeCard === subCard) subCard.style.visibility = 'hidden'; }, 620);
-      } else {
+      if (aiming && ghost) {
+        const aimed = ghost.el, homeRotation = ghost.rotation;
+        ghost = null;
+        if (e.type !== 'pointercancel' && isFront && nearPortal && throwIn()) {
+          // The aim is spent: the ghost dissolves where it was released.
+          aimed.animate([{opacity: aimed.style.opacity || .7}, {opacity: 0, filter: 'blur(6px) brightness(2)'}],
+            {duration: 260, easing: 'ease-out', fill: 'forwards'}).finished.then(() => aimed.remove(), () => aimed.remove());
+          return;
+        }
+        // Not a valid throw: the ghost is drawn back into its card.
+        setThrowState(null);
+        aimed.animate([{transform: aimed.style.transform, opacity: .6},
+          {transform: `translate(0px, ${-THROW.aimLift * .45}px) rotate(${homeRotation}deg) scale(1)`, opacity: 0}],
+          {duration: 300, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards'}).finished.then(() => aimed.remove(), () => aimed.remove());
+        settleCard();
+      }
+
+      {
         // Not thrown (missed the portal, one was already occupied, or this
         // wasn't the front card to begin with) — re-sort the stack instead.
         // Project the drag onto the stack's own offset axis (16px right,
@@ -1172,7 +1363,7 @@ layoutHand();
         const currentIndex = handOrder.indexOf(id);
         if (e.type !== 'pointercancel') moveHandCardTo(id, Math.round(currentIndex + slotsMoved));
 
-        subCard.style.transition = 'translate 0.35s ease';
+        subCard.style.transition = 'translate 0.35s ease, rotate 0.35s ease';
         subCard.style.translate = `${baseX}px ${baseY}px`;
         subCard.style.animation = '';
         resetIntensity();
@@ -1185,27 +1376,15 @@ layoutHand();
       }
     }
 
-    subCard.addEventListener('pointerup', endDrag);
-    subCard.addEventListener('pointercancel', endDrag);
-    // Keyboard users perform the same intake + material projection sequence.
+    // On the window too (a captured pointer's events still bubble here once).
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+    // Keyboard users throw the front card the same way, without the aim.
     subCard.addEventListener('keydown', event => {
       if (!['Enter', ' '].includes(event.key) || activeCard || !document.body.classList.contains('intro-done')) return;
       event.preventDefault();
       if (handOrder[0] !== subCard.dataset.app) { bringHandCardToFront(subCard.dataset.app); return; }
-      if (!activate(subCard.dataset.app, subCard, glowVar)) return;
-      subCard.style.animation = 'none';
-      if (handCard) {
-        handCard.style.transition = 'none';
-        handCard.style.rotate = '0deg';
-        handCard.style.scale = '1';
-        handCard.classList.add('is-thrown');
-      }
-      const r = subCard.getBoundingClientRect(), c = portalCenter();
-      subCard.style.transition = 'translate .4s ease-in, scale .4s ease-in, opacity .4s ease-in';
-      const scale = viewportScale();
-      subCard.style.translate = `${(c.x - r.left - r.width / 2) / scale}px ${(c.y - r.top - r.height / 2) / scale}px`;
-      subCard.style.scale = '.05'; subCard.style.opacity = '0';
-      window.setTimeout(() => { if (activeCard === subCard) subCard.style.visibility = 'hidden'; }, 420);
+      throwIn();
     });
   });
 

@@ -29,12 +29,19 @@ A retrigger starts from the current drop displacement. It creates no input lock.
 `{x, y, intensity, duration}`. It is emitted once for an accepted nonzero hit.
 It is not the existing `portal-impact` event used by the cloth/room lights.
 
-## Connecting the card branch later
+## Connecting the card branch
 
-At the instant the final card flight crosses the portal plane, convert its
-contact point to aperture fractions and call the hook **once**. The card branch
-owns that hit detection and conversion. Do not trigger on pointer release unless
-that is also the actual arrival time.
+The card throw (`script.js`) now dispatches `card-portal-arrival` on window with
+the landing point in aperture fractions. The water rings there by itself
+(`portal-surface.js`); that ripple needs no orb and does not delay the page.
+Nothing calls the orb drop on arrival yet: doing so means either waiting ~2.2 s
+before the page opens or letting `project()` cut the drop short, which is a
+timing decision for the card flow, not for this module.
+
+To use the orb drop as well, at the instant the final card flight crosses the
+portal plane, convert its contact point to aperture fractions and call the hook
+**once**. The card branch owns that hit detection and conversion. Do not trigger
+on pointer release unless that is also the actual arrival time.
 
 If opening the card content morphs the same orb into a page, await the response
 before calling `portalMatter.project(appId)`, and retain the card branch's own
@@ -71,7 +78,7 @@ Permanent defaults are at the top of `portal-reaction.js`. Console changes apply
 to subsequent hits; each active response retains its original configuration.
 
 ```js
-portalReaction.configure({orbDropDistance: .40, orbDropSpeed: 1.1});
+portalReaction.configure({orbDropDistance: .46, orbDropSpeed: 1.1});
 portalReaction.configure({rippleAmplitude: .85, sparkCount: 7, duration: 2.0});
 portalReaction.configure(portalReaction.defaults); // restore defaults
 portalReaction.settings; // copy of current settings
@@ -80,7 +87,7 @@ portalReaction.stats;    // active response / spark counts, motion preference
 
 | Parameter | Default | Units / effect |
 | --- | ---: | --- |
-| `orbDropDistance` | .40 | Orb diameters along the table normal (0-.7) |
+| `orbDropDistance` | .46 | Orb diameters along the table normal (0-.7); at full strength the orb dips just into the recessed water |
 | `orbDropSpeed` | 1 | Multiplier; contact at 280 ms at default duration |
 | `reboundStrength` | .12 | Small overshoot, 0-.3 |
 | `damping` | 5 | Recovery damping, 3-12 |
@@ -97,15 +104,24 @@ portalReaction.stats;    // active response / spark counts, motion preference
 
 - `portal-reaction.js`: controller, reusable API, transient canvas rings, central
   well, flare and bounded sparks. No extra WebGL context or idle animation loop.
-- `portal-reaction.css`: contained surface and transient visuals; debug panel.
+  With a live WebGL surface the ring outlines only glint faintly on the crests:
+  the water itself carries the waves.
+- `portal-reaction.css`: contained surface and transient visuals. The layer sits at
+  the waterline (`--water-depth`), so flare and sparks rise from the water.
+- `portal-surface.js`: on `portal-reaction-start` rings the water from the contact
+  point, timed with the canvas waves (main wave at .7 × contact, a weaker one after),
+  and draws the surface down under the orb from `sample().pull`. The abyss is
+  refracted through the same ripples.
 - `portal-effects.js`: samples the additive vertical offset; exposes `canReact`
   and cancels the response on orb mode changes/reset. Idle shader is unchanged.
 - `portal-depth.js`: optional transient uniforms bend/darken the existing fog.
   They return to exactly zero when the response ends.
-- `index.html`: loads the response and isolated debug script, preserving aura.
-- `dev/portal-impact.js`: opt-in manual controls; remove its script tag to remove
-  the harness. Without `?impactDebug=1`, it creates no DOM or listeners.
-- `tests/impact-check.mjs`: Chrome integration checks and phase screenshots.
+- `index.html`: loads the response, preserving aura, and fetches the debug script
+  only when the URL has `?impactDebug=1`.
+- `dev/portal-impact.js`: opt-in manual controls, styles included; delete the file
+  to remove the harness. The normal page never loads it.
+- `tests/impact-check.mjs`: Chrome integration checks and phase screenshots,
+  including the orb reaching the recessed water and the layer riding on it.
 
 ## Review
 

@@ -136,12 +136,14 @@ body.portal-unlocked .screen.is-projecting .app-view { pointer-events: none; }
 body.table-covered .screen-tunnel { opacity: 0; }
 .screen.portal-active .screen-tunnel { animation: none; }
 .screen-tunnel::after { content: none; }
-/* The pond (portal-surface.js): a living liquid surface in the aperture just
-   below the rim, above the shaft's depths and below the impact layers (-1px).
+/* The pond (portal-surface.js): a living liquid surface in the aperture,
+   recessed below the rim to the waterline the well sets (--water-depth,
+   portal-depth.js), so the top of the lining stays dry above it and the rest
+   is seen through the water. Above the abyss, below the impact layers.
    Dormant under the cloth, it wakes with the depths. */
 .portal-surface {
   position: absolute; inset: 0; pointer-events: none;
-  transform: translateZ(-3px);
+  transform: translateZ(calc(var(--water-depth, 3px) * -1));
   transition: opacity 1.6s ease .2s;
 }
 body.table-covered .portal-surface { opacity: 0; }
@@ -189,41 +191,31 @@ body.table-covered .portal-surface { opacity: 0; }
   width: 160%; height: 95%;
   background: radial-gradient(ellipse, #010207 25%, #020309 53%, transparent 72%);
 }
-.portal-stars { width: 130%; height: 66%; }
-.portal-stars i {
-  position: absolute; width: var(--star-size); height: var(--star-size);
-  border-radius: 50%; background: #b4c5db; opacity: var(--star-alpha);
-}
-.portal-fog { width: 98%; height: 44%;
-  background: radial-gradient(ellipse at 23% 50%, #276e6966, transparent 35%),
-    radial-gradient(ellipse at 76% 46%, #58407a66, transparent 35%);
-}
-.portal-fog--deep { width: 110%; height: 58%; }
 .portal-depth { display: none; width: 100%; height: 100%; pointer-events: none; }
-.portal-fog.webgl { background: none; }
-.portal-fog.webgl .portal-depth { display: block; }
-.portal-particles { position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none; }
-.portal-mote {
-  position: absolute; left: 50%; top: 50%; border-radius: 50%;
-  width: var(--mote-size); height: var(--mote-size); background: var(--mote-color);
-  transform: translate(-50%, -50%) translate3d(var(--mote-x), var(--mote-y), var(--mote-z))
-    rotateX(calc(var(--view-pitch) * -1));
+/* Impact reaction (portal-impact.js): rings, glow and embers on the water;
+   portal-impact.js animates their size, position and opacity. The layer sits
+   at the waterline, so its depths are measured from the water. */
+.portal-impact {
+  position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none;
+  transform: translateZ(calc(var(--water-depth, 3px) * -1));
 }
-/* Impact reaction (portal-impact.js): rings, glow and embers on the aperture
-   plane; portal-impact.js animates their size, position and opacity. */
-.portal-impact { position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none; }
 /* The surface (rings, glow pool) is clipped to the opening, which flattens it
-   onto the aperture plane; flare and embers stay in 3D beside it. */
+   onto a plane just above the water; flare and embers stay in 3D beside it. */
 .portal-impact i { position: absolute; left: 0; top: 0; display: block; pointer-events: none; opacity: 0; }
 .portal-impact > .portal-impact-surface {
   width: 100%; height: 100%; opacity: 1;
-  transform: translateZ(-1px); clip-path: inset(0);
+  transform: translateZ(2px); clip-path: inset(0);
 }
 .portal-impact .portal-impact-pool { width: 100%; height: 100%; }
 .portal-impact-ring { border-radius: 50%; }
 .portal-impact-ring--wave { border: 2px solid #8cf0dcd9; box-shadow: 0 0 14px #6fe3d099, inset 0 0 10px #b995f580; }
 .portal-impact-ring--pull { border: 1.5px solid #ffc46bcc; box-shadow: 0 0 12px #ff8a4a80, inset 0 0 14px #b995f580; }
 .portal-impact-ring--after { border: 1px solid #b995f5b3; box-shadow: 0 0 20px #6fe3d066; }
+/* A live WebGL surface rings the water itself on the same impact
+   (portal-surface.js); drawn outlines would double its waves. The closing
+   ring, the glow pool, the flare and the embers remain. */
+.portal-surface.webgl ~ .portal-impact .portal-impact-ring--wave,
+.portal-surface.webgl ~ .portal-impact .portal-impact-ring--after { display: none; }
 .portal-impact-flare {
   border-radius: 50%;
   background: radial-gradient(circle, #fff6dcf2 0, #ffcf7ad9 11%, #ff8f5a66 25%, #b58cf04d 42%, #4fd6c233 58%, transparent 70%);

@@ -1,9 +1,11 @@
 /* Pure interior material/projection helpers. No ownership of the portal's
-   liquid surface, orb, lights, camera, or interactions. Loaded before depth.js. */
+   liquid surface, orb, lights, camera, or interactions. Loaded after
+   portal-surface.js, whose water slope field the depths are seen through,
+   and before depth.js. */
 (() => {
-  const defaults=Object.freeze({wallDepth:.075,fogDensity:.85,centralDarkness:.88,
+  const defaults=Object.freeze({wallDepth:.075,waterLevel:.36,fogDensity:.85,centralDarkness:.88,
     parallaxStrength:1,particleDepthSpeed:1,inwardPull:.35,swirlAmount:.25,deepGlowIntensity:.65});
-  const limits=Object.freeze({wallDepth:[.025,.14],fogDensity:[0,1.8],centralDarkness:[0,1],
+  const limits=Object.freeze({wallDepth:[.025,.14],waterLevel:[0,.8],fogDensity:[0,1.8],centralDarkness:[0,1],
     parallaxStrength:[0,2],particleDepthSpeed:[0,3],inwardPull:[0,1],swirlAmount:[0,1],deepGlowIntensity:[0,1.5]});
   const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
   // Lattice periods of the phases portal-depth.js wraps; the shader's noise
@@ -55,10 +57,14 @@
 
   const vertex=`attribute vec2 position;varying vec2 uv;
     void main(){uv=position*.5+.5;gl_Position=vec4(position,0.,1.);}`;
+  // The surface's slope field (waterSlope); without a surface the water is still.
+  const water=window.portalSurface?.glsl||'vec2 waterSlope(vec2 p){return vec2(0.);}';
   // Six optical layers, back to front, in one opaque pass: an unlit throat,
   // two star fields, deep spiral energy with glow pockets, dark mist, motes
   // and the near mist lapping at the lining. Mist lies in horizontal sheets,
   // so it is foreshortened like the opening; points stay round on screen.
+  // All of it is seen through the water: its slope displaces each layer in
+  // proportion to that layer's depth.
   const fragment=`precision highp float;
     varying vec2 uv;
     uniform float time,fogDensity,centralDarkness,swirlAmount,deepGlowIntensity;
@@ -66,10 +72,12 @@
     uniform vec2 planeSize,apertureSize,eye,basis,impactPoint;
     uniform vec3 planeCenter;
     uniform vec2 offset[6];
-    uniform vec4 starShift;
+    uniform vec4 starShift,apToLocal;
     uniform float pixel;
     uniform vec4 motes[${MOTES}];
     uniform float impactPull,impactWave,impactRadius;
+    uniform float waterDepth,refraction,glowBreath;
+    ${water}
     const float TAU=6.2831853;
     float hash(vec2 p){vec3 q=fract(vec3(p.xyx)*vec3(.1031,.1030,.0973));q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
     float pnoise(vec2 p,vec2 period){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
@@ -95,42 +103,56 @@
       // -1..1 across the opening seen through this pixel; +y toward the viewer.
       vec2 ap=vec2(p3.x*ray,eye.x+(p3.y-eye.x)*ray)/apertureSize*2.;
       float aspect=apertureSize.x/apertureSize.y;
-      // A dropped orb bends and darkens the volume locally (portal-reaction.js).
-      vec2 delta=ap-impactPoint;float hit=length(delta),crest=hit-impactRadius;
-      ap+=delta/max(hit,.001)*(impactPull*.3*exp(-hit*hit*1.8)+sin(crest*24.)*exp(-crest*crest*8.)*impactWave*.6);
+      // Seen through the moving water: where this pixel's ray crosses the
+      // surface, the slope there displaces everything below it, each layer by
+      // its depth (in aperture heights, eased so the far layers sway rather
+      // than swim). The same field shades the surface (portal-surface.js).
+      vec2 bend=vec2(0.);
+      if(refraction>0.){
+        float sw=(eye.y+waterDepth)/max(.001,eye.y-p3.z);
+        vec2 s=waterSlope(vec2(p3.x*sw,-(eye.x+(p3.y-eye.x)*sw))/apertureSize.y);
+        bend=vec2(2.*s.x/aspect,-2.*s.y)*refraction;
+      }
+      vec2 bendLocal=apToLocal.xy*bend.x+apToLocal.zw*bend.y;
+      // A dropped orb bends and darkens the volume locally (portal-reaction.js),
+      // measured alike along both axes so its rings stay round like the water's.
+      vec2 delta=(ap-impactPoint)*vec2(aspect,1.);float hit=length(delta),crest=hit-impactRadius;
+      ap+=delta/max(hit,.001)*(impactPull*.3*exp(-hit*hit*1.8)+sin(crest*24.)*exp(-crest*crest*8.)*impactWave*.6)/vec2(aspect,1.);
       // The throat follows the opening's shape; the front of the opening looks
       // steeply down into it, the back sees the mist below the lining.
       vec2 centre=vec2(0.,.08);
-      float rT=length((ap-centre-offset[0])*vec2(.92,1.));
+      float rT=length((ap+bend*2.06-centre-offset[0])*vec2(.92,1.));
       float back=smoothstep(.95,-1.,ap.y);
       vec3 col=mix(vec3(.0008,.0012,.004),vec3(.004,.009,.017),smoothstep(.2,1.25,rT));
       float hollow=smoothstep(.22,.7,rT);
-      col+=vec3(.46,.54,.70)*stars(local-starShift.xy,pixel*24.,.11,3.)*.42*hollow;
-      col+=vec3(.60,.68,.86)*stars(local-starShift.zw,pixel*40.,.1,11.)*.7*hollow;
+      col+=vec3(.46,.54,.70)*stars(local+bendLocal*1.75-starShift.xy,pixel*24.,.11,3.)*.42*hollow;
+      col+=vec3(.60,.68,.86)*stars(local+bendLocal*1.29-starShift.zw,pixel*40.,.1,11.)*.7*hollow;
       vec3 teal=vec3(.035,.20,.185),violet=vec3(.165,.065,.28);
       // Deep energy: tangential streaks that spiral slowly into the throat,
-      // brightest in a loose ring around it. Hue follows the arms.
-      vec2 sD=(ap-centre-offset[3])*vec2(aspect*.8,1.);
+      // brightest in a loose ring around it. Hue follows the arms; the glow
+      // pockets breathe with the water above them.
+      vec2 sD=(ap+bend*.7-centre-offset[3])*vec2(aspect*.8,1.);
       vec2 lpD=spiral(sD,4.,16.,-.5-2.*swirlAmount)+phase.zw;
       float e=pfbm(lpD,vec2(8.,16.));
       float pockets=smoothstep(.58,.88,pnoise(lpD*.5+vec2(2.1*sin(time*.019),1.6*cos(time*.023)),vec2(4.,8.)));
       float energy=smoothstep(.44,.8,e)*smoothstep(.18,.48,rT)*(1.-.6*smoothstep(.6,1.25,rT));
       float arm=.5+.5*sin(lpD.y*TAU/16.*2.+ap.x*1.2);
-      vec3 deepHue=mix(teal,violet,clamp(arm*.7+smoothstep(-1.,1.,ap.x)*.45-.1,0.,1.))*(.45+1.5*pockets*deepGlowIntensity);
+      vec3 deepHue=mix(teal,violet,clamp(arm*.7+smoothstep(-1.,1.,ap.x)*.45-.1,0.,1.))*(.45+1.5*pockets*deepGlowIntensity*glowBreath);
       col=mix(col,deepHue,clamp(energy*.62*fogDensity,0.,.95));
-      float dark=smoothstep(.36,.72,pfbm((ap-offset[4])*vec2(aspect,1.)*2.2+3.1,vec2(256.)));
+      float dark=smoothstep(.36,.72,pfbm((ap+bend*.43-offset[4])*vec2(aspect,1.)*2.2+3.1,vec2(256.)));
       col*=1.-dark*.65*smoothstep(.25,.85,rT)*centralDarkness;
       for(int i=0;i<${MOTES};i++){
         vec4 m=motes[i];
         if(m.w<=0.)continue;
-        vec2 d=local-m.xy;float q=dot(d,d)/(m.z*m.z);
+        vec2 d=local+bendLocal*.8-m.xy;float q=dot(d,d)/(m.z*m.z);
         if(q>40.)continue;
         col+=(m.z<0.?vec3(.52,.45,.86):vec3(.38,.80,.73))*m.w*(exp(-q)+.14*exp(-q*.12));
       }
-      vec2 sN=(ap-centre-offset[5])*vec2(aspect*.9,1.);
+      vec2 apN=ap+bend*.25;
+      vec2 sN=(apN-centre-offset[5])*vec2(aspect*.9,1.);
       vec2 lpN=spiral(sN,2.4,9.,-.25-1.2*swirlAmount)+phase.xy;
       float n=pfbm(lpN,vec2(8.,9.));
-      vec2 edge=abs(ap-offset[5]*.5);
+      vec2 edge=abs(apN-offset[5]*.5);
       float lining=pow(pow(edge.x,5.)+pow(edge.y,5.),.2);
       float band=smoothstep(.5,1.02,lining)*mix(.3,1.,back)*(.4+.6*smoothstep(.45,1.,rT));
       float mist=smoothstep(.42,.84,n)*band;

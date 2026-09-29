@@ -8,7 +8,7 @@
   if (!screen) return;
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const DEFAULTS = Object.freeze({
-    orbDropDistance: .40, // fraction of the orb diameter, along table normal
+    orbDropDistance: .46, // fraction of the orb diameter, along table normal: reaches the recessed water
     orbDropSpeed: 1,     // multiplier; default contact after 280 ms
     reboundStrength: .12,
     damping: 5,
@@ -114,7 +114,11 @@
     }
     const sheen=ctx.createLinearGradient(x-radius,y-radius,x+radius,y+radius);
     sheen.addColorStop(0,'#9aefdd');sheen.addColorStop(.45,'#52b3aa');sheen.addColorStop(1,'#a98ae0');
-    ctx.strokeStyle=sheen;ctx.lineWidth=1.2+Math.min(1.6,c.rippleAmplitude)*.9;ctx.stroke();
+    // A live WebGL surface ripples the water itself (portal-surface.js); the
+    // outline then only glints faintly on the crest instead of drawing it.
+    const drawn=window.portalSurface?.water?.live;
+    if(drawn)ctx.globalAlpha=clamp(alpha)*.28;
+    ctx.strokeStyle=sheen;ctx.lineWidth=(drawn?.8:1.2)+Math.min(1.6,c.rippleAmplitude)*.9;ctx.stroke();
     ctx.globalAlpha=1;
   }
   function paint(hit,now) {

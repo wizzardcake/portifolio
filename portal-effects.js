@@ -209,7 +209,10 @@
     // in WebGL mode: the CSS fallback (!gl) uses this same element's own
     // box (border-radius/background) AS the page visual, so it must stay.
     canvas.style.opacity = (gl && morph >= .985) ? '0' : '1';
-    if (gl && rect.w > 0 && rect.h > 0 && matter.style.opacity !== '0') {
+    // Nothing shows while the dormant orb is hidden under the cloth, or once
+    // it has settled into a page (hidden canvas): skip the ray march then.
+    const unseen = matter.style.visibility === 'hidden' || (morph >= .985 && !transition);
+    if (gl && !unseen && rect.w > 0 && rect.h > 0 && matter.style.opacity !== '0') {
       // Cap the pixel budget: the surface stays smooth without a full-screen raymarch.
       const ratio = Math.min(devicePixelRatio, 1.5, 640 / Math.max(rect.w, rect.h));
       const w = Math.max(1, Math.round(rect.w * ratio)), h = Math.max(1, Math.round(rect.h * ratio));

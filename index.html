@@ -350,6 +350,13 @@ window.addEventListener('error', (e) => {
 <script src="script.js"></script>
 <script type="module" src="room-scene.js"></script>
 <script type="module" src="portal-aura.js"></script>
-<script src="dev/portal-impact.js"></script>
+<script>
+// The orb-drop review panel (dev/portal-impact.js) is fetched only on request: ?impactDebug=1
+if (new URLSearchParams(location.search).get('impactDebug') === '1') {
+  const harness = document.createElement('script');
+  harness.src = 'dev/portal-impact.js';
+  document.body.append(harness);
+}
+</script>
 <script src="dev/arrange.js"></script></body>
 </html>

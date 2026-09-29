@@ -143,18 +143,46 @@ async function check() {
       probe.style.cssText = 'position:absolute;width:0;height:0;left:${50 + x * 50}%;top:${50 + y * 50}%';
       document.querySelector('#screen').append(probe); const r = probe.getBoundingClientRect(); probe.remove();
       return [Math.round(r.left), Math.round(r.top)]; })()`);
+    // Where the eye looks into the water: the surface's live state and plane.
+    async function water() {
+      return evaluate(`(() => { const m = getComputedStyle(document.querySelector('.portal-surface')).transform.match(/matrix3d\\((.+)\\)/);
+        return {depth: portalDepth.stats.waterDepthPx, wall: portalDepth.stats.wallDepthPx, refraction: portalDepth.stats.refraction,
+          plane: m ? +m[1].split(',')[14] : 0, ...portalSurface.stats}; })()`);
+    }
+    // A still depth frame, sampled in the frame that draws it (before the
+    // drawing buffer is presented and cleared).
+    const abyssSample = `new Promise(resolve => { portalDepth.configure({}); requestAnimationFrame(() => {
+      const c = document.querySelector('.portal-depth'), gl = c.getContext('webgl'), p = new Uint8Array(c.width * c.height * 4);
+      gl.readPixels(0, 0, c.width, c.height, gl.RGBA, gl.UNSIGNED_BYTE, p);
+      resolve(Array.from({length: 4000}, (_, i) => p[Math.floor(i * p.length / 16000) * 4 + 1])); }); })`;
     await viewport(1440, 900);
     await motion('reduce');
     await cdp('Page.navigate', {url});
-    await until('!!window.portalDepth');
+    await until('!!window.portalDepth && !!window.portalSurface');
     assert.ok(await evaluate("document.body.classList.contains('table-covered')"));
     await expectFrozen('Covered interior does not continuously render');
+    const coveredSurface = await evaluate('portalSurface.stats.frames');
+    await sleep(350);
+    assert.equal(await evaluate('portalSurface.stats.frames'), coveredSurface, 'The surface is dormant under the cloth');
     await reveal();
     await shot('desktop-still');
     await expectFrozen('Reduced motion preserves a static interior');
     checkLayers(await evaluate('portalDepth.stats'));
     const wallRatio = await evaluate("portalDepth.stats.wallDepthPx / document.querySelector('#screen').clientHeight");
     assert.ok(wallRatio > 0 && wallRatio < .15, 'Only a short physical wall remains near the rim');
+    const still = await water();
+    assert.ok(still.depth > 2 && still.depth < still.wall, 'The water stands below the rim, within the lining: ' + JSON.stringify(still));
+    assert.ok(Math.abs(still.plane + still.depth) < .5, 'The surface plane lies at the waterline: ' + JSON.stringify(still));
+    assert.ok(still.live && still.refraction > 0, 'The depths are seen through a live WebGL surface');
+    // The same water slope that shades the surface displaces the depths.
+    const flat = await evaluate(`portalSurface.params.refraction = 0; dispatchEvent(new Event('resize'));
+      new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))).then(() => ${abyssSample})`);
+    const bent = await evaluate(`portalSurface.params.refraction = 3; dispatchEvent(new Event('resize'));
+      new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))).then(() => ${abyssSample})`);
+    await evaluate(`portalSurface.params.refraction = 1; dispatchEvent(new Event('resize')); true`);
+    assert.ok(flat.filter(Boolean).length > flat.length * .2 && bent.filter(Boolean).length > bent.length * .2, 'Both abyss frames were read back');
+    const moved = flat.filter((value, i) => Math.abs(value - bent[i]) > 2).length;
+    assert.ok(moved > flat.length * .05, `The surface refracts the abyss (${moved} of ${flat.length} samples moved)`);
     assert.deepEqual(await evaluate("['back-left','back-right','front-left','front-right'].map(n => getComputedStyle(document.querySelector('.table-leg--' + n)).visibility)"),
       ['hidden', 'hidden', 'visible', 'visible'], 'Back legs, only ever seen through the opening, no longer show through it');
     const [throatX, throatY] = await aperturePoint(0, .08), [x0, y0] = await aperturePoint(-.8, -.8), [x1, y1] = await aperturePoint(.8, .8);
@@ -181,6 +209,10 @@ async function check() {
     await motion('no-preference');
     await until('!portalDepth.stats.reducedMotion && portalDepth.stats.active');
     await sleep(900);
+    // Whatever enters the water rings it: here a card arriving (script.js's hook).
+    await evaluate(`dispatchEvent(new CustomEvent('card-portal-arrival', {detail: {aperture: {x: .4, y: .55}, velocity: {x: 0, y: 900}}})); true`);
+    assert.equal((await water()).rings, 1, 'A card arriving rings the water');
+    await until('portalSurface.stats.rings === 0');
     const desktop = await evaluate('portalDepth.stats');
     assert.ok(desktop.renderPixels > 0 && desktop.renderPixels <= 700000, 'Desktop fog respects its aggregate pixel budget');
     assert.ok(desktop.glContexts > 0 && desktop.glContexts <= 3, 'Fog WebGL contexts remain bounded');
@@ -211,7 +243,7 @@ async function check() {
     const later = await evaluate('portalDepth.stats');
     assert.ok(later.layers.some((layer, i) => Math.abs(layer.depth-right.layers[i].depth) + Math.abs(layer.x-right.layers[i].x) + Math.abs(layer.y-right.layers[i].y) > .01), 'The idle volume has independent drift');
     await shot('desktop-later');
-    console.log('PASS: shallow rim, hidden back legs, dark throat, tuning isolation, visible motes, no DOM churn, continuous depth and rim-anchored parallax');
+    console.log('PASS: shallow rim, recessed water, refraction through the surface, splash rings, hidden back legs, dark throat, tuning isolation, visible motes, no DOM churn, continuous depth and rim-anchored parallax');
 
     await motion('reduce');
     await until('portalDepth.stats.reducedMotion');
@@ -220,6 +252,7 @@ async function check() {
     await sleep(650);
     const mobile = await evaluate('portalDepth.stats');
     assert.ok(mobile.renderPixels > 0 && mobile.renderPixels <= 240000, 'Mobile fog respects its aggregate pixel budget');
+    assert.ok(mobile.waterDepthPx > 2 && mobile.waterDepthPx < mobile.wallDepthPx, 'The water is recessed on mobile too');
     assert.equal(await evaluate('document.documentElement.scrollWidth'), 390, 'No horizontal overflow');
     checkLayers(mobile);
     await shot('mobile');
@@ -243,6 +276,7 @@ async function check() {
     const fallback = await evaluate('portalDepth.stats');
     assert.equal(fallback.glContexts, 0, 'The no-WebGL interior uses the CSS fallback');
     assert.equal(fallback.particles, 0, 'The static CSS fallback draws no motes');
+    assert.equal(fallback.refraction, 0, 'Nothing refracts a static CSS interior');
     checkLayers(fallback, false);
     await shot('fallback');
     await expectFrozen('Fallback respects reduced motion');

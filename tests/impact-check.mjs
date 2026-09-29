@@ -75,11 +75,17 @@ async function check(){
     async function at(ms){await evaluate(`window.__impactClock=window.__start+${ms};new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);}
     const states=[];
     for(const ms of [70,140,280,580,1100,1800,2250]) {
-      await at(ms);states.push(await evaluate(`({ms:${ms},...portalReaction.sample(),height:parseFloat(document.querySelector('#portalMatter').style.getPropertyValue('--matter-height')),stats:portalReaction.stats})`));
+      await at(ms);states.push(await evaluate(`(() => {const m=document.querySelector('#portalMatter'),height=parseFloat(m.style.getPropertyValue('--matter-height'));
+        const layer=getComputedStyle(document.querySelector('.portal-reaction')).transform.match(/matrix3d\\((.+)\\)/);
+        return {ms:${ms},...portalReaction.sample(),height,stats:portalReaction.stats,
+          // The drawn sphere's radius is .369 of its element's width (portal-surface.js).
+          orbBottom:height-.369*parseFloat(m.style.width),water:portalDepth.stats.waterDepthPx,layer:layer?+layer[1].split(',')[14]:0};})()`));
       if([140,280,580,1100,2250].includes(ms))await shot(String(ms));
     }
     assert.ok(Math.abs(states[1].orbOffset)>Math.abs(states[0].orbOffset)*3,'Orb accelerates during its fall');
     assert.ok(states[2].orbOffset<-.35,'Orb reaches the surface');
+    assert.ok(states[2].orbBottom<=-states[2].water+1,'At contact the orb dips into the recessed water: '+JSON.stringify(states[2]));
+    assert.ok(Math.abs(states[2].layer+states[2].water)<.5,'Rings, flare and sparks ride on the water: '+JSON.stringify(states[2]));
     assert.ok(states[3].orbOffset>states[2].orbOffset,'Orb recovers after contact');
     assert.ok(states[2].pull>0&&states[3].wave>0,'Suction and traveling wave overlap');
     assert.equal(states.at(-1).orbOffset,0,'No residual displacement');

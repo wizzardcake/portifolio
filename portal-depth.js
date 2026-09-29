@@ -1,7 +1,10 @@
 /* Shallow physical lining, then an optically deep interior. One opaque
    billboard just below the lining composites every depth layer in a single
-   shader pass; depth-volume.js owns its material and projection. The liquid
-   surface, orb, lights and interactions remain independent. */
+   shader pass; depth-volume.js owns its material and projection. The well
+   also sets the waterline (--water-depth): the liquid surface lies that far
+   below the rim, and the interior is refracted through its slope field
+   (portalSurface.water, read-only). Orb, lights and interactions remain
+   independent. */
 (() => {
   const screen=document.getElementById('screen'),volume=window.portalDepthVolume;
   if(!screen||!volume)return;
@@ -10,6 +13,9 @@
   const motion=matchMedia('(prefers-reduced-motion: reduce)');
   const finePointer=matchMedia('(hover: hover) and (pointer: fine)');
   const settings={...volume.defaults},clamp=volume.clamp,TAU=Math.PI*2,FRAME=1000/30;
+  // Lateral shift of a layer seen through the water, per unit slope and
+  // aperture height of depth: roughly 1 - 1/n for water.
+  const REFRACTION=.2;
   aperture.classList.add('portal-interior');
   // The short lining no longer screens the space under the back rim. The back
   // legs are only ever seen through the opening, so portal-depth.css hides them.
@@ -34,7 +40,7 @@
   const moteData=new Float32Array(volume.MOTES*4),offsets=new Float32Array(12),shifts=new Float32Array(4);
   const phases={nearFlow:0,nearTurn:0,deepFlow:0,deepTurn:0};
   let gl=null,uniforms=null,width=1,height=1,dirty=true,visible=true,active=false,raf=0,last=0;
-  let elapsed=0,particleTime=0,sampledDpr=0,frames=0,wallDepthPx=0,pixel=1,jx=[1,0],jy=[0,1];
+  let elapsed=0,particleTime=0,sampledDpr=0,frames=0,wallDepthPx=0,waterDepthPx=0,pixel=1,jx=[1,0],jy=[0,1];
   const pointer={x:0,y:0},view={x:0,y:0};
   const moteCount=()=>gl?(innerWidth<600?12:volume.MOTES):0;
   function initialize() {
@@ -54,8 +60,9 @@
       gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
       const pos=gl.getAttribLocation(program,'position');gl.enableVertexAttribArray(pos);gl.vertexAttribPointer(pos,2,gl.FLOAT,false,0,0);
       const keys=['time','fogDensity','centralDarkness','swirlAmount','deepGlowIntensity','phase',
-        'planeSize','apertureSize','eye','basis','planeCenter','offset','starShift','pixel','motes',
-        'impactPoint','impactPull','impactWave','impactRadius'];
+        'planeSize','apertureSize','eye','basis','planeCenter','offset','starShift','apToLocal','pixel','motes',
+        'impactPoint','impactPull','impactWave','impactRadius',
+        'waterDepth','refraction','glowBreath','uWater','uRipples','uPull'];
       uniforms=Object.fromEntries(keys.map(key=>[key,gl.getUniformLocation(program,key)]));
       abyss.classList.add('webgl');
     } catch(error) {console.warn('Portal interior uses CSS fallback:',error.message);gl=null;abyss.classList.remove('webgl');}
@@ -65,6 +72,9 @@
     width=screen.clientWidth;height=screen.clientHeight;sampledDpr=devicePixelRatio||1;
     wallDepthPx=Math.min(48,Math.max(8,height*settings.wallDepth));
     screen.style.setProperty('--well-depth',wallDepthPx+'px');
+    // The water stands this far below the rim, leaving a dry band of lining.
+    waterDepthPx=wallDepthPx*settings.waterLevel;
+    screen.style.setProperty('--water-depth',waterDepthPx+'px');
     const {localEyeZ:ez,localEyeY:ey}=camera;
     const frontCut=Math.max(.1,1-wallDepthPx*(ey-height/2)/ez/height-.03);
     screen.style.setProperty('--wall-front-cut',frontCut*100+'%');
@@ -128,9 +138,16 @@
     gl.uniform2f(u.eye,camera.localEyeY,camera.localEyeZ);gl.uniform2f(u.basis,plane.s,plane.c);
     gl.uniform3f(u.planeCenter,plane.cx,plane.cy,plane.cz);
     gl.uniform2fv(u.offset,offsets);gl.uniform4fv(u.starShift,shifts);gl.uniform1f(u.pixel,pixel);
+    gl.uniform4f(u.apToLocal,jx[0],jx[1],jy[0],jy[1]);
     gl.uniform4fv(u.motes,moteData);
     gl.uniform2f(u.impactPoint,(impact?.x??.5)*2-1,(impact?.y??.5)*2-1);
     gl.uniform1f(u.impactPull,impact?.pull||0);gl.uniform1f(u.impactWave,impact?.wave||0);gl.uniform1f(u.impactRadius,impact?.radius||0);
+    // The water above (read-only): its slope bends the view, its breathing the glow.
+    const water=window.portalSurface?.water,live=!!water?.live;
+    gl.uniform1f(u.waterDepth,waterDepthPx);
+    gl.uniform1f(u.refraction,live?REFRACTION*water.refraction:0);
+    gl.uniform1f(u.glowBreath,live?water.uniform[3]:1);
+    if(live){gl.uniform4fv(u.uWater,water.uniform);gl.uniform4fv(u.uRipples,water.ripples);gl.uniform3fv(u.uPull,water.pull);}
     gl.drawArrays(gl.TRIANGLES,0,6);
   }
   function advance(dt) {
@@ -184,12 +201,16 @@
   },{passive:true});
   document.documentElement.addEventListener('pointerleave',()=>{pointer.x=pointer.y=0;});
   window.portalDepth={defaults:volume.defaults,
+    // Live layer offsets in aperture units (x,y per layer, throat first): the
+    // surface lights the water around the throat where the abyss shows it.
+    offsets,
     configure(values={}) {
       for(const [key,value] of Object.entries(values))if(volume.limits[key]&&Number.isFinite(value))settings[key]=clamp(value,...volume.limits[key]);
       invalidate();return {...settings};
     },
     get settings(){return {...settings};},
-    get stats(){return {frames,active,reducedMotion:motion.matches,wallDepthPx,
+    get stats(){return {frames,active,reducedMotion:motion.matches,wallDepthPx,waterDepthPx,
+      refraction:gl&&window.portalSurface?.water?.live?REFRACTION*window.portalSurface.water.refraction:0,
       particles:moteCount(),visibleParticles:gl?motes.filter((_,i)=>moteData[i*4+3]>.05).length:0,
       glContexts:gl?1:0,renderPixels:gl?canvas.width*canvas.height:0,
       plane:{depth:plane.depth,maxZ:plane.maxZ,width:plane.width,height:plane.height},

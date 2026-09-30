@@ -129,6 +129,9 @@
     uniform vec2 uThroat; // the abyss's throat, shifted by parallax (aperture units)
     uniform vec3 uEye, uWindow, uStair, uLancet, uNook;
     uniform vec3 uOrb; // the orb's centre height, radius, strength (0: absent)
+    uniform vec2 uOrbAt; // its footprint on the water
+    uniform vec3 uOrbGlow; // the light it gives
+    uniform vec2 uContact; // how strongly its light pools, and it shades, beneath it
     ${WATER}
 
     float noise(vec2 p) {
@@ -162,15 +165,16 @@
       return vec3(.55,1.,.85)*lobe(P,R,uWindow,900.)+vec3(.8,.62,1.)*lobe(P,R,uStair,420.)
         +vec3(.6,1.,.8)*lobe(P,R,uLancet,900.);
     }
-    // The hovering orb above the centre, mirrored.
+    // The hovering orb, mirrored where it floats, in the light it gives.
     vec3 orb(vec3 P, vec3 R) {
       if(uOrb.z<=0.) return vec3(0.);
-      vec3 C=vec3(0.,0.,uOrb.x)-P;
+      vec3 C=vec3(uOrbAt,uOrb.x)-P;
       float along=dot(C,R);
       if(along<=0.) return vec3(0.);
       float miss=length(C-R*along), r=uOrb.y;
       float body=1.-smoothstep(r*.7,r*1.05,miss);
-      return (vec3(.20,.46,.40)*body+vec3(.25,.75,.65)*exp(-miss*miss/(r*r*4.))*.3)*uOrb.z;
+      return ((vec3(.10,.26,.23)+uOrbGlow*.25)*body
+        +(vec3(.12,.36,.31)+uOrbGlow*.3)*exp(-miss*miss/(r*r*4.))*.3)*uOrb.z;
     }
 
     void main() {
@@ -214,13 +218,23 @@
       // Disturbed water glows faintly along its crests, so a ring stays
       // legible even where it crosses the dark throat.
       light+=vec3(.30,.78,.70)*smoothstep(.03,.22,length(rings))*.06*uGlow*(1.-fresnel);
+      // Beneath the orb its light pools on the water, tighter and brighter as
+      // it comes down, and the water around the pool darkens a little: the
+      // orb hangs in the space above it rather than on the page.
+      vec2 od=p-uOrbAt;
+      float oh=max(uOrb.x,0.), orr=max(uOrb.y,1e-3), reach=orr*.7+oh*.5, near=orr/(orr+oh*.6);
+      float pool=exp(-dot(od,od)/(reach*reach))*near*uOrb.z;
+      float shade=exp(-dot(od,od)/(reach*reach*3.))*near*uOrb.z*uContact.y;
+      light+=uOrbGlow*pool*(.4+.6*face)*.36*uContact.x*(1.-fresnel);
       light/=1.+light*.6;
+      mirrored*=1.-shade*.4;
 
       // The water itself dims the depths, more where it is seen edge-on;
       // a faint bright line where it meets the stone.
       float body=mix(.08,.28,1.-facing);
       vec3 meniscus=vec3(.16,.42,.40)*exp(-wall*140.)*.25;
       float alpha=1.-(1.-body)*(1.-fresnel);
+      alpha+=(1.-alpha)*shade*.35;
       gl_FragColor=vec4(vec3(.004,.016,.022)*body+light+mirrored+meniscus,min(alpha,.9));
     }`;
 
@@ -255,7 +269,8 @@
       const position = gl.getAttribLocation(program, 'position');
       gl.enableVertexAttribArray(position); gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
       uniforms = Object.fromEntries(['uAspect','uTime','uWater','uRipples','uPull','uRippleSpeed','uShimmer','uRefraction',
-        'uCloudSpeed','uGlow','uThroat','uEye','uWindow','uStair','uLancet','uNook','uOrb'].map(key => [key, gl.getUniformLocation(program, key)]));
+        'uCloudSpeed','uGlow','uThroat','uEye','uWindow','uStair','uLancet','uNook','uOrb','uOrbAt','uOrbGlow','uContact']
+        .map(key => [key, gl.getUniformLocation(program, key)]));
       gl.clearColor(0, 0, 0, 0);
       layer.classList.add('webgl');
     } catch (error) {
@@ -268,6 +283,7 @@
 
   let clock = 0, last = 0, measured = -1e9, dirty = true, visible = true, active = false, raf = 0, frames = 0;
   let width = 1, height = 1, level = 3, orbCentre = null, orbUniform = [0, 0, 0];
+  let orbAt = [0, 0], orbGlow = [.3, .85, .75], orbContact = [1, 1];
   function resize() {
     width = screen.clientWidth || 1; height = screen.clientHeight || 1;
     const r = layer.getBoundingClientRect();
@@ -282,8 +298,16 @@
   // Scene metres (x right, y up, z toward the viewer) to water plane units
   // (x right, y away, z up above the water, in aperture heights).
   const toPlane = ([x, y, z], scale, table, lift) => [x * scale, -z * scale, (y - table) * scale + lift];
-  // The orb's centre above the water, its radius and how much of it shows.
+  // The orb's centre above the water, its radius and how much of it shows:
+  // from the orb itself (portal-effects.js), or read off its element.
   function orb(height, lift) {
+    const o = window.portalOrb?.contact;
+    if (o) {
+      if (!(o.strength > 0)) return null;
+      const centre = o.height / height + lift, radius = o.radius / height;
+      const shown = o.strength * Math.min(1, Math.max(0, (centre - radius * .3) / radius));
+      return [centre, radius, shown > .001 ? shown : 0];
+    }
     if (!matter || matter.dataset.state !== 'idle' || matter.style.visibility === 'hidden') return null;
     const centre = (parseFloat(matter.style.getPropertyValue('--matter-height')) || 0) / height + lift;
     // The drawn sphere's radius is .369 of its element's width.
@@ -320,16 +344,21 @@
       water.ripples.set([ring.x, ring.y, .035 + ring.speed * age,
         ring.strength * params.splash * Math.exp(-1.1 * age) * Math.min(1, age / .06)], i * 4);
     });
-    // A dropped orb draws the water down under it (portal-reaction.js).
-    const drop = window.portalReaction?.sample(now);
-    water.pull[0] = ((drop?.x ?? .5) - .5) * aspect;
-    water.pull[1] = .5 - (drop?.y ?? .5);
-    water.pull[2] = (drop?.pull || 0) * .065 * params.splash;
-    // The orb breaks the surface as it rises out of the portal.
-    const o = orb(height, lift);
-    if (o && orbCentre !== null && orbCentre < 0 && o[0] >= 0) splash(.5, .5, .6);
+    // The orb breaks the surface as it rises out of the portal (a dive's own
+    // bursting-out rings are timed by the reaction instead).
+    const o = orb(height, lift), heart = window.portalOrb?.contact, drop = window.portalReaction?.sample(now);
+    if (o && orbCentre !== null && orbCentre < 0 && o[0] >= 0 && !drop?.dive) splash(heart?.x ?? .5, heart?.y ?? .5, .6);
     orbCentre = o ? o[0] : null;
     orbUniform = o || [0, 0, 0];
+    orbAt = heart ? [(heart.x - .5) * aspect, .5 - heart.y] : [0, 0];
+    if (heart) {orbGlow = heart.glow; orbContact = [heart.lightPool, heart.shadow];}
+    // A dropped orb draws the water down under it (portal-reaction.js), and a
+    // diving one swells it before bursting back out; at rest the water is
+    // drawn gently up toward the orb, with its breath.
+    const dropping = (drop?.pull || 0) !== 0;
+    water.pull[0] = ((dropping ? drop.x : heart?.x ?? .5) - .5) * aspect;
+    water.pull[1] = .5 - (dropping ? drop.y : heart?.y ?? .5);
+    water.pull[2] = (drop?.pull || 0) * .065 * params.splash + (o ? heart?.dimple || 0 : 0);
   }
   function draw() {
     const camera = window.sceneCamera, scale = camera.units / height, lift = level / height;
@@ -351,6 +380,9 @@
     for (const key of ['window', 'stair', 'lancet', 'nook'])
       gl.uniform3fv(uniforms['u' + key[0].toUpperCase() + key.slice(1)], toPlane(LIGHTS[key], scale, camera.tableHeight, lift));
     gl.uniform3fv(uniforms.uOrb, orbUniform);
+    gl.uniform2fv(uniforms.uOrbAt, orbAt);
+    gl.uniform3fv(uniforms.uOrbGlow, orbGlow);
+    gl.uniform2fv(uniforms.uContact, orbContact);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     frames++;
   }
@@ -392,20 +424,31 @@
   // reaction's own waves do (portal-reaction.js: contact, then .7 of it).
   addEventListener('portal-reaction-start', ({detail = {}}) => {
     const cfg = window.portalReaction?.settings || {};
-    const contact = Math.min(.52, .28 / (cfg.orbDropSpeed || 1)) * (detail.duration || 2.2) / 2.2;
     const strength = (detail.intensity ?? 1) * (cfg.rippleAmplitude ?? 1), speed = cfg.rippleSpeed || RING_SPEED;
+    // A dive rings it where the orb goes in and where it bursts back out.
+    if (detail.dive) {
+      const {entry, rise} = detail.dive;
+      splash(detail.x, detail.y, strength, entry, speed);
+      splash(detail.x, detail.y, strength * .4, entry + .3, speed);
+      splash(detail.x, detail.y, strength * .85, rise, speed);
+      splash(detail.x, detail.y, strength * .35, rise + .3, speed);
+      return;
+    }
+    const contact = Math.min(.52, .28 / (cfg.orbDropSpeed || 1)) * (detail.duration || 2.2) / 2.2;
     splash(detail.x, detail.y, strength, contact * .7, speed);
     splash(detail.x, detail.y, strength * .4, contact + .34, speed);
   });
   // The cloth's release (portal-impact.js) and a card dropping in (script.js).
   addEventListener('portal-impact', ({detail = {}}) => splash(detail.x, detail.y, .9 * (detail.strength ?? 1)));
-  addEventListener('card-portal-arrival', ({detail = {}}) => {
-    const v = detail.velocity, speed = v ? Math.hypot(v.x, v.y) : 0;
-    splash(detail.aperture?.x, detail.aperture?.y, Math.min(1, .7 + speed / 5000));
+  // Anything may announce an arrival, with or without a detail (then null).
+  addEventListener('card-portal-arrival', ({detail}) => {
+    const v = detail?.velocity, speed = v ? Math.hypot(v.x, v.y) || 0 : 0;
+    splash(detail?.aperture?.x, detail?.aperture?.y, Math.min(1, .7 + speed / 5000));
   });
   initialize();
   sync();
-  window.portalSurface = {params, layer, water, splash, glsl: WATER,
+  // lights: where the room's lights stand (read-only), shared with the orb.
+  window.portalSurface = {params, layer, water, splash, glsl: WATER, lights: LIGHTS,
     get stats() {return {frames, active, live: !!gl, level, rings: rings.length,
       renderPixels: gl ? canvas.width * canvas.height : 0};}};
 })();

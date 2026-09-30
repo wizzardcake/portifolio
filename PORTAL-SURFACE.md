@@ -13,7 +13,9 @@ The water's slope field is a GLSL chunk (`WATER`, exposed as `portalSurface.glsl
   noise layers. Never repeats, damped at the walls.
 - **Rings:** up to six trains of crests running outward from wherever something
   entered the water. They widen and fade as they spread.
-- **Pull:** a smooth dip drawn down under a dropped orb.
+- **Pull:** a smooth dip drawn down under a dropped orb. A diving orb also swells the
+  water up just before it bursts back out. At rest, the water is drawn gently up toward
+  the orb instead, in time with its breath.
 
 The surface shades itself with it: Fresnel reflections of the room's real lights and
 the hovering orb, the fine shimmer, and the abyss's own light caught on wave faces.
@@ -33,12 +35,29 @@ pockets.
 | Source | Event | Where / when |
 | --- | --- | --- |
 | Orb drop (`portal-reaction.js`) | `portal-reaction-start` | Contact point, timed with the canvas waves |
+| Orb dive (a card's arrival) | `portal-reaction-start` with `dive` | Where it goes in and, again, where it bursts back out |
 | Cloth release (`portal-impact.js`) | `portal-impact` | Where the cloth lost its grip |
 | Card thrown in (`script.js`) | `card-portal-arrival` | Landing point; strength from arrival speed |
-| Orb rising out of the portal | its centre crossing the waterline | Aperture centre |
+| Orb rising out of the portal | its centre crossing the waterline | The orb's footprint |
+| Orb at rest (`portal-effects.js`) | its heartbeat | Its footprint; faint, once per breath (`portalOrb` `pulseRipple`) |
 
 `portalSurface.splash(x, y, strength)` does the same by hand (aperture fractions:
 x left to right, y back to front). Reduced motion never rings the water.
+
+## The orb above the water
+
+The surface reads the orb's live state, `portalOrb.contact` (`PORTAL-ORB.md`):
+
+- where the orb floats;
+- its height and radius;
+- the light it gives;
+- how strongly that light should pool and its shade fall.
+
+From it, the orb's reflection sits where the orb actually is, in its current light.
+Its light pools on the water beneath it, tighter and brighter as it comes down, and
+the water around the pool darkens slightly. The idle rise under it goes through the
+same pull the abyss refracts through. `portalSurface.lights` (read-only) are the room
+light positions the orb is lit from, so the orb and the water agree.
 
 ## Tuning
 

@@ -325,13 +325,15 @@ try {
     const nearShift=Math.abs(nearRight-nearLeft), farShift=Math.abs(farRight-farLeft);
     assert.ok(farShift>8 && farShift>nearShift,'Seen past the fixed rim, distant stars slide visibly further than the near mist');
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('#screen')).transform`),pose,'The rim remains fixed during internal parallax');
-    const readAbyss=`new Promise(resolve=>requestAnimationFrame(()=>{
+    // Ask for a draw first: its frame callback is registered before this one,
+    // so the read lands in the same frame, before the buffer is presented.
+    const readAbyss=`new Promise(resolve=>{portalDepth.configure({});requestAnimationFrame(()=>{
       const c=document.querySelector('.portal-depth'),gl=c.getContext('webgl');
       const p=new Uint8Array(c.width*c.height*4);gl.readPixels(0,0,c.width,c.height,gl.RGBA,gl.UNSIGNED_BYTE,p);
       let drawn=0,lit=0,dark=0;
       for(let i=0;i<p.length;i+=4){if(p[i+3]===255)drawn++;const v=Math.max(p[i],p[i+1],p[i+2]);if(v>64)lit++;if(v<16)dark++;}
       resolve({drawn,lit,dark,total:c.width*c.height,error:gl.getError()});
-    }))`;
+    })})`;
     let pixels;
     for(let i=0;i<12;i++){pixels=await evaluate(readAbyss);if(pixels.drawn)break;await sleep(35);}
     assert.equal(pixels.drawn,pixels.total,'The abyss is opaque: the room below never shows through the short lining');

@@ -60,6 +60,7 @@
     const t=age(hit,now),c=hit.cfg,d=hit.duration,land=contact(hit);
     if(t>=d||hit.still)return {...empty,x:hit.x,y:hit.y};
     const fade=1-smooth((t/d-.76)/.24);
+    if(hit.dive)return diveState(hit,t,fade);
     const distance=c.orbDropDistance*(.72+.28*hit.strength);
     let offset;
     if(t<land) {
@@ -78,6 +79,29 @@
     return {orbOffset:offset,orbInfluence:smooth(t/.07)*(1-smooth((t/d-.65)/.35)),
       x:hit.x,y:hit.y,pull,wave:c.rippleAmplitude*.045*hit.strength*pulse(t,land*.65,.10,c.rippleLifetime)*fade,
       radius:Math.min(c.rippleRadius,waveAge*c.rippleSpeed)*2};
+  }
+  // A dive (the orb's answer to a card, portal-effects.js): the orb follows
+  // its own path down through the surface and back out. The water answers
+  // twice, where it goes in and where it bursts back out, and swells just
+  // before it does. The orb reads `dive` for its clock; no offset is added.
+  function diveState(hit,t,fade) {
+    const c=hit.cfg,v=hit.dive,s=hit.strength;
+    const pull=c.suctionStrength*s*(.55*pulse(t,v.entry-.04,.1,.4)-.4*pulse(t,v.gone,v.rise-v.gone,.2))*fade;
+    const wave=c.rippleAmplitude*.045*s*(pulse(t,v.entry,.08,c.rippleLifetime*.7)+.85*pulse(t,v.rise,.08,c.rippleLifetime*.7))*fade;
+    const since=Math.max(0,t<v.rise?t-v.entry:t-v.rise);
+    return {orbOffset:0,orbInfluence:smooth(t/.07)*(1-smooth((t-v.settle)/Math.max(.05,hit.duration-v.settle))),
+      x:hit.x,y:hit.y,pull,wave,radius:Math.min(c.rippleRadius,since*c.rippleSpeed)*2,
+      dive:{...v,t,start:hit.start,strength:s}};
+  }
+  // Seconds from the start: entry (it meets the water), under (it is below
+  // it), gone (lost in the depth), rise (it bursts back out), clear (it leaves
+  // the water), settle (back at rest), end. Kept in order, at most 5 s.
+  function timeline(v) {
+    let last=0;const out={};
+    for(const key of ['entry','under','gone','rise','clear','settle','end']) {
+      last=Math.max(last,finite(Number(v[key]),last));out[key]=Math.min(5,last);
+    }
+    return out;
   }
   function sample(now=performance.now()) {
     return orbHit?state(orbHit,now):empty;
@@ -122,9 +146,12 @@
     ctx.globalAlpha=1;
   }
   function paint(hit,now) {
-    const t=age(hit,now),c=hit.cfg,s=hit.strength,land=contact(hit),response=state(hit,now);
+    const t=age(hit,now),c=hit.cfg,s=hit.strength,response=state(hit,now),v=hit.dive;
+    // A dive goes in at `entry` and bursts back out at `rise`.
+    const land=v?v.entry:contact(hit),burst=v?v.rise:land;
     const x=hit.x*width,y=hit.y*height,tail=1-smooth((t/hit.duration-.75)/.25);
     const flare=hit.still ? pulse(t,0,.09,.3)*s*c.flareBrightness
+      : v ? (pulse(t,burst-.03,.09,.45)+.45*pulse(t,land,.07,.3))*s*c.flareBrightness*tail
       : pulse(t,land*.68,.09,.42)*s*c.flareBrightness*tail;
     if(ctx) {
       ctx.globalAlpha=1;
@@ -136,21 +163,26 @@
         const radius=height*(.22-.06*smooth((t-land)/.85));
         radial(x,y,radius,[[0,'#00020af2'],[.42,'#020816cf'],[.70,'#392b5e5c'],[.87,'#579a9540'],[1,'#456f7900']]);
         ctx.globalAlpha=1;
-        wave(hit,t,.015,.40); // immediate disturbance from the arriving object
-        wave(hit,t,land*.7,1); // main droplet reaction
-        wave(hit,t,land+.18,.55);
-        wave(hit,t,land+.47,.25);
+        if(v) {
+          wave(hit,t,land-.02,.9);wave(hit,t,land+.2,.4); // going in
+          wave(hit,t,burst,.8);wave(hit,t,burst+.22,.35); // bursting back out
+        } else {
+          wave(hit,t,.015,.40); // immediate disturbance from the arriving object
+          wave(hit,t,land*.7,1); // main droplet reaction
+          wave(hit,t,land+.18,.55);
+          wave(hit,t,land+.47,.25);
+        }
       }
       ctx.globalAlpha=clamp(flare*.48);
       radial(x,y,height*.25,[[0,'#83e9d6a3'],[.33,'#67d2c568'],[.65,'#a275db40'],[1,'#856ab200']]);
       ctx.globalAlpha=1;
     }
     if(hit.flare) {
-      place(hit.flare,x,y,height*(.025+.04*smooth((t-land)/.4)),height*.42,height*.29);
+      place(hit.flare,x,y,height*(.025+.04*smooth((t-burst)/.4)),height*.42,height*.29);
       hit.flare.style.opacity=String(clamp(flare));
     }
     for(const spark of hit.sparks) {
-      const u=clamp((t-land-spark.delay)/spark.life),v=Math.pow(u,1.12);
+      const u=clamp((t-burst-spark.delay)/spark.life),v=Math.pow(u,1.12);
       const gather=c.suctionStrength*smooth((u-.25)/.6);
       const spread=height*spark.spread*Math.sin(Math.PI*v)*(1-gather*.55);
       const z=height*(.009+spark.lift*Math.sin(Math.PI*v)-.16*gather*v*v);
@@ -173,7 +205,7 @@
   function tick(now) {
     raf=0;
     if(document.hidden){cancel('hidden');return;}
-    if(!window.portalMatter?.canReact||document.body.classList.contains('table-covered')){cancel('not-ready');return;}
+    if((!window.portalMatter?.canReact&&impacts.some(hit=>!hit.detached))||document.body.classList.contains('table-covered')){cancel('not-ready');return;}
     clear();if(ctx)ctx.setTransform(ratio,0,0,ratio,0,0);
     for(let i=impacts.length-1;i>=0;i--) {
       if(age(impacts[i],now)>=impacts[i].duration){finish(impacts[i],true);impacts.splice(i,1);}
@@ -187,7 +219,9 @@
     for(const hit of impacts)finish(hit,false,reason);
     impacts.length=0;clear();layer.hidden=true;
   }
-  function trigger(position={x:.5,y:.5},intensity=1) {
+  // options.dive: the orb's dive timeline (see timeline()). Without it the
+  // orb dips to the water and recovers, as before.
+  function trigger(position={x:.5,y:.5},intensity=1,options={}) {
     if(!window.portalMatter?.canReact||document.body.classList.contains('table-covered')||document.hidden)
       return Promise.resolve({completed:false,reason:'not-ready'});
     const strength=clamp(finite(intensity,1));
@@ -197,25 +231,36 @@
     if(impacts.length===3)finish(impacts.shift(),false,'superseded');
     const hit={id:++serial,x:clamp(finite(position?.x,.5)),y:clamp(finite(position?.y,.5)),
       strength,start:now,from,cfg:{...settings},still:motion.matches,sparks:[]};
-    hit.duration=hit.still ? .42 : hit.cfg.duration;
+    hit.dive=!hit.still&&options?.dive?timeline(options.dive):null;
+    hit.duration=hit.still ? .42 : hit.dive ? hit.dive.end : hit.cfg.duration;
     hit.flare=hit.still?null:element('flare');
     const count=hit.still?0:Math.round(hit.cfg.sparkCount*(.5+.5*strength));
+    const burst=hit.dive?hit.dive.rise:contact(hit);
     // Stable distribution for tuning and repeatable captures, no asset loading.
     for(let i=0;i<count;i++) {
       const el=element('spark'),color=colors[i%colors.length],size=1.7+(i%3)*.55;
       el.style.background=color;el.style.boxShadow=`0 0 ${size*2.3}px ${color}`;
       hit.sparks.push({el,size,angle:i*2.39996+hit.id*.5,delay:(i%4)*.028,
-        life:Math.min(1.05+(i%3)*.08,hit.duration-contact(hit)-.14),spread:.05+(i%4)*.024,lift:.035+(i%3)*.021});
+        life:Math.min(1.05+(i%3)*.08,hit.duration-burst-.14),spread:.05+(i%4)*.024,lift:.035+(i%3)*.021});
     }
     const done=new Promise(resolve=>{hit.resolve=resolve;});impacts.push(hit);orbHit=hit;layer.hidden=false;measure();
     if(!raf)raf=requestAnimationFrame(tick);
-    window.dispatchEvent(new CustomEvent('portal-reaction-start',{detail:{x:hit.x,y:hit.y,intensity:strength,duration:hit.duration}}));
+    window.dispatchEvent(new CustomEvent('portal-reaction-start',{detail:{x:hit.x,y:hit.y,intensity:strength,duration:hit.duration,
+      ...(hit.dive?{dive:{entry:hit.dive.entry,rise:hit.dive.rise}}:{})}}));
     return done;
   }
   motion.addEventListener('change',()=>cancel('motion-preference'));
   document.addEventListener('visibilitychange',()=>{if(document.hidden)cancel('hidden');});
   window.triggerPortalImpact=trigger;
   window.portalReaction={trigger,cancel,sample,defaults:DEFAULTS,
+    // A lifted-off dive finishes its water/sparks after the orb starts opening.
+    // Reset, restore, visibility and motion preference still cancel everything.
+    releaseOrb() {
+      if(!orbHit?.dive)return false;
+      orbHit.detached=true;
+      for(let i=impacts.length-1;i>=0;i--)if(impacts[i]!==orbHit){finish(impacts[i],false,'orb-transition');impacts.splice(i,1);}
+      return true;
+    },
     configure(values={}) {
       for(const [key,value] of Object.entries(values))if(limits[key]&&Number.isFinite(value))settings[key]=clamp(value,...limits[key]);
       settings.sparkCount=Math.round(settings.sparkCount);return {...settings};

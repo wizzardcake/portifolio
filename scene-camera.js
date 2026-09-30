@@ -35,8 +35,9 @@
     // tabletop, so resizing the table in portal.css never moves it.
     const wideDistance = fitting(1.4 * width / units, (portrait ? 1.4 : .94) * height / units,
       wide.frame[format], wide.eye) + wide.retreat;
-    const seatedDistance = Math.max(seated.distance, fitting(table.clientWidth / units,
-      (table.offsetTop + table.clientHeight - height / 2) / units, seated.fit[format], seated.eye));
+    const framing = window.portalTable?.framing;
+    const seatedDistance = Math.max(seated.distance, fitting((framing?.width ?? table.clientWidth) / units,
+      (framing?.front ?? (table.offsetTop + table.clientHeight - height / 2)) / units, seated.fit[format], seated.eye));
     const distance = wideDistance + (seatedDistance - wideDistance) * state.approach;
     const eyeHeight = wide.eye + (seated.eye - wide.eye) * state.approach;
     const elevation = eyeHeight - state.tableHeight;

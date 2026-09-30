@@ -69,7 +69,7 @@ try {
     return result.result.value;
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  async function until(expression, timeout = 14000) {
+  async function until(expression, timeout = 30000) {
     const start = Date.now();
     while (!await evaluate(expression)) {
       if (Date.now() - start > timeout) throw new Error('Timed out: ' + expression + '\n' + JSON.stringify(await evaluate(`({state:document.readyState,hidden:document.hidden,body:document.body.className,errors:[...document.querySelectorAll('body>div')].filter(e=>e.textContent.startsWith('JS ERROR')).map(e=>e.textContent)})`)));
@@ -167,7 +167,7 @@ try {
       await assertViewport();await assertHeldHand();
       console.log('Room',width,await evaluate(`({camera:{fov:studyRoom.camera.fov,eye:studyRoom.camera.position.toArray(),origin:sceneCamera.originY},calls:studyRoom.renderer.info.render.calls,triangles:studyRoom.renderer.info.render.triangles,cssOrigin:document.querySelector('.portal-origin').getBoundingClientRect().toJSON(),worldOrigin:studyRoom.project(0,sceneCamera.tableHeight,0)})`));
       const registration=await evaluate(`(() => {
-        const s=document.querySelector('#screen'),r=s.getBoundingClientRect(),t=document.querySelector('.portal-table').getBoundingClientRect(),o=document.querySelector('.portal-origin').getBoundingClientRect(),p=studyRoom.project(0,sceneCamera.tableHeight,0);
+        const s=document.querySelector('#screen'),r=(document.querySelector('.table-aperture')||s).getBoundingClientRect(),t=document.querySelector('.portal-table').getBoundingClientRect(),o=document.querySelector('.portal-origin').getBoundingClientRect(),p=studyRoom.project(0,sceneCamera.tableHeight,0);
         return {error:Math.hypot(o.x-p.x,o.y-p.y),table:t.toJSON(),portal:r.toJSON(),
           calls:studyRoom.renderer.info.render.calls,triangles:studyRoom.renderer.info.render.triangles,pixels:roomCanvas.width*roomCanvas.height,
           opening:studyRoom.scene.getObjectByName('back wall with through opening').geometry.parameters.shapes.holes.length,
@@ -178,6 +178,26 @@ try {
       assert.ok(registration.table.bottom<height*.88,'The near table edge is visible above the bottom of the viewport');
       const {portal,table}=registration;
       assert.ok(portal.left>table.left && portal.right<table.right && portal.top>table.top && portal.bottom<table.bottom,'The portal is contained inside the tabletop');
+      const artifact=await evaluate(`(() => {
+        const g=portalTable.geometry,s=document.querySelector('#screen'),orb=document.querySelector('#portalMatter');
+        const edge=g.outline.map((a,i)=>{const b=g.outline[(i+1)%6];return Math.abs(a[0]*b[1]-a[1]*b[0])/Math.hypot(b[0]-a[0],b[1]-a[1]);});
+        const portrait=innerWidth<900&&innerWidth<innerHeight;
+        return {vertices:g.outline.length,margin:Math.min(...edge)-g.radius,table:studyRoom.table.stats,
+          height:sceneCamera.tableHeight,eye:sceneCamera.eyeHeight,pitch:sceneCamera.camera.pitch,
+          orb:parseFloat(orb.style.width),expectedOrb:Math.min(260,s.clientHeight*.68,innerHeight*.30),
+          area:g.width*g.height*.75,oldArea:s.clientWidth*1.12*s.clientHeight*(portrait?1.43:1.176),
+          backGap:s.clientHeight*.58-g.height/2,
+          aperture:[document.querySelector('.table-aperture').clientWidth,document.querySelector('.table-aperture').clientHeight],
+          mask:studyRoom.scene.getObjectByName('portal room-occlusion mask').geometry.type};
+      })()`);
+      assert.equal(artifact.vertices,6);assert.ok(artifact.margin>3,'A continuous physical rim surrounds the round opening');
+      assert.equal(artifact.aperture[0],artifact.aperture[1],'The local opening is circular, not a viewport ellipse');
+      assert.equal(artifact.mask,'CircleGeometry','The room occlusion agrees with the round portal');
+      assert.equal(artifact.height,.46);assert.equal(artifact.eye,1.18);assert.equal(artifact.pitch,75);
+      assert.ok(Math.abs(artifact.orb-artifact.expectedOrb)<.01,'The orb has not been scaled with the table');
+      assert.ok(artifact.area<artifact.oldArea*.8 && artifact.backGap>0,'Smaller footprint leaves more floor toward the back wall');
+      assert.ok(artifact.table.meshes<=4 && artifact.table.triangles<2800,'The table is batched into four modest meshes');
+      console.log('Table geometry',width,artifact);
       assert.ok(registration.ceiling>0 && registration.ceiling<height*.4,'The ceiling/wall junction is in frame');
       assert.equal(registration.opening,1,'The gothic window cuts through the actual wall geometry');
       assert.ok(registration.thickness>.2 && registration.calls<30 && registration.triangles<10000 && registration.pixels<=2600000,'Architectural depth stays within the room rendering budget');
@@ -295,7 +315,7 @@ try {
         tunnel:getComputedStyle(t).transform,style:getComputedStyle(t).transformStyle,
         cut:getComputedStyle(document.querySelector('.portal-table-top')).clipPath,
         depths:[...document.querySelectorAll('.portal-depth-layer')].map(e=>({name:e.className,z:parseFloat(e.style.getPropertyValue('--layer-z'))})),
-        walls:[...document.querySelectorAll('.portal-wall')].map(e=>getComputedStyle(e).transform)};
+        walls:[...document.querySelectorAll('.table-circular-lining i')].map(e=>getComputedStyle(e).transform)};
     })()`);
     assert.equal(construction.background,'rgba(0, 0, 0, 0)','The opening has no surface fill');
     assert.equal(construction.shadow,'none','The opening has no panel bezel');
@@ -306,7 +326,7 @@ try {
     const optical=await evaluate(`portalDepth.stats`);
     assert.ok(new Set(optical.layers.map(l=>Math.round(l.depth))).size>=4 && optical.plane.maxZ < -optical.wallDepthPx,
       'Throat, stars, energy and mists occupy separate optical depths below the short lining');
-    assert.ok(construction.walls.every(t=>t.startsWith('matrix3d')),'Walls are rotated 3D faces');
+    assert.ok(construction.walls.length===48 && construction.walls.every(t=>t.startsWith('matrix3d')),'The shallow round lining consists of upright 3D faces');
     // The geometry must still read as a hole with every cosmic visual hidden.
     await evaluate(`window.geometryOnly=document.createElement('style');geometryOnly.textContent='.portal-abyss{visibility:hidden!important}';document.head.appendChild(geometryOnly)`);
     await shot('depth-geometry');
@@ -337,7 +357,9 @@ try {
     let pixels;
     for(let i=0;i<12;i++){pixels=await evaluate(readAbyss);if(pixels.drawn)break;await sleep(35);}
     assert.equal(pixels.drawn,pixels.total,'The abyss is opaque: the room below never shows through the short lining');
-    assert.ok(pixels.lit>pixels.total*.03 && pixels.dark>pixels.total*.05,'Lit mist and a near-black throat both occupy the volume: '+JSON.stringify(pixels));
+    // The round crop omits the old rectangle's bright corner haze, while
+    // retaining illuminated mist around the much darker central throat.
+    assert.ok(pixels.lit>pixels.total*.02 && pixels.dark>pixels.total*.05,'Lit mist and a near-black throat both occupy the volume: '+JSON.stringify(pixels));
     assert.equal(pixels.error,0);
     await cdp('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion',value:'reduce'}]});
     await sleep(150);

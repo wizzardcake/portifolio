@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three/three.module.js';
+import {createRitualTable} from './table-model.js';
 
-// Architecture only. The existing portal, orb and HTML reader stay in their
+// Architecture and physical furniture. Portal, orb and HTML reader stay in their
 // own renderers; scene-camera.js gives both branches the same projection.
 const host = document.getElementById('roomShell');
 const canvas = document.getElementById('roomCanvas');
@@ -1050,27 +1051,24 @@ if (renderer) {
   // This module loads late; the intro may already have uncovered the table.
   if(!document.body.classList.contains('table-covered')){cloth.visible=false;setGlow(1);}
 
-  // CSS objects do not enter a WebGL shadow map. A matching invisible proxy
-  // supplies their floor contact shadow; it never covers the portal's pixels.
-  const proxy=new THREE.Group();scene.add(proxy);
-  const voidMask=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({color:'#010207',side:THREE.DoubleSide}));
+  // The crafted table shares the room's lights and shadow map. Its actual
+  // geometry replaces the old invisible rectangular slab/thin-leg proxies.
+  const artifact=createRitualTable(THREE,woodMap);scene.add(artifact.group);
+  const voidMask=new THREE.Mesh(new THREE.CircleGeometry(1,64),new THREE.MeshBasicMaterial({color:'#010207',side:THREE.DoubleSide}));
   voidMask.name='portal room-occlusion mask';voidMask.rotation.x=-Math.PI/2;
   voidMask.position.y=view.tableHeight-.002;voidMask.renderOrder=10;scene.add(voidMask);
-  const shadowOnly=new THREE.MeshBasicMaterial({colorWrite:false,depthWrite:false});
-  function refreshProxy() {
-    while(proxy.children.length){const old=proxy.children[0];old.geometry.dispose();proxy.remove(old);}
+  function refreshTable() {
     const table=document.querySelector('.portal-table');
     const u=view.units,w=table.clientWidth/u,d=table.clientHeight/u;
     // The architecture must never show its floor through the magical opening.
     // This featureless mask only excludes the room behind the aperture; all
     // visible walls, fog, stars and parallax remain in the existing CSS volume.
-    voidMask.scale.set(view.width/u,view.height/u,1);
+    const shape=window.portalTable.geometry;
+    voidMask.scale.setScalar(shape.radius/u);
     const x=(table.offsetLeft+table.clientWidth/2-view.width/2)/u;
     const z=(table.offsetTop+table.clientHeight/2-view.height/2)/u;
-    const add=(w,h,d,x,y,z)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),shadowOnly);m.position.set(x,y,z);m.castShadow=true;proxy.add(m);};
-    add(w,.035,d,x,view.tableHeight-.018,z);
-    for(const leg of table.querySelectorAll('.table-leg')) add(.035,view.tableHeight,.035,
-      x+(leg.offsetLeft+leg.offsetWidth/2)/u-w/2,view.tableHeight/2,z+leg.offsetTop/u-d/2);
+    artifact.update(shape,view);
+    document.getElementById('screen').classList.add('has-table-model');
     teal.position.x=-view.width/u*.44;purple.position.x=view.width/u*.44;
     Object.assign(drape,{hx:w/2,hz:d/2,x,z});lay();
     const [Wm,Dm]=clothSize();if(Math.abs(Wm/Dm-clothAspect)>.02) repaintCloth();
@@ -1091,7 +1089,8 @@ if (renderer) {
   frontCanvas.addEventListener('webglcontextlost',event=>{event.preventDefault();frontLost=true;frontHost.classList.remove('is-ready');});
   frontCanvas.addEventListener('webglcontextrestored',()=>{frontLost=false;invalidate();});
   let pending=false, lost=false, layoutKey='';
-  const sizeKey=()=>[innerWidth,innerHeight,view.width,view.height,view.units,devicePixelRatio].join(':');
+  const sizeKey=()=>[innerWidth,innerHeight,view.width,view.height,view.units,devicePixelRatio,
+    ...Object.values(window.portalTable.geometry).slice(0,3)].join(':');
   function invalidate() {if(!pending&&!document.hidden&&!lost){pending=true;requestAnimationFrame(draw);}}
   function draw() {
     pending=false;if(document.hidden||lost)return;
@@ -1142,18 +1141,18 @@ if (renderer) {
     if(front){front.setPixelRatio(ratio);front.setSize(innerWidth,innerHeight,false);}
     // Dust mote size in device pixels per metre at unit distance.
     dustMaterial.uniforms.uFocal.value=innerHeight*ratio/2/Math.tan(view.fov*Math.PI/360);
-    refreshProxy();invalidate();
+    refreshTable();invalidate();
   }
   // A dolly frame only changes the projection; geometry and canvas allocation
   // are refreshed only when the viewport or responsive table dimensions change.
   addEventListener('scene-camera-change',()=>{if(sizeKey()!==layoutKey)resize();else invalidate();});
   new MutationObserver(invalidate).observe(stage,{attributes:true,attributeFilter:['class','data-approach']});
   document.addEventListener('visibilitychange',invalidate);
-  canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();lost=true;host.classList.remove('is-ready');});
+  canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();lost=true;host.classList.remove('is-ready');document.getElementById('screen').classList.remove('has-table-model');});
   canvas.addEventListener('webglcontextrestored',()=>{lost=false;resize();});
   // Used by the local geometry/registration check and dev inspection.
   // hem: the cloth hem wave's parameters, live-tunable from the console.
-  window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,
+  window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,table:artifact,
     // Room extents in scene (table-relative) coordinates; the plan objects
     // after it (window, tower, alcove, corner) are in plan coordinates.
     dimensions:{...room,back:room.back-placement.forward,front:room.front-placement.forward},

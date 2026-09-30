@@ -18,14 +18,14 @@
   // `clearance` below the tabletop, and the plane is clipped to exactly those
   // rays. Clip it locally, never its preserve-3d parent. It does not move:
   // parallax and drift happen in the shader, so no frame restyles the DOM.
-  function project(plane,width,height,camera,clearance,bleed) {
+  function project(plane,width,height,camera,clearance,bleed,boundary) {
     const pitch=camera.camera.pitch*Math.PI/180,s=Math.sin(pitch),c=Math.cos(pitch);
     const ey=camera.localEyeY,ez=camera.localEyeZ,T=1+clearance/ez;
     const hw=width/2*(1+bleed),hh=height/2*(1+bleed),k=5*(1+bleed);
     // The back corners' rays meet a camera-facing plane highest; solve for them.
     const depth=(T*(s*(ey+hh)+c*ez)-s*ey-c*ez)*ez/(s*ey+c*ez);
     const cy=-depth*ey/ez,cz=-depth;
-    const corners=[[-hw+k,-hh],[hw-k,-hh],[hw,-hh+k],[hw,hh-k],[hw-k,hh],[-hw+k,hh],[-hw,hh-k],[-hw,-hh+k]];
+    const corners=boundary||[[-hw+k,-hh],[hw-k,-hh],[hw,-hh+k],[hw,hh-k],[hw-k,hh],[-hw+k,hh],[-hw,hh-k],[-hw,-hh+k]];
     let maxZ=-Infinity;
     const points=corners.map(([qx,qy])=>{
       const t=(s*(cy-ey)+c*(cz-ez))/(s*(qy-ey)-c*ez);

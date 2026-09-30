@@ -183,8 +183,8 @@ async function check() {
     assert.ok(flat.filter(Boolean).length > flat.length * .2 && bent.filter(Boolean).length > bent.length * .2, 'Both abyss frames were read back');
     const moved = flat.filter((value, i) => Math.abs(value - bent[i]) > 2).length;
     assert.ok(moved > flat.length * .05, `The surface refracts the abyss (${moved} of ${flat.length} samples moved)`);
-    assert.deepEqual(await evaluate("['back-left','back-right','front-left','front-right'].map(n => getComputedStyle(document.querySelector('.table-leg--' + n)).visibility)"),
-      ['hidden', 'hidden', 'visible', 'visible'], 'Back legs, only ever seen through the opening, no longer show through it');
+    assert.ok(await evaluate("document.querySelectorAll('.table-circular-lining i').length === 48 && [...document.querySelectorAll('.table-leg')].every(e=>getComputedStyle(e).display==='none')"),
+      'The circular lining and physical table replace the old leg proxies');
     const [throatX, throatY] = await aperturePoint(0, .08), [x0, y0] = await aperturePoint(-.8, -.8), [x1, y1] = await aperturePoint(.8, .8);
     const [throat, opening] = await luminance([[throatX - 20, throatY - 7, 40, 14], [x0, y0, x1 - x0, y1 - y0]]);
     assert.ok(throat < opening * .6, `The central throat is darker than the opening around it (${throat.toFixed(1)} vs ${opening.toFixed(1)})`);
@@ -243,7 +243,7 @@ async function check() {
     const later = await evaluate('portalDepth.stats');
     assert.ok(later.layers.some((layer, i) => Math.abs(layer.depth-right.layers[i].depth) + Math.abs(layer.x-right.layers[i].x) + Math.abs(layer.y-right.layers[i].y) > .01), 'The idle volume has independent drift');
     await shot('desktop-later');
-    console.log('PASS: shallow rim, recessed water, refraction through the surface, splash rings, hidden back legs, dark throat, tuning isolation, visible motes, no DOM churn, continuous depth and rim-anchored parallax');
+    console.log('PASS: circular lining, recessed water, refraction through the surface, splash rings, replaced leg proxies, dark throat, tuning isolation, visible motes, no DOM churn, continuous depth and rim-anchored parallax');
 
     await motion('reduce');
     await until('portalDepth.stats.reducedMotion');

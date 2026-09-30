@@ -1,0 +1,57 @@
+/* Tunable footprint, independent of the orb's original coordinate system. */
+.portal-table {
+  --table-width: .89;
+  --table-aspect: 1.47;
+  --table-opening: .82;
+  inset: auto;
+}
+.portal-table-top {
+  border-radius: 0;
+  background:
+    radial-gradient(ellipse at 50% 50%, transparent 48%, #ae986557 50%, #202624 51%, transparent 54%),
+    repeating-linear-gradient(92deg, #a3844a0b 0 1px, transparent 1px 5px),
+    linear-gradient(135deg, #494334, #282921 45%, #40372b);
+  box-shadow: inset 0 0 0 4px #a68d56, inset 0 0 0 9px #373e37;
+}
+.portal-table::after { display: none; }
+/* Carved feet for the no-WebGL stand-in; the room model replaces them. */
+.portal-table .table-leg {
+  width: 11%; border-radius: 0;
+  background: linear-gradient(90deg, #101715, #4f4d39 20%, #282d27 60%, #101714);
+  clip-path: polygon(0 0,100% 0,77% 22%,65% 72%,100% 91%,100% 100%,0 100%,0 91%,35% 72%,23% 22%);
+  border-top: 5px solid #948057; border-bottom: 7px solid #756443;
+}
+.portal-table .table-leg--front-left { left: 20%; top: 84%; }
+.portal-table .table-leg--front-right { right: 20%; top: 84%; }
+.has-table-model .portal-table-top,
+.has-table-model .portal-table .table-leg { display: none; }
+.table-aperture { position: absolute; border-radius: 50%; pointer-events: none; }
+.table-circular-lining { position: absolute; inset: 0; pointer-events: none; transform-style: preserve-3d; transition: opacity 1.6s ease .2s; }
+.table-circular-lining i {
+  position: absolute; transform-origin: 50% 0; backface-visibility: hidden;
+  background: linear-gradient(#887851, #263c38 22%, #17272d 56%, #040a11 100%);
+}
+body.table-covered .table-circular-lining { opacity: 0; }
+.portal-interior .portal-wall { display: none; }
+/* Clip planar children, never their shared 3D parent. */
+.portal-surface,
+.portal-impact > .portal-impact-surface,
+.portal-reaction-surface { clip-path: circle(var(--table-aperture-radius) at 50% 50%); }
+/* Re-seat the existing aura on the new collar, not the retired rectangle. */
+.portal-aura .aura-rim--left {
+  left: calc(50% - var(--table-aperture-radius) - 5px);
+  top: calc(50% - var(--table-aperture-radius) - 5px);
+  width: calc(var(--table-aperture-radius) * 2 + 10px);
+  height: calc(var(--table-aperture-radius) * 2 + 10px);
+  bottom: auto; border-radius: 50%;
+  background: conic-gradient(#668e86, #8c73b8, #587a79, #4eaa96, #668e86);
+  mask-image: radial-gradient(closest-side, transparent 94%, #0008 97%, transparent);
+  filter: blur(2px);
+}
+.portal-aura .aura-rim--right,
+.portal-aura .aura-rim--back,
+.portal-aura .aura-rim--front,
+.portal-aura-apron { display: none; }
+@media (max-width: 899px) and (max-aspect-ratio: 1/1) {
+  .portal-table { --table-width: 1.06; --table-aspect: 1.10; }
+}

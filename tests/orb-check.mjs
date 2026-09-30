@@ -21,7 +21,7 @@ const server = createServer(async (req, res) => {
     res.end(data);
   } catch { res.writeHead(404).end(); }
 });
-await new Promise((done, fail) => { server.once('error', fail); server.listen(serveOnly ? 4177 : 0, '127.0.0.1', done); });
+await new Promise((done, fail) => { server.once('error', fail); server.listen(serveOnly ? Number(process.env.PORTFOLIO_PREVIEW_PORT || 4177) : 0, '127.0.0.1', done); });
 const url = 'http://127.0.0.1:' + server.address().port + '/';
 console.log('Portal orb preview:', url);
 if (!serveOnly) await check();

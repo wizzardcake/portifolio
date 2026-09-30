@@ -80,9 +80,10 @@
     screen.style.setProperty('--wall-front-cut',frontCut*100+'%');
     // Preserve the existing table cut exactly; only its inner lining shortens.
     const x=-table.offsetLeft,y=-table.offsetTop,w=table.clientWidth,h=table.clientHeight,c=5;
-    tabletop.style.clipPath=`path(evenodd, "M0 0 H${w} V${h} H0 Z M${x+c} ${y} H${x+width-c} L${x+width} ${y+c} V${y+height-c} L${x+width-c} ${y+height} H${x+c} L${x} ${y+height-c} V${y+c} Z")`;
+    if(window.portalTable)window.portalTable.updateWell(wallDepthPx);
+    else tabletop.style.clipPath=`path(evenodd, "M0 0 H${w} V${h} H0 Z M${x+c} ${y} H${x+width-c} L${x+width} ${y+c} V${y+height-c} L${x+width-c} ${y+height} H${x+c} L${x} ${y+height-c} V${y+c} Z")`;
     // The billboard starts where the lining ends; it bleeds 3% under the rim.
-    volume.project(plane,width,height,camera,wallDepthPx+Math.max(6,height*.02),.03);
+    volume.project(plane,width,height,camera,wallDepthPx+Math.max(6,height*.02),.03,window.portalTable?.boundary(.008));
     const box=abyss.getBoundingClientRect();
     pixel=box.width>0?plane.width/box.width:1;
     // How one aperture unit maps into the plane, for the screen-aligned stars.

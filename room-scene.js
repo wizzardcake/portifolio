@@ -464,9 +464,16 @@ if (renderer) {
     const m=new THREE.Mesh(geometry,material);m.name=name;m.layers.set(1);chair.add(m);
   }
 
-  scene.add(new THREE.HemisphereLight('#99a7c4','#777062',1.0));
-  scene.add(new THREE.AmbientLight('#d8bc99',.24));
-  const warm=new THREE.PointLight('#ffbb72',13,7,2);warm.position.set(-1.7,1.45,1.1);shell.add(warm);
+  // ---- Room lighting balance. The base fill stays low, so the lights below
+  // shape the room: warm and close around the table and the study nook, cool
+  // and further off at the window and the tower, the ceiling left to fall
+  // into shadow. Intensities in three.js physical units; live-tunable with
+  // studyRoom.lighting.configure({...}).
+  const lighting={fill:.5,ambient:.06,lamp:17,front:1.2,table:9,tableAwake:.35};
+  // A dim night sky from above and the warm floor's bounce from below.
+  const hemisphere=new THREE.HemisphereLight('#8390c4','#4c3a2c',lighting.fill);scene.add(hemisphere);
+  const ambient=new THREE.AmbientLight('#d8bc99',lighting.ambient);scene.add(ambient);
+  const warm=new THREE.PointLight('#ffb468',lighting.lamp,7.5,2);warm.position.set(-1.7,1.45,1.1);shell.add(warm);
   // Moonlight still enters through the pointed window, now at the alcove's end.
   const moon=new THREE.SpotLight('#a0bcf4',28,9,.54,.75,1.7);
   moon.position.set(aperture.x,1.75,alcove.back-T/2);moon.target.position.set(-1.7,0,-1.4);
@@ -479,9 +486,19 @@ if (renderer) {
   towerBounce.position.set(bounceX,lancets[1].sill+.3,bounceZ);shell.add(towerBounce);
   // A dim warm fill from the viewer's end of the room. Hemisphere and ambient
   // light are too weak alone there, which left the nearest beams pure black.
-  const frontFill=new THREE.PointLight('#ffcf9a',3,6,2);frontFill.position.set(0,2.1,4.3);shell.add(frontFill);
+  // Hung well below the beams, so they fall off into shadow instead of
+  // glowing orange at the top of the frame, and the chair's back still reads.
+  const frontFill=new THREE.PointLight('#ffc58e',lighting.front,6,2);frontFill.position.set(0,1.55,4.3);shell.add(frontFill);
   const teal=new THREE.PointLight('#38bdae',4.4,3.5,2);teal.position.set(-.65,.23,.1);scene.add(teal);
   const purple=new THREE.PointLight('#8163b7',3,3.4,2);purple.position.set(.64,.24,.20);scene.add(purple);
+  // The table's own light: a soft, warm pool from just under the beams, a
+  // little toward the viewer, so the cloth and the floor around the table are
+  // the brightest part of the room and the table stands on its own shadow.
+  // Once the portal wakes it gives way to the portal's glow (applyGlow).
+  const tableKey=new THREE.SpotLight('#ffd3a0',lighting.table,5.5,.72,.8,2);
+  tableKey.position.set(0,2.2,.9);tableKey.target.position.set(0,.2,-.15);
+  tableKey.castShadow=true;tableKey.shadow.mapSize.set(1024,1024);tableKey.shadow.bias=-.0008;tableKey.shadow.normalBias=.02;
+  scene.add(tableKey,tableKey.target);
 
   // ---- Convergence lighting: two magical light systems meet in the room. A
   // deep purple presence shines down from the upper floor through the
@@ -843,7 +860,8 @@ if (renderer) {
   // while the table is covered, rising as the cloth comes off.
   const smooth=x=>{x=Math.min(1,Math.max(0,x));return x*x*(3-2*x);};
   let glow=0,flare=0,clothMotion=null,airborne=false;
-  const applyGlow=()=>{teal.intensity=4.4*(glow+flare);purple.intensity=3*(glow+flare);};
+  const applyGlow=()=>{teal.intensity=4.4*(glow+flare);purple.intensity=3*(glow+flare);
+    tableKey.intensity=lighting.table*(1-(1-lighting.tableAwake)*glow);};
   const setGlow=value=>{glow=value;applyGlow();};
   setGlow(0);
   // A portal impact (portal-impact.js) flares the portal's light on the room:
@@ -1159,6 +1177,12 @@ if (renderer) {
     window:aperture,tower,alcove,corner,
     project(x,y,z){const p=new THREE.Vector3(x,y,z).project(camera);return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};},
     clay(enabled){materials.forEach((m,i)=>{m.map=enabled?null:textured[i].map;if(m===stone)m.bumpMap=enabled?null:stoneMap;m.color.copy(enabled?new THREE.Color('#686460'):textured[i].color);m.needsUpdate=true;});boards.material=wood;invalidate();},
+    // The room's light balance ("Room lighting balance"), read or tuned live.
+    lighting:{get values(){return {...lighting};},configure(values={}) {
+      for(const [key,value] of Object.entries(values)) if(Object.hasOwn(lighting,key)&&Number.isFinite(value))
+        lighting[key]=Math.max(0,key==='tableAwake'?Math.min(1,value):value);
+      hemisphere.intensity=lighting.fill;ambient.intensity=lighting.ambient;warm.intensity=lighting.lamp;
+      frontFill.intensity=lighting.front;applyGlow();invalidate();return {...lighting};}},
     invalidate};
   resize();
 }

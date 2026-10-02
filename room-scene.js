@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three/three.module.js';
 import {createRitualTable} from './table-model.js';
+import {createRitualCloth} from './ritual-cloth.js';
 
 // Architecture and physical furniture. Portal, orb and HTML reader stay in their
 // own renderers; scene-camera.js gives both branches the same projection.
@@ -598,6 +599,8 @@ if (renderer) {
   // whichever edge it is drawn toward.
   // hang: fabric beyond each tabletop edge; edge: radius it rolls over.
   const hang=.3,edge=.02,drape={hx:1,hz:1,x:0,z:0,ox:0,oz:0};
+  const ritualCloth=createRitualCloth(THREE);
+  ritualCloth.update(2,2);
   // Painted at the cloth's own proportions (Wm x Dm metres) so the hem,
   // sigils and inscription keep their size on any table. Returns the colour
   // texture and the inscription's glow mask (red: letters, green: halo).
@@ -618,8 +621,14 @@ if (renderer) {
     // Bronze hem threads with a band of small stitched glyphs between them;
     // it lands on the fabric hanging over the table edge.
     const thread='#b8955e';
-    const frame=(inset,width,alpha)=>{g.strokeStyle=thread+alpha;g.lineWidth=width;g.strokeRect(inset,inset,W-inset*2,H-inset*2);};
-    frame(m(.085),2,'aa');frame(m(.22),2,'aa');frame(m(.35),1,'55');
+    const frame=(scale,width,alpha)=>{
+      g.strokeStyle=thread+alpha;g.lineWidth=width;g.beginPath();
+      ritualCloth.border.forEach(([x,z],i)=>{const px=W/2+m(x)*scale,py=H/2+m(z)*scale;i?g.lineTo(px,py):g.moveTo(px,py);});
+      g.closePath();g.stroke();
+    };
+    // Nested embroidered contours follow the actual six-lobed cut, including
+    // its wave-ended hem. A muted inner seam ties the six panels to the core.
+    frame(.963,2,'bb');frame(.925,1,'88');frame(.80,1,'44');
     g.strokeStyle=thread+'99';g.fillStyle=thread+'88';g.lineWidth=1.6;
     const glyphs=[
       (x,y,s)=>{g.beginPath();g.moveTo(x-8*s,y);g.lineTo(x+8*s,y);g.moveTo(x,y-8*s);g.lineTo(x,y+8*s);g.moveTo(x-3*s,y-3*s);g.lineTo(x+3*s,y+3*s);g.moveTo(x+3*s,y-3*s);g.lineTo(x-3*s,y+3*s);g.stroke();},
@@ -627,19 +636,24 @@ if (renderer) {
       (x,y,s)=>{g.beginPath();g.arc(x,y,6*s,0,Math.PI*2);g.stroke();g.beginPath();g.arc(x,y,1.6*s,0,Math.PI*2);g.fill();},
       (x,y,s)=>{g.beginPath();g.moveTo(x,y-8*s);g.lineTo(x,y+8*s);g.moveTo(x,y-2*s);g.lineTo(x+6*s,y-8*s);g.moveTo(x,y+3*s);g.lineTo(x-6*s,y-3*s);g.stroke();},
     ];
-    let k=0;const band=m(.153),step=m(.12);
-    for(let x=m(.284);x<W-m(.26);x+=step){glyphs[k++%4](x,band,sc);glyphs[k++%4](x,H-band,sc);}
-    for(let y=m(.284);y<H-m(.26);y+=step){glyphs[k++%4](band,y,sc);glyphs[k++%4](W-band,y,sc);}
-    // Sigils in the tabletop's corners.
-    g.strokeStyle=thread+'55';g.lineWidth=1.4;
-    const corner=m(hang+.19);
-    for(const [x,y] of [[corner,corner],[W-corner,corner],[corner,H-corner],[W-corner,H-corner]]) {
-      g.beginPath();g.arc(x,y,20*sc,0,Math.PI*2);g.stroke();glyphs[0](x,y,sc);
+    for(let k=0;k<36;k++) {
+      const j=Math.round(k*ritualCloth.border.length/36);
+      const [x,z]=ritualCloth.border[j];
+      g.save();g.translate(W/2+m(x)*.869,H/2+m(z)*.869);g.rotate(Math.atan2(z,x)+Math.PI/2);
+      glyphs[k%4](0,0,sc*.57);g.restore();
+    }
+    // One restrained medallion per broad panel, not four rectangular corners.
+    for(let k=0;k<6;k++) {
+      const j=Math.round((k+.5)*ritualCloth.border.length/6);
+      const [px,pz]=ritualCloth.border[j],x=W/2+m(px)*.71,y=H/2+m(pz)*.71;
+      g.strokeStyle=thread+'66';g.lineWidth=1.3;
+      g.beginPath();g.arc(x,y,15*sc,0,Math.PI*2);g.stroke();
+      glyphs[k%4](x,y,sc);
     }
     // The call to action, embroidered at the centre in the page's Cinzel
     // capitals: bronze-gold satin stitch over a sunken edge, stretched along
     // the table's depth so it reads upright from the chair.
-    const lines=['IKKE DRA','I TEPPET'],stretch=1.3,top=m(Wm-2*hang);
+    const lines=['IKKE DRA','I TEPPET'],stretch=1.3,top=m(drape.hx*2);
     const font=size=>`600 ${size}px Cinzel, Georgia, serif`;
     g.font=font(100);
     const widest=Math.max(...lines.map(line=>g.measureText(line).width));
@@ -671,7 +685,7 @@ if (renderer) {
     map.anisotropy=glow.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
     return {map,glow};
   }
-  const clothGeometry=new THREE.PlaneGeometry(1,1,72,52);
+  const clothGeometry=ritualCloth.geometry;
   const clothMaterial=new THREE.MeshPhysicalMaterial({roughness:.8,sheen:.75,
     sheenRoughness:.45,sheenColor:new THREE.Color('#6f5a86'),side:THREE.DoubleSide,transparent:true});
   // The inscription glows from within the fabric: its colour flows across the
@@ -713,7 +727,7 @@ if (renderer) {
     clothMaterial.map=map;inscription.uInscription.value=glow;clothMaterial.needsUpdate=true;invalidate();
   }
   document.fonts?.load('600 64px Cinzel').then(()=>{if(clothAspect)repaintCloth();},()=>{});
-  const clothSize=()=>[2*drape.hx+2*hang,2*drape.hz+2*hang];
+  const clothSize=()=>ritualCloth.size;
   // Walls the dragged cloth meets, in scene coordinates: the left wall (with
   // the nook's recess), the back wall (with the alcove), the right wall, and
   // the tower's round wall for everything behind its mouth. Fills `hit` with
@@ -746,16 +760,21 @@ if (renderer) {
   const hemFold=new Float32Array(clothCount),hemLaidFold=new Float32Array(clothCount);
   const loose=new Float32Array(clothCount*3),reachP=new Float32Array(clothCount),reachT=new Float32Array(clothCount);
   const reachN=new Float32Array(clothCount*2),reachId=new Uint8Array(clothCount),hit={};
-  const push=new Float32Array(4),spanMin=new Float32Array(4),spanMax=new Float32Array(4);
+  const push=new Float32Array(4),spanMin=new Float32Array(4),spanMax=new Float32Array(4),support={x:0,z:0};
   function lay() {
-    const {hx,hz,x:cx,z:cz,ox,oz}=drape,[W,D]=clothSize(),top=view.tableHeight+.004;
-    const p=clothGeometry.attributes.position,uv=clothGeometry.attributes.uv;
+    const {x:cx,z:cz,ox,oz}=drape,top=view.tableHeight+.004;
+    const p=clothGeometry.attributes.position;
     push.fill(0);spanMin.fill(Infinity);spanMax.fill(-Infinity);
     for(let i=0;i<p.count;i++) {
       // Flat position on the cloth; its top edge (v=1) lies at the table's back.
-      const fx=(uv.getX(i)-.5)*W,fz=(.5-uv.getY(i))*D;
-      let x=cx+ox+fx,z=cz+oz+fz,y=top+.0015*Math.sin(fx*11+fz*7);
-      const ex=Math.max(cx-hx,Math.min(cx+hx,x)),ez=Math.max(cz-hz,Math.min(cz+hz,z));
+      const fx=ritualCloth.flat[i*2],fz=ritualCloth.flat[i*2+1];
+      // The centre follows the hand, while each soft outer panel yields a
+      // little. Bounded spatial lag preserves the cut even on a long pull.
+      const lag=ritualCloth.free[i]*ritualCloth.tuning.dragTrail*(.8+.2*Math.sin(ritualCloth.phase[i]));
+      const pull=Math.hypot(ox,oz),trail=pull?Math.min(.09,pull*lag)/pull:0;
+      let x=cx+ox*(1-trail)+fx,z=cz+oz*(1-trail)+fz,y=top+.0015*Math.sin(fx*11+fz*7);
+      ritualCloth.supportAt(x-cx,z-cz,support);
+      const ex=cx+support.x,ez=cz+support.z;
       const d=Math.hypot(x-ex,z-ez);
       hemWeight[i]=hemFold[i]=hemLaidFold[i]=0;
       if(d>1e-6) {
@@ -766,7 +785,7 @@ if (renderer) {
           // Hangs, flaring a little, in folds that deepen toward the hem;
           // whatever reaches the floor lies on it.
           const hanging=d-bend,fall=Math.min(hanging,top-edge-.006),pool=hanging-fall;
-          const along=Math.abs(nx)>Math.abs(nz)?fz:fx,phase=nx*2+nz*3,depth=Math.min(1,fall/.12);
+          const along=fx*(-nz)+fz*nx,phase=ritualCloth.phase[i],depth=Math.min(1,fall/.12);
           const fold=Math.sin(along*30+phase)*.016*depth;
           out=edge+fall*.08+fold+pool;
           drop=edge+fall;
@@ -832,14 +851,15 @@ if (renderer) {
   //   droop         metres the hem drops per metre of outward fold
   //   sideways      metres of along-the-edge travel per metre of fold
   //   fadeOut / fadeIn  how fast it yields to a drag and returns (per second)
-  const hem={amplitude:.04,wavelength:.25,speed:.15,irregularity:1,swell:.5,droop:.9,sideways:.5,fadeOut:4,fadeIn:1.2};
+  const hem={amplitude:.028,wavelength:.30,speed:.11,irregularity:.7,swell:.35,droop:.6,sideways:.35,fadeOut:4,fadeIn:1.2};
   const hemStill=matchMedia('(prefers-reduced-motion: reduce)');
   let hemGain=1,hemClock=0,hemHeld=false;
   function stirHem(now) {
     const dt=hemClock?Math.min(.1,(now-hemClock)/1000):0;hemClock=now;
     // Yields while the cloth is being dragged, and rests for reduced motion.
     const target=hemHeld||hemStill.matches?0:1;
-    hemGain+=(target-hemGain)*Math.min(1,dt*(target<hemGain?hem.fadeOut:hem.fadeIn));
+    if(hemStill.matches) hemGain=0;
+    else hemGain+=(target-hemGain)*Math.min(1,dt*(target<hemGain?hem.fadeOut:hem.fadeIn));
     const p=clothGeometry.attributes.position,t=now/1000,k=2*Math.PI/hem.wavelength;
     for(let i=0;i<p.count;i++) {
       let x=laid[i*3],y=laid[i*3+1],z=laid[i*3+2];
@@ -893,8 +913,8 @@ if (renderer) {
   }
 
   // ---- Release: the enchanted cloth settles with a ripple, lifts off the
-  // table, turns toward the spiral stair and flies up along it, trailing like
-  // a ribbon, until the tower hides it on its way to the upper floor.
+  // table, turns toward the spiral stair and flies up along it. The broad
+  // panels remain legible until the tower hides it on the upper floor.
   const UP=new THREE.Vector3(0,1,0);
   const towerAxis=new THREE.Vector3(tower.x,0,tower.z-placement.forward);
   // Route of the cloth's leading edge, in scene coordinates: from where it
@@ -964,14 +984,15 @@ if (renderer) {
         if(clothMotion!==motion){if(!released)resolve(false);return;}
         const t=(now-begin)/1000;
         const ripple=Math.max(0,1-t/.6);          // the release settles through the fabric
-        const b=smooth((t-.35)/1.0);              // rest shape → flying ribbon
+        const b=smooth((t-.35)/1.0);              // rest shape → flying textile
         // Gathers pace off the table, then cruises up the stair.
         const tau=Math.max(0,t-.45),acc=1.4,cruise=2,reach=cruise/acc;
         const sigma=tau<reach?acc*tau*tau/2:acc*reach*reach/2+cruise*(tau-reach);
         // As it lifts it gathers itself in toward its leading edge, then
         // narrows and curls further on its way to the stair.
         const gather=smooth((t-.35)/1.1),furl=smooth((sigma-.3)/3.5);
-        const Lc=W*(1-.55*gather)*(1-.2*furl),Dc=D*(1-.55*gather)*(1-.45*furl),curl=.4*gather+.6*furl;
+        const Lc=W*(1-ritualCloth.tuning.gather*gather)*(1-.2*furl);
+        const Dc=D*(1-ritualCloth.tuning.gather*gather)*(1-ritualCloth.tuning.furlWidth*furl),curl=.3*gather+.45*furl;
         setGlow(fromGlow+(1-fromGlow)*Math.min(1,t/1.6));
         const hold=within?tugHold(t):0;
         tugLight.intensity=2.6*hold*(.8+.2*Math.sin(t*37)+.1*Math.sin(t*61));
@@ -1004,10 +1025,21 @@ if (renderer) {
         const far=corner(0,-drape.hz+drape.z).y,right=corner(drape.hx+drape.x,drape.hz+drape.z).x;
         let overTable=false;
         for(let i=0;i<p.count;i++) {
-          // Across the cloth, its back edge (first row) on the -Z side at rest.
-          const f=frames[i%columns],w=(Math.floor(i/columns)/52-.5)*Dc;
-          const offset=f.wave+curl*w*w+.035*Math.sin(3.1*w+4.3*t)*b;
-          const fx=f.p.x+f.b.x*w+f.n.x*offset,fy=f.p.y+f.b.y*w+f.n.y*offset+f.lift,fz=f.p.z+f.b.z*w+f.n.z*offset;
+          // Material UVs, not grid-row indices: the actual scalloped outline
+          // is transported along the route. Smooth frame interpolation avoids
+          // quantised strips in the radial mesh. Each hem section trails softly.
+          const uv=clothGeometry.attributes.uv,free=ritualCloth.free[i],phase=ritualCloth.phase[i];
+          const lag=ritualCloth.tuning.flightTrail*free*b*(.6+.4*Math.sin(phase-t*2));
+          const column=(uv.getX(i)-lag)*(columns-1);
+          // Extrapolate the last few centimetres instead of clamping the
+          // trailing hem into one strip at the route's rear sample.
+          const a=Math.max(0,Math.min(columns-2,Math.floor(column))),f=frames[a],next=frames[a+1],mix=column-a;
+          const w=(.5-uv.getY(i))*Dc;
+          const offset=f.wave+(next.wave-f.wave)*mix+curl*w*w+
+            ritualCloth.tuning.flutter*free*Math.sin(phase+4.3*t+3.1*w)*b;
+          const fx=f.p.x+(next.p.x-f.p.x)*mix+(f.b.x+(next.b.x-f.b.x)*mix)*w+(f.n.x+(next.n.x-f.n.x)*mix)*offset;
+          const fy=f.p.y+(next.p.y-f.p.y)*mix+(f.b.y+(next.b.y-f.b.y)*mix)*w+(f.n.y+(next.n.y-f.n.y)*mix)*offset+f.lift+(next.lift-f.lift)*mix;
+          const fz=f.p.z+(next.p.z-f.p.z)*mix+(f.b.z+(next.b.z-f.b.z)*mix)*w+(f.n.z+(next.n.z-f.n.z)*mix)*offset;
           const pulled=grip[i]*hold;
           const rx=rest[i*3]+(gripX-rest[i*3])*tug.gather*pulled,rz=rest[i*3+2]+(gripZ-rest[i*3+2])*tug.gather*pulled;
           const ry=rest[i*3+1]+.022*ripple*Math.sin(10*Math.hypot(rx-centre.x,rz-centre.z)-16*t)-tug.depth*pulled;
@@ -1037,6 +1069,7 @@ if (renderer) {
     });
   }
   window.portalCloth={
+    get design(){return {...ritualCloth.tuning};},
     // Still lying on the table (neither flown off nor put away).
     get covered(){return cloth.visible&&!airborne;},
     // Drag offset as fractions of the cloth's on-screen size.
@@ -1088,8 +1121,9 @@ if (renderer) {
     artifact.update(shape,view);
     document.getElementById('screen').classList.add('has-table-model');
     teal.position.x=-view.width/u*.44;purple.position.x=view.width/u*.44;
-    Object.assign(drape,{hx:w/2,hz:d/2,x,z});lay();
-    const [Wm,Dm]=clothSize();if(Math.abs(Wm/Dm-clothAspect)>.02) repaintCloth();
+    Object.assign(drape,{hx:w/2,hz:d/2,x,z});
+    const changed=ritualCloth.update(w,d);lay();
+    if(changed||!clothAspect) repaintCloth();
   }
   // The CSS table always paints over the room canvas, so furniture between the
   // viewer and the table (layer 1) renders into a transparent canvas stacked

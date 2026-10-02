@@ -155,7 +155,59 @@ try {
   async function assertRemainingHand() {
     assert.equal(await evaluate(`[...document.querySelectorAll('.hand-card .sub-card')].filter(e=>getComputedStyle(e).visibility==='visible' && +getComputedStyle(e).opacity>0).length`),4,'Exactly the active card leaves the hand');
   }
-  if (process.argv.includes('--environment-only')) {
+  if (process.argv.includes('--cloth-only')) {
+    for(const [width,height] of [[1440,1000],[390,844]]) {
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+      await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+      await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/`});
+      await until(`!!window.studyRoom && document.querySelector('#deviceTilt').dataset.approach==='ready'`);
+      await evaluate(`document.fonts.ready`);await sleep(250);
+      await shot('cloth-rest-'+width);
+      const invariants=await evaluate(`JSON.stringify({table:portalTable.geometry,orb:document.querySelector('#portalMatter').getAttribute('style'),camera:sceneCamera.camera})`);
+      const finite=`(() => {const mesh=studyRoom.scene.getObjectByName('table cloth');return mesh.geometry.attributes.position.count<3900&&Array.from(mesh.geometry.attributes.position.array).every(Number.isFinite)&&Array.from(mesh.geometry.attributes.normal.array).every(Number.isFinite)})()`;
+      assert.ok(await evaluate(finite));
+      assert.equal(await evaluate('portalCloth.covered'),true);
+      // Record the flat textile with its real texture, separately from its
+      // drape, using a temporary QA-only canvas (not a production renderer).
+      if(width===1440) {
+        const data=await evaluate(`(async()=>{
+          const THREE=await import('./vendor/three/three.module.js');
+          const {createRitualCloth}=await import('./ritual-cloth.js');
+          const shape=createRitualCloth(THREE);shape.update(portalTable.geometry.width/sceneCamera.units,portalTable.geometry.height/sceneCamera.units);
+          const p=shape.geometry.attributes.position;for(let i=0;i<p.count;i++)p.setXYZ(i,shape.flat[i*2],-shape.flat[i*2+1],0);
+          const scene=new THREE.Scene();scene.background=new THREE.Color('#17141d');
+          const material=new THREE.MeshBasicMaterial({map:studyRoom.scene.getObjectByName('table cloth').material.map,side:THREE.DoubleSide});scene.add(new THREE.Mesh(shape.geometry,material));
+          const [w,d]=shape.size,cam=new THREE.OrthographicCamera(-w*.55,w*.55,d*.55,-d*.55,.1,10);cam.position.z=2;
+          const r=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});r.setSize(900,Math.round(900*d/w));r.render(scene,cam);
+          const result=r.domElement.toDataURL('image/png').split(',')[1];r.dispose();r.forceContextLoss();shape.geometry.dispose();material.dispose();return result;
+        })()`);
+        await writeFile(resolve(output,'cloth-pattern.png'),Buffer.from(data,'base64'));
+      }
+      // Short pulls in different directions retain the hex cut and settle.
+      for(const [x,z] of [[.08,.02],[-.05,.07]]) {
+        await evaluate(`portalCloth.pull(${x},${z})`);assert.ok(await evaluate(finite));
+        await shot('cloth-drag-'+width+'-'+(x>0?'right':'left'));
+        assert.equal(await evaluate('portalCloth.settle()'),true);
+      }
+      assert.equal(await evaluate(`JSON.stringify({table:portalTable.geometry,orb:document.querySelector('#portalMatter').getAttribute('style'),camera:sceneCamera.camera})`),invariants,'Cloth work cannot resize the table/orb or alter the camera');
+      await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
+      await sleep(150);
+      await pullCloth(width===1440?160:100);
+      await sleep(450);await shot('cloth-release-'+width);assert.ok(await evaluate(finite));
+      await sleep(500);await shot('cloth-flight-'+width);assert.ok(await evaluate(finite));
+      await until(`document.body.classList.contains('intro-done') && !studyRoom.scene.getObjectByName('table cloth').visible`,25000);
+      assert.equal(await evaluate('portalCloth.covered'),false);await assertViewport();
+      await shot('cloth-revealed-'+width);
+      // Reset safely cancels an active flight; reduced motion removes it immediately.
+      await evaluate('portalCloth.reset();portalCloth.slideOff();portalCloth.reset()');await sleep(100);
+      assert.equal(await evaluate('portalCloth.covered'),true);
+      await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+      assert.equal(await evaluate('portalCloth.slideOff()'),true);
+      assert.equal(await evaluate('portalCloth.covered'),false);
+      console.log('PASS: ritual cloth rest/drag/flight/reveal/reset/reduced motion at',width,height);
+    }
+    assert.equal(errors.length,0,JSON.stringify(errors));
+  } else if (process.argv.includes('--environment-only')) {
     for(const [width,height] of [[1920,910],[1440,1000],[390,844]]) {
       await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
       await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
@@ -413,18 +465,32 @@ try {
     'The WebGL canvas must be hidden once fully morphed into a page');
   console.log('PASS: 1920x910 projected page fits the viewport, canvas hidden in page mode');
 
+  // Observe the approach inside the page. Software-rendered screenshots can
+  // take longer than the dolly itself; testing its old state after capturing
+  // an image is a race, not a reliable assertion about cloth input gating.
+  const approachProbe=await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`
+    window.approachQA=[];
+    addEventListener('scene-camera-change',()=>{
+      const view=window.sceneCamera,button=document.querySelector('#tableCloth');
+      if(document.querySelector('#deviceTilt')?.dataset.approach!=='walking'||view.approach>=1)return;
+      const last=approachQA[approachQA.length-1];
+      if(last&&view.approach-last.progress<.02)return;
+      const r=document.querySelector('#screen').getBoundingClientRect();
+      approachQA.push({progress:view.approach,w:r.width,distance:view.distance,pitch:view.camera.pitch,disabled:button.getAttribute('aria-disabled')});
+    });`});
   await cdp('Emulation.setDeviceMetricsOverride', {width:1440,height:1000,deviceScaleFactor:1,mobile:false});
   await cdp('Page.navigate', {url:`http://127.0.0.1:${port}/`});
   await until(`!!window.portalMatter`);
+  await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:approachProbe.identifier});
   await sleep(700); await shot('00-approach'); // still across the room, first beat of the walk in
-  const farPortal = await bounds('#screen');
-  const approachPitch = await evaluate(`sceneCamera.camera.pitch`);
-  const farDistance = await evaluate(`sceneCamera.distance`);
-  assert.equal(await evaluate(`document.querySelector('#tableCloth').getAttribute('aria-disabled')`), 'true');
   await sleep(2000); await shot('00a-approach-mid');
-  const middlePortal = await bounds('#screen');
   await sleep(900); await shot('00b-approach-near');
   await until(`document.querySelector('#deviceTilt').dataset.approach === 'ready'`);
+  const approach=await evaluate('approachQA');
+  assert.ok(approach.length>=2,'The approach renders intermediate camera states');
+  assert.ok(approach.every(frame=>frame.disabled==='true'),'Cloth input is disabled throughout the approach');
+  const farPortal=approach[0],middlePortal=approach[Math.floor(approach.length/2)];
+  const approachPitch=farPortal.pitch,farDistance=farPortal.distance;
   assert.equal(await evaluate(`document.querySelector('#tableCloth').tabIndex`), 0);
   const initial = await bounds('#screen');
   console.log('Intro bounds', JSON.stringify(initial));

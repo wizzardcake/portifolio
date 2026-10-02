@@ -250,6 +250,17 @@ try {
       assert.ok(artifact.area<artifact.oldArea*.8 && artifact.backGap>0,'Smaller footprint leaves more floor toward the back wall');
       assert.ok(artifact.table.meshes<=4 && artifact.table.triangles<2800,'The table is batched into four modest meshes');
       console.log('Table geometry',width,artifact);
+      const architecture=await evaluate(`(() => {
+        const a=studyRoom.architecture,s=studyRoom.shell,light=s.getObjectByName('stairwell light'),bounce=s.getObjectByName('upper floor glow');
+        return {stats:a.stats,source:a.source,angle:light.angle,reach:bounce.distance,
+          bronze:!!s.getObjectByName('gothic bronze tracery'),global:studyRoom.lighting.values,
+          valid:['stone trim','gothic bronze tracery','spiral stair'].every(name=>Array.from(s.getObjectByName(name).geometry.attributes.position.array).every(Number.isFinite))};
+      })()`);
+      assert.equal(architecture.stats.windows,4);assert.equal(architecture.stats.profiles,5);assert.equal(architecture.stats.railBays,7);
+      assert.ok(architecture.bronze&&architecture.valid&&architecture.stats.triangles<2700,'Batched architectural dressings stay bounded');
+      assert.ok(architecture.source.position[1]>architecture.source.wellHeight&&architecture.source.target[1]<1,'Green light originates above the landing and falls into the stairwell');
+      assert.ok(architecture.angle<.4&&architecture.reach<1.6,'Upper light is a narrow source, not a room-wide wash');
+      assert.deepEqual(architecture.global,{fill:.5,ambient:.06,lamp:11,front:1.2,table:9,tableAwake:.35},'Architecture pass preserves global lighting balance');
       assert.ok(registration.ceiling>0 && registration.ceiling<height*.4,'The ceiling/wall junction is in frame');
       assert.equal(registration.opening,1,'The gothic window cuts through the actual wall geometry');
       assert.ok(registration.thickness>.2 && registration.calls<30 && registration.triangles<10000 && registration.pixels<=2600000,'Architectural depth stays within the room rendering budget');

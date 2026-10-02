@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three/three.module.js';
 import {createRitualTable} from './table-model.js';
 import {createRitualCloth} from './ritual-cloth.js';
+import {createRoomArchitecture,architectureTuning} from './room-architecture.js';
 
 // Architecture and physical furniture. Portal, orb and HTML reader stay in their
 // own renderers; scene-camera.js gives both branches the same projection.
@@ -133,9 +134,10 @@ if (renderer) {
   const stairStone=new THREE.MeshStandardMaterial({color:'#7f786e',roughness:.95});
   // The stair's own stone, as dark as the walls' once its texture is multiplied in.
   const stepStone=new THREE.MeshStandardMaterial({color:'#d6d1c8',map:dressedStone(),roughness:.9});
+  const architecturalMetal=new THREE.MeshStandardMaterial({color:'#827354',metalness:.48,roughness:.58});
   const chairWood=new THREE.MeshStandardMaterial({color:'#8f6a4c',map:woodMap,roughness:.6});
   const velvet=new THREE.MeshStandardMaterial({color:'#23403a',roughness:.92});
-  const materials=[stone,wood,ceilingMaterial,trim,timber,stairStone,chairWood,velvet,stepStone];
+  const materials=[stone,wood,ceilingMaterial,trim,timber,stairStone,chairWood,velvet,stepStone,architecturalMetal];
   const textured = materials.map(m=>({map:m.map,color:m.color.clone()}));
   // Pieces sharing a material are merged into one mesh, which keeps the
   // curved shell inside the room's draw-call budget. Stone courses use world
@@ -335,19 +337,12 @@ if (renderer) {
   windowShape.holes.push(arch(new THREE.Path(),aperture));
   mesh('back wall with through opening',extrude(windowShape,T,alcove.back-T,24),stone);
 
-  // Stone trim: the alcove archivolt, the window surround and the sills.
-  const bevelled=(shape,depth,z)=>new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:true,bevelSegments:1,
-    bevelSize:.012,bevelThickness:.012,curveSegments:24}).translate(0,0,z);
-  const archivolt=arch(new THREE.Shape(),alcove,alcove.x,.1);archivolt.holes.push(arch(new THREE.Path(),alcove));
-  const surround=arch(new THREE.Shape(),aperture,aperture.x,.085);surround.holes.push(arch(new THREE.Path(),aperture));
+  // Shared carved profiles for the alcove, actual window reveals and curved
+  // tower lancets. The same pointed tracery is carried into the stair rail.
   const radialAt=(at,rho)=>[tower.x+rho*Math.cos(at),tower.z+rho*Math.sin(at)];
-  mesh('stone trim',merge([
-    bevelled(archivolt,.06,room.back+.005),
-    bevelled(surround,.08,alcove.back+.005),
-    block(aperture.halfWidth*2+.22,.10,T+.24,aperture.x,aperture.sill-.06,alcove.back-T/2+.04),
-    ...lancets.map(w=>{const [x,z]=radialAt(w.at,tower.r+T/2-.05);
-      return block(w.halfWidth*2+.1,.07,T+.12,x,w.sill-.035,z,-w.at-Math.PI/2);}),
-  ]),trim);
+  const architecture=createRoomArchitecture(THREE,{aperture,alcove,tower,lancets,stair,roomBack:room.back});
+  mesh('stone trim',architecture.stone,trim);
+  mesh('gothic bronze tracery',architecture.metal,architecturalMetal);
 
   // The spiral stair, in its own dressed stone. Each step is one solid from the
   // stair's open inner edge into the wall, its profile carrying a nosing that
@@ -415,7 +410,6 @@ if (renderer) {
     arcWall({...tower,r:tower.r-.1,t:.2,from:tower.mouthRight,to:tower.mouthBack+2*Math.PI,
       y0:H-.2,y1:H,bottom:true,steps:24}),
     new THREE.CylinderGeometry(.12,.12,.16,12).translate(tower.x,tower.height-.08,tower.z),
-    block(.035,aperture.peak-aperture.sill-.025,.045,aperture.x,(aperture.peak+aperture.sill-.025)/2,alcove.back-T+.04),
   ];
   // The nook's built-ins: a worktop at desk height with a thin apron, and
   // one shelf, both spanning between the arch's jambs.
@@ -432,22 +426,9 @@ if (renderer) {
     const a=i*Math.PI/3+.3,[x,z]=radialAt(a,(tower.r+T/2)/2);
     beamParts.push(block(tower.r+T/2,.12,.1,x,tower.height-.06,z,-a));
   }
-  // Handrail along the stair's open inner edge, parallel to the nosing line,
-  // on a slender, slightly tapered baluster per step, from a newel post with
-  // a cap and ball finial at the foot.
-  const railAt=(i,rho=stair.inner+.03)=>{const phi=stair.from-i*stair.step;
-    return [tower.x+rho*Math.cos(phi),tread(i)+.86,tower.z+rho*Math.sin(phi)];};
-  const helix=new THREE.Curve();
-  helix.getPoint=(t,target=new THREE.Vector3())=>target.set(...railAt(t*stair.count));
-  beamParts.push(new THREE.TubeGeometry(helix,32,.024,6,false));
-  for(let i=0;i<stair.count;i++) {
-    const [x,top,z]=railAt(i+.5),height=top-tread(i);
-    beamParts.push(new THREE.CylinderGeometry(.01,.013,height,6,1,true).translate(x,tread(i)+height/2,z));
-  }
-  const [newelX,newelTop,newelZ]=railAt(0),newel=newelTop+.05;
-  beamParts.push(block(.07,newel,.07,newelX,newel/2,newelZ,-stair.from),
-    block(.095,.03,.095,newelX,newel+.015,newelZ,-stair.from),
-    new THREE.SphereGeometry(.036,6,4).translate(newelX,newel+.06,newelZ));
+  // The warm handrail follows the same helix; its stone foot and open bronze
+  // pointed bays are batched with the matching window dressings above.
+  beamParts.push(architecture.handrail);
   // Upper floor inside the tower, one riser above the last step. Its stairwell
   // keeps headroom over the flight and clears the tall lancets, so the stair
   // visibly arrives at another level instead of ending in the wall.
@@ -659,7 +640,7 @@ if (renderer) {
   //   upperGreen  the upper floor's light, the scene's one saturated green
   //   skyLight    the window light: lighter and bluer than the portal's violet,
   //               so sky, stair and portal each keep their own colour
-  const upperGreen='#52f08f',skyLight='#a79aff';
+  const upperGreen=architectureTuning.green,skyLight='#a79aff';
   // The window light is the sky's: the alcove's shadow-casting spot (its
   // window-shaped patch falls behind the table, toward the tower) and the
   // soft fills by each window.
@@ -670,15 +651,15 @@ if (renderer) {
   towerBounce.intensity=1.5;
   // The upper floor's light falling through the stairwell: over the upper
   // flight, down the wall beneath it and softly onto the tower floor.
-  const wellMid=(well.from+well.to)/2,[wellX,wellZ]=radialAt(wellMid,(well.inner+tower.r)/2),wellY=tread(stair.count);
-  const presence=new THREE.SpotLight(upperGreen,13,6,.55,1,2);presence.name='stairwell light';
-  presence.position.set(wellX,wellY+.3,wellZ);presence.target.position.set(1.9,.2,-2.2);
+  const [wellX,wellZ]=radialAt(-66*Math.PI/180,.94),wellY=tread(stair.count);
+  const presence=new THREE.SpotLight(upperGreen,architectureTuning.greenIntensity,5,architectureTuning.greenAngle,.68,2);presence.name='stairwell light';
+  presence.position.set(wellX,wellY+.45,wellZ);presence.target.position.set(2.28,.28,-1.90);
   shell.add(presence,presence.target);
   // Its source, up in the tower room just above the well, stays out of view.
   // The seated eye sees it as the wall at the top of the stair: brightest just
   // under the landing, fading down the flight.
-  const upstairs=new THREE.PointLight(upperGreen,13,2.2,2),[upX,upZ]=radialAt(-118*Math.PI/180,.85);
-  upstairs.name='upper floor glow';upstairs.position.set(upX,wellY+.13,upZ);shell.add(upstairs);
+  const upstairs=new THREE.PointLight(upperGreen,architectureTuning.upperBounce,architectureTuning.upperReach,2),[upX,upZ]=radialAt(-118*Math.PI/180,.85);
+  upstairs.name='upper floor glow';upstairs.position.set(upX,wellY+.23,upZ);shell.add(upstairs);
   // Shafts of light, from their source to where they fade out: open cones,
   // brightest along their axis as seen from any angle, fading at both ends.
   const inward=(w,down,length)=>{
@@ -694,10 +675,16 @@ if (renderer) {
   // past the lower flight, the only part of the stair seen from above the
   // treads; over the upper flight's soffit they would read as pale columns.
   const fall=(degrees,rho,above,to)=>{const [x,z]=radialAt(degrees*Math.PI/180,rho);return {from:[x,wellY+above,z],to};};
+  // Slit-like shafts emerge together from the upper well, not from the
+  // windows. Shorter/finer falloff keeps their mint core distinct from the
+  // untouched lavender moonlight. Reuse the existing batch and dust count.
+  const greenShaft=(degrees,rho,to,r0,r1,strength,motes)=>({
+    ...fall(degrees,rho,.45,to),r0:r0*architectureTuning.shaftWidth,r1:r1*architectureTuning.shaftWidth,
+    color:upperGreen,strength:strength*architectureTuning.shaftStrength,motes,dustGlow:.32,dustSize:.65});
   const beams=[
-    {...fall(-74,.95,.6,[2.2,.03,-1.65]),r0:.12,r1:.36,color:upperGreen,strength:.2,motes:70},
-    {...fall(-50,1.05,.5,[2.5,.15,-1.45]),r0:.06,r1:.18,color:upperGreen,strength:.1,motes:22},
-    {...fall(-44,1.15,.5,[2.7,.3,-1.95]),r0:.05,r1:.13,color:upperGreen,strength:.08,motes:14},
+    greenShaft(-66,.94,[2.28,.18,-1.90],.027,.14,.21,70),
+    greenShaft(-57,1.02,[2.46,.40,-1.78],.019,.085,.13,22),
+    greenShaft(-77,.84,[2.08,.85,-2.02],.015,.060,.08,14),
     {...inward(lancets[1],.55,2.5),r0:.1,r1:.3,color:skyLight,strength:.26,motes:30},
     {...inward(lancets[0],.62,2.3),r0:.08,r1:.24,color:skyLight,strength:.17,motes:18},
     {...slant(aperture.x-.17,1.72,3.0),r0:.1,r1:.32,color:skyLight,strength:.22,motes:30},
@@ -735,7 +722,7 @@ if (renderer) {
       const t=.08+random()*.84,radius=(beam.r0+(beam.r1-beam.r0)*t)*Math.sqrt(random())*.85,angle=random()*Math.PI*2;
       const p=a.clone().lerp(b,t).addScaledVector(side,Math.cos(angle)*radius).addScaledVector(other,Math.sin(angle)*radius);
       dust.position.push(p.x,p.y,p.z);
-      const glow=(.5+random()*.5)*(1-t*.6);dust.tint.push(c.r*glow,c.g*glow,c.b*glow);dust.size.push(.008+random()*.014);
+      const glow=(.5+random()*.5)*(1-t*.6)*(beam.dustGlow??1);dust.tint.push(c.r*glow,c.g*glow,c.b*glow);dust.size.push((.008+random()*.014)*(beam.dustSize??1));
     }
   }
   const shaftGeometry=new THREE.BufferGeometry();
@@ -1372,6 +1359,8 @@ if (renderer) {
     // after it (window, tower, alcove, corner) are in plan coordinates.
     dimensions:{...room,back:room.back-placement.forward,front:room.front-placement.forward},
     window:aperture,tower,alcove,corner,
+    architecture:{get tuning(){return {...architectureTuning};},stats:architecture.stats,
+      source:{position:presence.position.toArray(),target:presence.target.position.toArray(),wellHeight:wellY}},
     project(x,y,z){const p=new THREE.Vector3(x,y,z).project(camera);return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};},
     clay(enabled){materials.forEach((m,i)=>{m.map=enabled?null:textured[i].map;if(m===stone)m.bumpMap=enabled?null:stoneMap;m.color.copy(enabled?new THREE.Color('#686460'):textured[i].color);m.needsUpdate=true;});boards.material=wood;invalidate();},
     // The room's light balance ("Room lighting balance"), read or tuned live.

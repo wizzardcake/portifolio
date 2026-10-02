@@ -9,8 +9,8 @@
      same field (portal-depth-volume.js includes WATER), so the depths below
      sway, bend and part with the surface above them;
    - a Fresnel reflection of the room's actual light sources (the alcove's
-     green window, the purple stair light, the tower's green lancets, the warm
-     nook) and of the hovering orb, so coloured highlights travel over it;
+     window onto the purple sky, the green light down the stair, the tower's lancets,
+     the warm nook) and of the hovering orb, so coloured highlights travel over it;
    - fine, faster ripples that only the glints see: the shimmer;
    - the abyss's own light reaching the water from below, in a loose ring
      around the dark throat, caught by the wave faces; a few luminous wisps
@@ -43,9 +43,9 @@
   // The room's light sources the surface reflects, in scene metres with the
   // table centre at the origin, +y up and +z toward the viewer (room-scene.js).
   const LIGHTS = {
-    window: [-1, 1.25, -4.5],   // the alcove's pointed window: green sky
-    stair: [1.8, 1.4, -3.1],    // purple light down the spiral stair
-    lancet: [2.9, 2, -4.3],     // the tower's green lancets
+    window: [-1, 1.25, -4.5],   // the alcove's pointed window: moonlit purple sky
+    stair: [1.8, 1.4, -3.1],    // green light from the upper floor down the spiral stair
+    lancet: [2.9, 2, -4.3],     // the tower's lancets onto the same sky
     nook: [-2.6, 1.1, -1.55],   // the warm study nook
   };
   // Rings: at most RINGS at once, running outward at RING_SPEED aperture
@@ -149,21 +149,21 @@
     // What the pond mirrors: a dark room, a little warm overhead, and its lights.
     vec3 room(vec3 P, vec3 R) {
       vec3 c=mix(vec3(.010,.012,.018),vec3(.034,.026,.020),smoothstep(-.1,.6,R.z));
-      // Upper walls faintly lit by the window's green (left) and the stair's
-      // purple (right): what the steeper reflections near the viewer see.
-      c+=mix(vec3(.10,.30,.24),vec3(.24,.14,.40),smoothstep(-.4,.4,R.x))*.12*smoothstep(.25,.75,R.z);
+      // Upper walls faintly lit by the window's lavender (left) and the stair's
+      // green (right): what the steeper reflections near the viewer see.
+      c+=mix(vec3(.20,.18,.38),vec3(.10,.30,.19),smoothstep(-.4,.4,R.x))*.12*smoothstep(.25,.75,R.z);
       // The lit back wall around the window: a broad, soft sheen on the far
       // water that the ripples break up.
-      c+=vec3(.12,.46,.36)*lobe(P,R,uWindow,14.)*.2;
-      c+=vec3(.18,.80,.60)*lobe(P,R,uWindow,110.)*.75;
-      c+=vec3(.55,.28,1.)*lobe(P,R,uStair,22.)*.75;
-      c+=vec3(.28,.90,.66)*lobe(P,R,uLancet,90.)*.55;
+      c+=vec3(.30,.26,.52)*lobe(P,R,uWindow,14.)*.2;
+      c+=vec3(.62,.52,1.)*lobe(P,R,uWindow,110.)*.75;
+      c+=vec3(.24,.92,.52)*lobe(P,R,uStair,22.)*.6;
+      c+=vec3(.56,.48,.98)*lobe(P,R,uLancet,90.)*.55;
       c+=vec3(1.,.62,.30)*lobe(P,R,uNook,16.)*.35;
       return c;
     }
     vec3 glints(vec3 P, vec3 R) {
-      return vec3(.55,1.,.85)*lobe(P,R,uWindow,900.)+vec3(.8,.62,1.)*lobe(P,R,uStair,420.)
-        +vec3(.6,1.,.8)*lobe(P,R,uLancet,900.);
+      return vec3(.84,.78,1.)*lobe(P,R,uWindow,900.)+vec3(.66,1.,.78)*lobe(P,R,uStair,420.)
+        +vec3(.82,.76,1.)*lobe(P,R,uLancet,900.);
     }
     // The hovering orb, mirrored where it floats, in the light it gives.
     vec3 orb(vec3 P, vec3 R) {

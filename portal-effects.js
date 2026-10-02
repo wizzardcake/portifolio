@@ -21,16 +21,17 @@
 
   // The room's light on the orb, in scene metres (x right, y up, z toward the
   // viewer, table centre at the origin): the warm lamp by the nook and the
-  // warm fill from the viewer's end (room-scene.js); the green window and the
-  // violet stair where the water mirrors them (portal-surface.js); the dim
+  // warm fill from the viewer's end (room-scene.js); the lavender window onto
+  // the purple sky and the green stair where the water mirrors them
+  // (portal-surface.js); the dim
   // cool sky of the room above; and the portal's own teal and violet from
   // below. Colours are linear, multiplied by how strongly each registers.
   // The order matters to the shader: which give crisp highlights.
   const ROOM = [
-    {at: [-1.7, 1.45, -.2], color: [1, .5, .17], power: .55},
+    {at: [-2.1, 1.5, -1.4], color: [1, .5, .17], power: .55},
     {at: [0, 2.1, 3], color: [1, .62, .32], power: .32},
-    {name: 'window', at: [-1, 1.25, -4.5], color: [.06, .74, .40], power: .95},
-    {name: 'stair', at: [1.8, 1.4, -3.1], color: [.26, .07, 1], power: 1.05},
+    {name: 'window', at: [-1, 1.25, -4.5], color: [.40, .33, .95], power: .95},
+    {name: 'stair', at: [1.8, 1.4, -3.1], color: [.08, .87, .27], power: .9},
     {dir: [0, 1, .25], color: [.32, .38, .55], power: .3},
     {dir: [-.55, -1, .15], color: [.04, .51, .42], power: .5},
     {dir: [.55, -1, .15], color: [.22, .12, .47], power: .45},

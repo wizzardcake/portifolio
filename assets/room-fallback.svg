@@ -5,16 +5,23 @@
     <linearGradient id="floor" x2="0" y2="1"><stop stop-color="#272727"/><stop offset="1" stop-color="#382f23"/></linearGradient>
     <linearGradient id="left"><stop stop-color="#40372b"/><stop offset="1" stop-color="#2a2826"/></linearGradient>
     <linearGradient id="tower"><stop stop-color="#2c2d33"/><stop offset=".55" stop-color="#262830"/><stop offset="1" stop-color="#1e1b22"/></linearGradient>
+    <!-- The purple night sky outside the windows, glowing toward the horizon. -->
+    <linearGradient id="sky" gradientUnits="userSpaceOnUse" x1="0" y1="90" x2="0" y2="390">
+      <stop stop-color="#170c35"/><stop offset=".7" stop-color="#3b2170"/><stop offset=".88" stop-color="#7c52b4"/><stop offset="1" stop-color="#241740"/>
+    </linearGradient>
   </defs>
   <path fill="#2a241e" d="M0 0H1920V1000H0Z"/>
   <path fill="url(#left)" d="M0 0L527 65Q600 86 667 90L704 464Q640 468 589 487L0 870Z"/>
   <path fill="#303031" d="M667 90H1093L1076 465H912L907 224Q880 150 803 125Q736 150 710 224L732 465H704Z"/>
   <path fill="#1d1c1c" d="M732 465L710 224Q736 150 803 125Q880 150 907 224L912 465Z"/>
-  <path fill="#141e2e" d="M780 385L771 258Q776 212 823 180Q878 212 883 258L886 385Z"/>
+  <path fill="url(#sky)" d="M780 385L771 258Q776 212 823 180Q878 212 883 258L886 385Z"/>
+  <!-- The moon in the upper left of the alcove window. -->
+  <circle cx="801" cy="236" r="22" fill="#b69cf0" opacity=".22"/>
+  <circle cx="801" cy="236" r="8" fill="#f3ecff"/>
   <path fill="#505155" d="M770 386H896V398H770Z"/>
   <path fill="url(#tower)" d="M1093 90Q1240 130 1400 104Q1560 70 1700 0H1920V880L1448 579L1554 546L1492 489Q1420 455 1348 452Q1270 438 1207 441L1076 465Z"/>
   <!-- Lancets stepped up with the spiral stair, which climbs leftward out of view. -->
-  <g fill="#141e2e">
+  <g fill="url(#sky)">
     <path d="M1408 362V170Q1412 128 1432 104Q1452 128 1456 170V362Z"/>
     <path d="M1318 318V112Q1322 64 1344 38Q1366 64 1370 112V318Z"/>
     <path d="M1240 262V60Q1244 10 1266 -14Q1288 10 1292 60V262Z"/>

@@ -32,7 +32,7 @@ const nook = {back:-1.3, front:.8, depth:.45, shoulder:1.7, rise:.42, desk:.74, 
 // from - (i+1)*step .. from - i*step, so it starts on the right of the tower
 // (as seen from the table) and climbs leftward across its back wall.
 // soffit: depth of its smooth underside below the line through the nosings;
-// cap/nosing: each tread slab's thickness and how far it overhangs the riser.
+// cap/nosing: each nosing's thickness and how far it overhangs the riser.
 const stair = {from:-12 * Math.PI / 180, step:10 * Math.PI / 180, rise:.19, inner:.62, count:14,
   soffit:.3, cap:.045, nosing:.028};
 const tread = i => (i + 1) * stair.rise;
@@ -349,60 +349,53 @@ if (renderer) {
       return block(w.halfWidth*2+.1,.07,T+.12,x,w.sill-.035,z,-w.at-Math.PI/2);}),
   ]),trim);
 
-  // The spiral stair, in its own dressed stone. Each step is a wedge from the
-  // stair's open inner edge into the wall, under a tread slab whose nosing
-  // overhangs the riser below and the open edge, so every step draws a fine
-  // shadow line. Beneath, the wedges share one smooth helical soffit, landing
-  // on the floor at the foot, instead of a sawtooth of separate slabs: the
-  // flight reads as a single carved spiral. A stepped skirting ties each step
-  // into the curved wall.
+  // The spiral stair, in its own dressed stone. Each step is one solid from the
+  // stair's open inner edge into the wall, its profile carrying a nosing that
+  // overhangs the riser below, so every step draws a fine shadow line. Beneath,
+  // the steps share one smooth helical soffit, landing on the floor at the
+  // foot, instead of a sawtooth of separate slabs: the flight reads as a single
+  // carved spiral. A stepped skirting ties each step into the curved wall.
+  // 14 triangles a step: the room's triangle budget is nearly spent.
   const stepAt=i=>({from:stair.from-(i+1)*stair.step,to:stair.from-i*stair.step});
   const plinth=.14,proud=.035;
   // Height of the line through every nosing at plan angle phi, and of the soffit.
   const pitch=phi=>((stair.from-phi)/stair.step+1)*stair.rise;
   const soffit=phi=>Math.max(0,pitch(phi)-stair.soffit);
-  function stepBody(i) {
-    const {from:a,to:b}=stepAt(i),top=tread(i)-stair.cap,wall=tower.r+.05,parts=2;
+  function step(i) {
+    const {from:a,to:b}=stepAt(i),top=tread(i),lip=top-stair.cap,wall=tower.r+.05;
     const at=(phi,rho,y)=>new THREE.Vector3(tower.x+rho*Math.cos(phi),y,tower.z+rho*Math.sin(phi));
-    const centre=at((a+b)/2,(stair.inner+wall)/2,(top+soffit((a+b)/2))/2);
+    // Toward the step below; the nosing stands a constant distance out that way.
+    const front=new THREE.Vector3(-Math.sin(b),0,Math.cos(b)),nose=v=>v.addScaledVector(front,stair.nosing);
+    const up=new THREE.Vector3(0,1,0),down=new THREE.Vector3(0,-1,0);
     // The soffit's own (helicoid) normal, so the underside shades as one surface.
     const lean=stair.rise/stair.step;
-    const under=(phi,rho)=>soffit(phi)>0?new THREE.Vector3(lean*Math.sin(phi),-rho,-lean*Math.cos(phi)).normalize():new THREE.Vector3(0,-1,0);
+    const under=(phi,rho)=>soffit(phi)>0?new THREE.Vector3(lean*Math.sin(phi),-rho,-lean*Math.cos(phi)).normalize():down;
     const position=[],normal=[];
-    // A quad wound to face away from the step's centre; flat unless given normals.
-    const quad=(p,n)=>{
+    // A quad wound to face `out`; flat-shaded unless given normals.
+    const quad=(p,out,n)=>{
       const face=new THREE.Vector3().subVectors(p[1],p[0]).cross(new THREE.Vector3().subVectors(p[2],p[0]));
-      if(face.dot(new THREE.Vector3().subVectors(p[0],centre))<0){p=[p[0],p[3],p[2],p[1]];n=n&&[n[0],n[3],n[2],n[1]];face.negate();}
+      if(face.dot(out)<0){p=[p[0],p[3],p[2],p[1]];n=n&&[n[0],n[3],n[2],n[1]];face.negate();}
       face.normalize();
       for(const k of [0,1,2,0,2,3]){const m=n?n[k]:face;position.push(p[k].x,p[k].y,p[k].z);normal.push(m.x,m.y,m.z);}
     };
-    for(let k=0;k<parts;k++) {
-      const p=a+(b-a)*k/parts,q=a+(b-a)*(k+1)/parts;
-      quad([at(p,stair.inner,soffit(p)),at(q,stair.inner,soffit(q)),at(q,wall,soffit(q)),at(p,wall,soffit(p))],
-        [under(p,stair.inner),under(q,stair.inner),under(q,wall),under(p,wall)]);
-      quad([at(p,stair.inner,soffit(p)),at(q,stair.inner,soffit(q)),at(q,stair.inner,top),at(p,stair.inner,top)]);
-    }
-    for(const phi of [a,b]) quad([at(phi,stair.inner,soffit(phi)),at(phi,wall,soffit(phi)),at(phi,wall,top),at(phi,stair.inner,top)]);
+    // The profile, from the back of the soffit round to the back of the tread.
+    const profile=rho=>[at(a,rho,soffit(a)),at(b,rho,soffit(b)),at(b,rho,lip),nose(at(b,rho,lip)),nose(at(b,rho,top)),at(a,rho,top)];
+    const [i0,i1,i2,i3,i4,i5]=profile(stair.inner),[w0,w1,w2,w3,w4,w5]=profile(wall);
+    quad([i0,i1,w1,w0],down,[under(a,stair.inner),under(b,stair.inner),under(b,wall),under(a,wall)]);
+    quad([i1,i2,w2,w1],front);quad([i2,i3,w3,w2],down);quad([i3,i4,w4,w3],front);quad([i4,i5,w5,w4],up);
+    // The top step's back meets the landing; every other one hides under the next step.
+    if(i===stair.count-1) quad([i5,i0,w0,w5],new THREE.Vector3(Math.sin(a),0,-Math.cos(a)));
+    // The open edge: the step's face and its nosing lip. The wall end stays buried.
+    const edge=new THREE.Vector3(-Math.cos((a+b)/2),0,-Math.sin((a+b)/2)),corner=at(b,stair.inner,top);
+    quad([i0,i1,corner,i5],edge);quad([i2,i3,i4,corner],edge);
     const geometry=new THREE.BufferGeometry();
     geometry.setAttribute('position',new THREE.Float32BufferAttribute(position,3));
     geometry.setAttribute('normal',new THREE.Float32BufferAttribute(normal,3));
     geometry.setAttribute('uv',new THREE.Float32BufferAttribute(new Float32Array(position.length/3*2),2));
     return worldUV(geometry);
   }
-  // The tread slab: over the whole wedge, reaching a little past its open edge
-  // and, at the nosing, a constant distance in front of the riser.
-  function stepCap(i) {
-    const {from:a,to:b}=stepAt(i),r0=stair.inner-.02,r1=tower.r+.05,d=stair.nosing;
-    const shape=new THREE.Shape().moveTo(r0*Math.cos(a),r0*Math.sin(a));
-    shape.absarc(0,0,r0,a,b,false);
-    for(const r of [r0,r1]) shape.lineTo(r*Math.cos(b)-d*Math.sin(b),r*Math.sin(b)+d*Math.cos(b));
-    shape.absarc(0,0,r1,b,a,true);shape.closePath();
-    return worldUV(new THREE.ExtrudeGeometry(shape,{depth:stair.cap,bevelEnabled:false,curveSegments:2})
-      .rotateX(Math.PI/2).translate(tower.x,tread(i),tower.z));
-  }
   mesh('spiral stair',merge([
-    ...Array.from({length:stair.count},(_,i)=>stepBody(i)),
-    ...Array.from({length:stair.count},(_,i)=>stepCap(i)),
+    ...Array.from({length:stair.count},(_,i)=>step(i)),
     ...Array.from({length:stair.count},(_,i)=>arcWall({...tower,...stepAt(i),r:tower.r-proud,
       t:proud+.02,y0:tread(i),y1:tread(i)+plinth,steps:1})),
   ]),stepStone);
@@ -446,7 +439,7 @@ if (renderer) {
     return [tower.x+rho*Math.cos(phi),tread(i)+.86,tower.z+rho*Math.sin(phi)];};
   const helix=new THREE.Curve();
   helix.getPoint=(t,target=new THREE.Vector3())=>target.set(...railAt(t*stair.count));
-  beamParts.push(new THREE.TubeGeometry(helix,56,.024,6,false));
+  beamParts.push(new THREE.TubeGeometry(helix,32,.024,6,false));
   for(let i=0;i<stair.count;i++) {
     const [x,top,z]=railAt(i+.5),height=top-tread(i);
     beamParts.push(new THREE.CylinderGeometry(.01,.013,height,6,1,true).translate(x,tread(i)+height/2,z));
@@ -454,7 +447,7 @@ if (renderer) {
   const [newelX,newelTop,newelZ]=railAt(0),newel=newelTop+.05;
   beamParts.push(block(.07,newel,.07,newelX,newel/2,newelZ,-stair.from),
     block(.095,.03,.095,newelX,newel+.015,newelZ,-stair.from),
-    new THREE.SphereGeometry(.036,10,7).translate(newelX,newel+.06,newelZ));
+    new THREE.SphereGeometry(.036,6,4).translate(newelX,newel+.06,newelZ));
   // Upper floor inside the tower, one riser above the last step. Its stairwell
   // keeps headroom over the flight and clears the tall lancets, so the stair
   // visibly arrives at another level instead of ending in the wall.
@@ -466,12 +459,6 @@ if (renderer) {
   upper.closePath();
   beamParts.push(new THREE.ExtrudeGeometry(upper,{depth:.12,bevelEnabled:false,curveSegments:24})
     .rotateX(Math.PI/2).translate(tower.x,tread(stair.count),tower.z));
-  // Trimmer beams square off both ends of the well under the floor's edge;
-  // the one where the stair arrives is also its last riser.
-  for(const [phi,side] of [[well.from,-1],[well.to,1]]) {
-    const mid=(well.inner+tower.r)/2,[x,z]=radialAt(phi+side*.035/mid,mid);
-    beamParts.push(block(tower.r-well.inner,.21,.07,x,tread(stair.count)-.105,z,-phi));
-  }
   // Wall plates along both long walls carry the cross beams' ends.
   beamParts.push(block(.14,.14,room.front-corner.z,room.left+.07,H-.07,(room.front+corner.z)/2),
     block(.14,.14,room.front-rightJoin,room.right-.07,H-.07,(room.front+rightJoin)/2));

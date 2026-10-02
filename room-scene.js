@@ -31,7 +31,10 @@ const nook = {back:-1.3, front:.8, depth:.45, shoulder:1.7, rise:.42, desk:.74, 
 // Spiral stair along the tower wall. Step i spans plan angles
 // from - (i+1)*step .. from - i*step, so it starts on the right of the tower
 // (as seen from the table) and climbs leftward across its back wall.
-const stair = {from:-12 * Math.PI / 180, step:10 * Math.PI / 180, rise:.19, inner:.62, count:14, slab:.34};
+// soffit: depth of its smooth underside below the line through the nosings;
+// cap/nosing: each tread slab's thickness and how far it overhangs the riser.
+const stair = {from:-12 * Math.PI / 180, step:10 * Math.PI / 180, rise:.19, inner:.62, count:14,
+  soffit:.3, cap:.045, nosing:.028};
 const tread = i => (i + 1) * stair.rise;
 // Tall, narrow lancets stepped up with the stair: each sill clears the highest
 // tread beneath its opening. They sit where the stair is still low, so its
@@ -98,6 +101,28 @@ if (renderer) {
     return map;
   }
   const stoneMap=texture('stone'), woodMap=texture('wood');
+  // Dressed stone for the spiral stair: the walls' tone and grain without their
+  // coursing. It draws from its own seeded generator, so the shared one still
+  // lays out the same planks, sky and cloth.
+  function dressedStone() {
+    let s=4057;const draw=()=>((s=Math.imul(s,1664525)+1013904223>>>0)/4294967296);
+    const image=document.createElement('canvas');image.width=image.height=256;
+    const g=image.getContext('2d');g.fillStyle='#716e69';g.fillRect(0,0,256,256);
+    // Soft clouding, each patch drawn at every wrap so the tile repeats seamlessly.
+    for(let i=0;i<34;i++) {
+      const x=draw()*256,y=draw()*256,r=14+draw()*42,tone=draw()>.5?'#857f75':'#5d5a55';
+      for(const dx of [-256,0,256]) for(const dy of [-256,0,256]) {
+        const cloud=g.createRadialGradient(x+dx,y+dy,0,x+dx,y+dy,r);
+        cloud.addColorStop(0,tone+'38');cloud.addColorStop(1,tone+'00');
+        g.fillStyle=cloud;g.fillRect(x+dx-r,y+dy-r,2*r,2*r);
+      }
+    }
+    for(let i=0;i<9000;i++){g.fillStyle=draw()>.5?'#ddd4be0b':'#0a111417';g.fillRect(draw()*256,draw()*256,1+draw()*2,1+draw()*1.5);}
+    const map=new THREE.CanvasTexture(image);
+    map.colorSpace=THREE.SRGBColorSpace;map.wrapS=map.wrapT=THREE.RepeatWrapping;
+    map.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());map.repeat.set(1.3,1.3);
+    return map;
+  }
   const stone=new THREE.MeshStandardMaterial({color:'#c9c7c4',map:stoneMap,bumpMap:stoneMap,bumpScale:.012,roughness:1});
   const wood=new THREE.MeshStandardMaterial({color:'#a89980',map:woodMap,roughness:.94});
   const ceilingMaterial=new THREE.MeshStandardMaterial({color:'#7c756b',map:woodMap,roughness:1});
@@ -106,9 +131,11 @@ if (renderer) {
   // they stay light enough for shadowed timber to read as wood, not black.
   const timber=new THREE.MeshStandardMaterial({color:'#a8876a',map:woodMap,roughness:.95});
   const stairStone=new THREE.MeshStandardMaterial({color:'#7f786e',roughness:.95});
+  // The stair's own stone, as dark as the walls' once its texture is multiplied in.
+  const stepStone=new THREE.MeshStandardMaterial({color:'#d6d1c8',map:dressedStone(),roughness:.9});
   const chairWood=new THREE.MeshStandardMaterial({color:'#8f6a4c',map:woodMap,roughness:.6});
   const velvet=new THREE.MeshStandardMaterial({color:'#23403a',roughness:.92});
-  const materials=[stone,wood,ceilingMaterial,trim,timber,stairStone,chairWood,velvet];
+  const materials=[stone,wood,ceilingMaterial,trim,timber,stairStone,chairWood,velvet,stepStone];
   const textured = materials.map(m=>({map:m.map,color:m.color.clone()}));
   // Pieces sharing a material are merged into one mesh, which keeps the
   // curved shell inside the room's draw-call budget. Stone courses use world
@@ -322,17 +349,65 @@ if (renderer) {
       return block(w.halfWidth*2+.1,.07,T+.12,x,w.sill-.035,z,-w.at-Math.PI/2);}),
   ]),trim);
 
-  // Dressed stone: the spiral stair's solid wedge steps (the lowest rest on the
-  // floor; higher ones are cantilevered slabs), a stepped skirting that ties
-  // each step into the curved wall, and a low plinth where the other walls
-  // meet the floor.
+  // The spiral stair, in its own dressed stone. Each step is a wedge from the
+  // stair's open inner edge into the wall, under a tread slab whose nosing
+  // overhangs the riser below and the open edge, so every step draws a fine
+  // shadow line. Beneath, the wedges share one smooth helical soffit, landing
+  // on the floor at the foot, instead of a sawtooth of separate slabs: the
+  // flight reads as a single carved spiral. A stepped skirting ties each step
+  // into the curved wall.
   const stepAt=i=>({from:stair.from-(i+1)*stair.step,to:stair.from-i*stair.step});
   const plinth=.14,proud=.035;
-  mesh('dressed stone',merge([
-    ...Array.from({length:stair.count},(_,i)=>arcWall({...tower,...stepAt(i),r:stair.inner,
-      t:tower.r+.05-stair.inner,y0:Math.max(0,tread(i)-stair.slab),y1:tread(i),bottom:true,steps:1})),
+  // Height of the line through every nosing at plan angle phi, and of the soffit.
+  const pitch=phi=>((stair.from-phi)/stair.step+1)*stair.rise;
+  const soffit=phi=>Math.max(0,pitch(phi)-stair.soffit);
+  function stepBody(i) {
+    const {from:a,to:b}=stepAt(i),top=tread(i)-stair.cap,wall=tower.r+.05,parts=2;
+    const at=(phi,rho,y)=>new THREE.Vector3(tower.x+rho*Math.cos(phi),y,tower.z+rho*Math.sin(phi));
+    const centre=at((a+b)/2,(stair.inner+wall)/2,(top+soffit((a+b)/2))/2);
+    // The soffit's own (helicoid) normal, so the underside shades as one surface.
+    const lean=stair.rise/stair.step;
+    const under=(phi,rho)=>soffit(phi)>0?new THREE.Vector3(lean*Math.sin(phi),-rho,-lean*Math.cos(phi)).normalize():new THREE.Vector3(0,-1,0);
+    const position=[],normal=[];
+    // A quad wound to face away from the step's centre; flat unless given normals.
+    const quad=(p,n)=>{
+      const face=new THREE.Vector3().subVectors(p[1],p[0]).cross(new THREE.Vector3().subVectors(p[2],p[0]));
+      if(face.dot(new THREE.Vector3().subVectors(p[0],centre))<0){p=[p[0],p[3],p[2],p[1]];n=n&&[n[0],n[3],n[2],n[1]];face.negate();}
+      face.normalize();
+      for(const k of [0,1,2,0,2,3]){const m=n?n[k]:face;position.push(p[k].x,p[k].y,p[k].z);normal.push(m.x,m.y,m.z);}
+    };
+    for(let k=0;k<parts;k++) {
+      const p=a+(b-a)*k/parts,q=a+(b-a)*(k+1)/parts;
+      quad([at(p,stair.inner,soffit(p)),at(q,stair.inner,soffit(q)),at(q,wall,soffit(q)),at(p,wall,soffit(p))],
+        [under(p,stair.inner),under(q,stair.inner),under(q,wall),under(p,wall)]);
+      quad([at(p,stair.inner,soffit(p)),at(q,stair.inner,soffit(q)),at(q,stair.inner,top),at(p,stair.inner,top)]);
+    }
+    for(const phi of [a,b]) quad([at(phi,stair.inner,soffit(phi)),at(phi,wall,soffit(phi)),at(phi,wall,top),at(phi,stair.inner,top)]);
+    const geometry=new THREE.BufferGeometry();
+    geometry.setAttribute('position',new THREE.Float32BufferAttribute(position,3));
+    geometry.setAttribute('normal',new THREE.Float32BufferAttribute(normal,3));
+    geometry.setAttribute('uv',new THREE.Float32BufferAttribute(new Float32Array(position.length/3*2),2));
+    return worldUV(geometry);
+  }
+  // The tread slab: over the whole wedge, reaching a little past its open edge
+  // and, at the nosing, a constant distance in front of the riser.
+  function stepCap(i) {
+    const {from:a,to:b}=stepAt(i),r0=stair.inner-.02,r1=tower.r+.05,d=stair.nosing;
+    const shape=new THREE.Shape().moveTo(r0*Math.cos(a),r0*Math.sin(a));
+    shape.absarc(0,0,r0,a,b,false);
+    for(const r of [r0,r1]) shape.lineTo(r*Math.cos(b)-d*Math.sin(b),r*Math.sin(b)+d*Math.cos(b));
+    shape.absarc(0,0,r1,b,a,true);shape.closePath();
+    return worldUV(new THREE.ExtrudeGeometry(shape,{depth:stair.cap,bevelEnabled:false,curveSegments:2})
+      .rotateX(Math.PI/2).translate(tower.x,tread(i),tower.z));
+  }
+  mesh('spiral stair',merge([
+    ...Array.from({length:stair.count},(_,i)=>stepBody(i)),
+    ...Array.from({length:stair.count},(_,i)=>stepCap(i)),
     ...Array.from({length:stair.count},(_,i)=>arcWall({...tower,...stepAt(i),r:tower.r-proud,
       t:proud+.02,y0:tread(i),y1:tread(i)+plinth,steps:1})),
+  ]),stepStone);
+  // Dressed stone: a low plinth where the other walls meet the floor.
+  mesh('dressed stone',merge([
     arcWall({...corner,r:corner.r-proud,t:proud+.02,from:Math.PI,to:1.5*Math.PI,y1:plinth,steps:12}),
     block(proud,plinth,nook.back-corner.z,room.left+proud/2,plinth/2,(corner.z+nook.back)/2),
     block(proud,plinth,room.front-nook.front,room.left+proud/2,plinth/2,(nook.front+room.front)/2),
@@ -365,18 +440,21 @@ if (renderer) {
     beamParts.push(block(tower.r+T/2,.12,.1,x,tower.height-.06,z,-a));
   }
   // Handrail along the stair's open inner edge, parallel to the nosing line,
-  // with a baluster on every step and a newel post at the foot.
+  // on a slender, slightly tapered baluster per step, from a newel post with
+  // a cap and ball finial at the foot.
   const railAt=(i,rho=stair.inner+.03)=>{const phi=stair.from-i*stair.step;
     return [tower.x+rho*Math.cos(phi),tread(i)+.86,tower.z+rho*Math.sin(phi)];};
   const helix=new THREE.Curve();
   helix.getPoint=(t,target=new THREE.Vector3())=>target.set(...railAt(t*stair.count));
-  beamParts.push(new THREE.TubeGeometry(helix,48,.022,4,false));
+  beamParts.push(new THREE.TubeGeometry(helix,56,.024,6,false));
   for(let i=0;i<stair.count;i++) {
     const [x,top,z]=railAt(i+.5),height=top-tread(i);
-    beamParts.push(block(.024,height,.024,x,tread(i)+height/2,z));
+    beamParts.push(new THREE.CylinderGeometry(.01,.013,height,6,1,true).translate(x,tread(i)+height/2,z));
   }
-  const [newelX,newelTop,newelZ]=railAt(0);
-  beamParts.push(block(.06,newelTop+.08,.06,newelX,(newelTop+.08)/2,newelZ));
+  const [newelX,newelTop,newelZ]=railAt(0),newel=newelTop+.05;
+  beamParts.push(block(.07,newel,.07,newelX,newel/2,newelZ,-stair.from),
+    block(.095,.03,.095,newelX,newel+.015,newelZ,-stair.from),
+    new THREE.SphereGeometry(.036,10,7).translate(newelX,newel+.06,newelZ));
   // Upper floor inside the tower, one riser above the last step. Its stairwell
   // keeps headroom over the flight and clears the tall lancets, so the stair
   // visibly arrives at another level instead of ending in the wall.
@@ -388,6 +466,12 @@ if (renderer) {
   upper.closePath();
   beamParts.push(new THREE.ExtrudeGeometry(upper,{depth:.12,bevelEnabled:false,curveSegments:24})
     .rotateX(Math.PI/2).translate(tower.x,tread(stair.count),tower.z));
+  // Trimmer beams square off both ends of the well under the floor's edge;
+  // the one where the stair arrives is also its last riser.
+  for(const [phi,side] of [[well.from,-1],[well.to,1]]) {
+    const mid=(well.inner+tower.r)/2,[x,z]=radialAt(phi+side*.035/mid,mid);
+    beamParts.push(block(tower.r-well.inner,.21,.07,x,tread(stair.count)-.105,z,-phi));
+  }
   // Wall plates along both long walls carry the cross beams' ends.
   beamParts.push(block(.14,.14,room.front-corner.z,room.left+.07,H-.07,(room.front+corner.z)/2),
     block(.14,.14,room.front-rightJoin,room.right-.07,H-.07,(room.front+rightJoin)/2));
@@ -502,23 +586,28 @@ if (renderer) {
   scene.add(tableKey,tableKey.target);
 
   // ---- Convergence lighting: two magical light systems meet in the room. A
-  // deep purple presence shines down from the upper floor through the
-  // stairwell; a green sky outside sends light in through some of the panes.
+  // green glow on the tower's upper floor spills down through the stairwell;
+  // a green sky outside sends light in through some of the panes.
   // Spot lights put the colour on surfaces; soft additive shafts and a little
   // suspended dust show it in the air, where the two cross inside the tower
   // and near its mouth. All in plan coordinates (the shell group).
-  const upperPurple='#8b4dff',skyGreen='#46dfa9';
+  const upperGreen='#52f08f',skyGreen='#46dfa9';
   // The window light is the green sky's: the alcove's shadow-casting spot
   // (its window-shaped patch falls behind the table, toward the tower) and
   // the soft fills by each window.
   moon.color.set(skyGreen);moon.intensity=24;moon.target.position.set(.35,0,-1.35);
   windowBounce.color.set('#6fd9b6');towerBounce.color.set('#6fd9b6');
-  // Purple from inside the stairwell opening, down over the upper flight to
-  // the tower floor by its mouth.
+  // The upper floor's light falling through the stairwell: over the upper
+  // flight, down the wall beneath it and softly onto the tower floor.
   const wellMid=(well.from+well.to)/2,[wellX,wellZ]=radialAt(wellMid,(well.inner+tower.r)/2),wellY=tread(stair.count);
-  const presence=new THREE.SpotLight(upperPurple,36,6.5,.62,.85,1.6);
-  presence.position.set(wellX,wellY-.05,wellZ);presence.target.position.set(1.55,0,-1.85);
+  const presence=new THREE.SpotLight(upperGreen,7,6,.55,1,2);presence.name='stairwell light';
+  presence.position.set(wellX,wellY+.3,wellZ);presence.target.position.set(1.9,.2,-2.2);
   shell.add(presence,presence.target);
+  // Its source, up in the tower room just above the well, stays out of view.
+  // The seated eye sees it as the wall at the top of the stair: brightest just
+  // under the landing, fading down the flight.
+  const upstairs=new THREE.PointLight(upperGreen,13,2.2,2),[upX,upZ]=radialAt(-118*Math.PI/180,.85);
+  upstairs.name='upper floor glow';upstairs.position.set(upX,wellY+.13,upZ);shell.add(upstairs);
   // Shafts of light, from their source to where they fade out: open cones,
   // brightest along their axis as seen from any angle, fading at both ends.
   const inward=(w,down,length)=>{
@@ -529,12 +618,15 @@ if (renderer) {
     const d=new THREE.Vector3(.95,-.62,1).normalize(),z=alcove.back+.02;
     return {from:[x,y,z],to:[x+d.x*length,y+d.y*length,z+d.z*length]};
   };
+  // The upstairs shafts start in the tower room, above the well, so from the
+  // room they emerge from behind the ring beam, brightest at the top. They fall
+  // past the lower flight, the only part of the stair seen from above the
+  // treads; over the upper flight's soffit they would read as pale columns.
+  const fall=(degrees,rho,above,to)=>{const [x,z]=radialAt(degrees*Math.PI/180,rho);return {from:[x,wellY+above,z],to};};
   const beams=[
-    {from:[wellX,wellY,wellZ],to:[1.55,.03,-1.85],r0:.24,r1:.62,color:upperPurple,strength:.46,motes:70},
-    {...(()=>{const [x,z]=radialAt(-62*Math.PI/180,1.02);return {from:[x,wellY,z],to:[2.05,.03,-1.55]};})(),
-      r0:.1,r1:.26,color:upperPurple,strength:.26,motes:22},
-    {...(()=>{const [x,z]=radialAt(-128*Math.PI/180,.95);return {from:[x,wellY,z],to:[1.15,.4,-2.05]};})(),
-      r0:.08,r1:.2,color:upperPurple,strength:.2,motes:14},
+    {...fall(-74,.95,.6,[2.2,.03,-1.65]),r0:.12,r1:.36,color:upperGreen,strength:.16,motes:70},
+    {...fall(-50,1.05,.5,[2.5,.15,-1.45]),r0:.06,r1:.18,color:upperGreen,strength:.1,motes:22},
+    {...fall(-44,1.15,.5,[2.7,.3,-1.95]),r0:.05,r1:.13,color:upperGreen,strength:.08,motes:14},
     {...inward(lancets[1],.55,2.5),r0:.1,r1:.3,color:skyGreen,strength:.26,motes:30},
     {...inward(lancets[0],.62,2.3),r0:.08,r1:.24,color:skyGreen,strength:.17,motes:18},
     {...slant(aperture.x-.17,1.72,3.0),r0:.1,r1:.32,color:skyGreen,strength:.22,motes:30},

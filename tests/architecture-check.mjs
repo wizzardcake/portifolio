@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three/three.module.js';
 import {createRoomArchitecture,architectureTuning} from '../room-architecture.js';
 
-const stair={from:-12*Math.PI/180,step:10*Math.PI/180,rise:.19,inner:.62,count:14};
+const stair={from:-12*Math.PI/180,step:10*Math.PI/180,rise:.19,inner:.70,count:14};
 const tower={x:2.05,z:-2,r:1.35};
 const alcove={x:-1,halfWidth:.65,sill:0,shoulder:1.65,peak:2.25,back:-3.2};
 const aperture={x:-1,halfWidth:.42,sill:.5,shoulder:1.45,peak:2};

@@ -26,6 +26,30 @@ camera, table, portal, orb, cloth, card code and interactions are unchanged.
 The new geometry consumes no random numbers; the shaft particle count and RNG
 consumption are preserved, so the procedural cloth texture is unchanged too.
 
+## Stair polish (`feature/stair-window-arch-polish`)
+
+The flight's route, 14 treads, rise and step angle stay as above: the tower
+lancets' sills are derived from them and the flight must end at the mouth's
+left jamb. What read as an odd bow was the underside: it hung a constant 30 cm
+below the nosing line, so it was thinnest square to the slope along the steep
+inner edge and thickest at the gentle wall side, and from the room it showed
+as one heavy, twisted, black sail with no sign of steps.
+
+- `stair.soffit` is now a slab thickness (.15 m) measured square to the
+  flight at every radius, so the underside runs parallel to the steps: about
+  .28 m below the nosings along the inner edge and .19 m at the wall.
+- `stair.joint` (.018 m) tucks each stone's underside up at its front edge;
+  the joints draw a fine stepped line along the sweep, so the underside reads
+  as stones winding upward rather than one warped surface.
+- `stair.inner` is .70 m (was .62): a slightly wider open core, so the inner
+  edge and Astra's fascia read as one smoothly curving stringer instead of a
+  straight diagonal, and the green shafts fall clear down the middle.
+- A `stairwell floor bounce` spot (jade, intensity 5, upward only) gives
+  back a little of the green that lands on the tower floor, shading the
+  underside as a curved surface. It keeps the floor and newel out of its cone.
+
+Room total: 9,961 triangles (limit 10,000), 18 draw calls, no new shadow map.
+
 ## Files
 
 - `room-architecture.js`: isolated geometry generator and tuning defaults.

@@ -32,10 +32,11 @@ const nook = {back:-1.3, front:.8, depth:.45, shoulder:1.7, rise:.42, desk:.74, 
 // Spiral stair along the tower wall. Step i spans plan angles
 // from - (i+1)*step .. from - i*step, so it starts on the right of the tower
 // (as seen from the table) and climbs leftward across its back wall.
-// soffit: depth of its smooth underside below the line through the nosings;
-// cap/nosing: each nosing's thickness and how far it overhangs the riser.
-const stair = {from:-12 * Math.PI / 180, step:10 * Math.PI / 180, rise:.19, inner:.62, count:14,
-  soffit:.3, cap:.045, nosing:.028};
+// soffit: thickness of the flight under the line through the nosings, square
+// to its slope; joint: how far each stone's underside is tucked up at the
+// next one; cap/nosing: each nosing's thickness and how far it overhangs the riser.
+const stair = {from:-12 * Math.PI / 180, step:10 * Math.PI / 180, rise:.19, inner:.70, count:14,
+  soffit:.15, joint:.018, cap:.045, nosing:.028};
 const tread = i => (i + 1) * stair.rise;
 // Tall, narrow lancets stepped up with the stair: each sill clears the highest
 // tread beneath its opening. They sit where the stair is still low, so its
@@ -355,16 +356,29 @@ if (renderer) {
   const plinth=.14,proud=.035;
   // Height of the line through every nosing at plan angle phi, and of the soffit.
   const pitch=phi=>((stair.from-phi)/stair.step+1)*stair.rise;
-  const soffit=phi=>Math.max(0,pitch(phi)-stair.soffit);
+  // The underside keeps one slab thickness measured square to the flight, so
+  // it runs parallel to the steps at every radius: deeper in height along the
+  // steep inner edge, shallower where the flight is gentle against the wall.
+  // A constant vertical depth made it thickest at the wall, where it read as a
+  // heavy, twisted sail from the room.
+  const flightLean=stair.rise/stair.step,wallRadius=tower.r+.05;
+  const depth=rho=>stair.soffit*Math.hypot(1,flightLean/rho);
+  const soffit=(phi,rho)=>Math.max(0,pitch(phi)-depth(rho));
+  // Across the flight the underside rises toward the wall by this much per metre.
+  const across=(depth(stair.inner)-depth(wallRadius))/(wallRadius-stair.inner);
   function step(i) {
-    const {from:a,to:b}=stepAt(i),top=tread(i),lip=top-stair.cap,wall=tower.r+.05;
+    const {from:a,to:b}=stepAt(i),top=tread(i),lip=top-stair.cap,wall=wallRadius;
     const at=(phi,rho,y)=>new THREE.Vector3(tower.x+rho*Math.cos(phi),y,tower.z+rho*Math.sin(phi));
     // Toward the step below; the nosing stands a constant distance out that way.
     const front=new THREE.Vector3(-Math.sin(b),0,Math.cos(b)),nose=v=>v.addScaledVector(front,stair.nosing);
     const up=new THREE.Vector3(0,1,0),down=new THREE.Vector3(0,-1,0);
     // The soffit's own (helicoid) normal, so the underside shades as one surface.
-    const lean=stair.rise/stair.step;
-    const under=(phi,rho)=>soffit(phi)>0?new THREE.Vector3(lean*Math.sin(phi),-rho,-lean*Math.cos(phi)).normalize():down;
+    const under=(phi,rho)=>soffit(phi,rho)>0?new THREE.Vector3(flightLean*Math.sin(phi)+rho*across*Math.cos(phi),-rho,
+      rho*across*Math.sin(phi)-flightLean*Math.cos(phi)).normalize():down;
+    // Each stone's underside is tucked up a little at its front edge, so the
+    // joints between steps draw a fine stepped line along the sweep: the
+    // underside reads as separate stones winding up, not one warped surface.
+    const tuck=(phi,rho)=>soffit(phi,rho)>0?stair.joint:0;
     const position=[],normal=[];
     // A quad wound to face `out`; flat-shaded unless given normals.
     const quad=(p,out,n)=>{
@@ -374,12 +388,15 @@ if (renderer) {
       for(const k of [0,1,2,0,2,3]){const m=n?n[k]:face;position.push(p[k].x,p[k].y,p[k].z);normal.push(m.x,m.y,m.z);}
     };
     // The profile, from the back of the soffit round to the back of the tread.
-    const profile=rho=>[at(a,rho,soffit(a)),at(b,rho,soffit(b)),at(b,rho,lip),nose(at(b,rho,lip)),nose(at(b,rho,top)),at(a,rho,top)];
+    const profile=rho=>[at(a,rho,soffit(a,rho)),at(b,rho,soffit(b,rho)+tuck(b,rho)),at(b,rho,lip),nose(at(b,rho,lip)),nose(at(b,rho,top)),at(a,rho,top)];
     const [i0,i1,i2,i3,i4,i5]=profile(stair.inner),[w0,w1,w2,w3,w4,w5]=profile(wall);
     quad([i0,i1,w1,w0],down,[under(a,stair.inner),under(b,stair.inner),under(b,wall),under(a,wall)]);
     quad([i1,i2,w2,w1],front);quad([i2,i3,w3,w2],down);quad([i3,i4,w4,w3],front);quad([i4,i5,w5,w4],up);
-    // The top step's back meets the landing; every other one hides under the next step.
-    if(i===stair.count-1) quad([i5,i0,w0,w5],new THREE.Vector3(Math.sin(a),0,-Math.cos(a)));
+    // The top step's back meets the landing; every other one hides under the
+    // next step except for the thin strip its tucked joint leaves showing.
+    const back=new THREE.Vector3(Math.sin(a),0,-Math.cos(a));
+    if(i===stair.count-1) quad([i5,i0,w0,w5],back);
+    else if(tuck(a,stair.inner)>0) quad([i0,at(a,stair.inner,i0.y+tuck(a,stair.inner)),at(a,wall,w0.y+tuck(a,wall)),w0],back);
     // The open edge: the step's face and its nosing lip. The wall end stays buried.
     const edge=new THREE.Vector3(-Math.cos((a+b)/2),0,-Math.sin((a+b)/2)),corner=at(b,stair.inner,top);
     quad([i0,i1,corner,i5],edge);quad([i2,i3,i4,corner],edge);
@@ -660,6 +677,14 @@ if (renderer) {
   // under the landing, fading down the flight.
   const upstairs=new THREE.PointLight(upperGreen,architectureTuning.upperBounce,architectureTuning.upperReach,2),[upX,upZ]=radialAt(-118*Math.PI/180,.85);
   upstairs.name='upper floor glow';upstairs.position.set(upX,wellY+.23,upZ);shell.add(upstairs);
+  // Where the green lands on the tower floor it gives a little back: a faint
+  // fill from the floor that only shines upward, onto the middle of the
+  // flight's underside, so the sweep shades as one curved surface instead of
+  // a flat black silhouette. The floor and the newel stay out of its cone.
+  const [underX,underZ]=radialAt(-100*Math.PI/180,1);
+  const floorBounce=new THREE.SpotLight(upperGreen,5,3.4,.85,1,2);floorBounce.name='stairwell floor bounce';
+  floorBounce.position.set(2.18,.04,-1.96);floorBounce.target.position.set(underX,1.9,underZ);
+  shell.add(floorBounce,floorBounce.target);
   // Shafts of light, from their source to where they fade out: open cones,
   // brightest along their axis as seen from any angle, fading at both ends.
   const inward=(w,down,length)=>{

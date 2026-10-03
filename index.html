@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="portal-reaction.css">
 <link rel="stylesheet" href="portal-depth.css">
 <link rel="stylesheet" href="portal-table.css">
+<link rel="stylesheet" href="tools-page.css">
 </head>
 <body class="intro-active table-covered">
 
@@ -229,44 +230,102 @@
     </section>
 
     <!-- APP: VERKTØY -->
-    <section class="app-view" id="app-verktoy" data-app-view>
-      <header class="app-header">
+    <section class="app-view tools-view" id="app-verktoy" data-app-view aria-labelledby="tools-title">
+      <header class="app-header tools-header">
         <button class="back-btn" data-close type="button">← Tilbake</button>
-        <h2>Verktøy</h2>
+        <div class="tools-heading">
+          <p class="tools-eyebrow">DIGITALT VERKSTED</p>
+          <h2 id="tools-title">Verktøy</h2>
+          <p class="tools-subtitle">Fra første idé til ferdig uttrykk. Verktøyene jeg skaper med.</p>
+        </div>
       </header>
-      <div class="app-content">
-        <div class="tool-group">
-          <h3>Design</h3>
-          <div class="tool-grid">
-            <span class="tool-item">Adobe Creative Cloud (Illustrator, Photoshop, InDesign, After Effects)</span>
-            <span class="tool-item">Figma</span>
-            <span class="tool-item">Canva</span>
-          </div>
-        </div>
-        <div class="tool-group">
-          <h3>SEO &amp; analyse</h3>
-          <div class="tool-grid">
-            <span class="tool-item">RankMath / SEO</span>
-            <span class="tool-item">Google Analytics</span>
-            <span class="tool-item">Google Search Console</span>
-          </div>
-        </div>
-        <div class="tool-group">
-          <h3>Web &amp; utvikling</h3>
-          <div class="tool-grid">
-            <span class="tool-item">WordPress</span>
-            <span class="tool-item">VS Code</span>
-          </div>
-        </div>
-        <div class="tool-group">
-          <h3>AI &amp; produktivitet</h3>
-          <div class="tool-grid">
-            <span class="tool-item">Klang.ai</span>
-            <span class="tool-item">Claude &amp; ChatGPT</span>
-            <span class="tool-item">Obsidian</span>
-          </div>
-        </div>
+      <div class="app-content tools-content">
+        <section class="tool-group" aria-labelledby="tools-design-title">
+          <h3 id="tools-design-title">Design</h3>
+          <p class="tool-group-description">Form, farge og visuelle fortellinger</p>
+          <ul class="tool-grid" role="list">
+            <li class="tool-item">
+              <span class="tool-logo tool-logo--adobe" aria-hidden="true">Ai</span>
+              <span class="tool-name">Illustrator</span>
+            </li>
+            <li class="tool-item">
+              <span class="tool-logo tool-logo--adobe tool-logo--ps" aria-hidden="true">Ps</span>
+              <span class="tool-name">Photoshop</span>
+            </li>
+            <li class="tool-item">
+              <span class="tool-logo tool-logo--adobe tool-logo--id" aria-hidden="true">Id</span>
+              <span class="tool-name">InDesign</span>
+            </li>
+            <li class="tool-item">
+              <span class="tool-logo tool-logo--adobe tool-logo--ae" aria-hidden="true">Ae</span>
+              <span class="tool-name">After Effects</span>
+            </li>
+            <li class="tool-item" data-tool-seed="figma">
+              <span class="tool-logo"><img src="assets/tools/figma.svg" width="40" height="40" alt="" decoding="async"></span>
+              <span class="tool-name">Figma</span>
+            </li>
+            <li class="tool-item">
+              <span class="tool-logo"><img src="assets/tools/canva.svg" width="40" height="40" alt="" decoding="async"></span>
+              <span class="tool-name">Canva</span>
+            </li>
+          </ul>
+        </section>
+        <section class="tool-group" aria-labelledby="tools-seo-title">
+          <h3 id="tools-seo-title">SEO &amp; Analyse</h3>
+          <p class="tool-group-description">Synlighet, innsikt og bedre beslutninger</p>
+          <ul class="tool-grid" role="list">
+            <li class="tool-item">
+              <span class="tool-logo"><img src="assets/tools/rankmath.svg" width="40" height="40" alt="" decoding="async"></span>
+              <span class="tool-name">Rank Math</span>
+            </li>
+            <li class="tool-item" data-tool-seed="analytics">
+              <span class="tool-logo"><img src="assets/tools/googleanalytics.svg" width="40" height="40" alt="" decoding="async"></span>
+              <span class="tool-name">Google Analytics</span>
+            </li>
+            <li class="tool-item">
+              <span class="tool-logo"><img src="assets/tools/googlesearchconsole.svg" width="40" height="40" alt="" decoding="async"></span>
+              <span class="tool-name">Google Search Console</span>
+            </li>
+          </ul>
+        </section>
+        <section class="tool-group" aria-labelledby="tools-web-title">
+          <h3 id="tools-web-title">Web &amp; Utvikling</h3>
+          <p class="tool-group-description">Fra struktur til levende nettsider</p>
+          <ul class="tool-grid" role="list">
+            <li class="tool-item">
+              <span class="tool-logo"><img src="assets/tools/wordpress.svg" width="40" height="40" alt="" decoding="async"></span>
+              <span class="tool-name">WordPress</span>
+            </li>
+            <li class="tool-item" data-tool-seed="vscode">
+              <span class="tool-logo"><img src="assets/tools/visualstudiocode.svg" width="40" height="40" alt="" decoding="async"></span>
+              <span class="tool-name">Visual Studio Code</span>
+            </li>
+          </ul>
+        </section>
+        <section class="tool-group" aria-labelledby="tools-ai-title">
+          <h3 id="tools-ai-title">AI &amp; Produktivitet</h3>
+          <p class="tool-group-description">Idéer, utforsking og flyt i hverdagen</p>
+          <ul class="tool-grid" role="list">
+            <li class="tool-item">
+              <span class="tool-logo tool-logo--wordmark" aria-hidden="true">klang<span>.ai</span></span>
+              <span class="tool-name">Klang.ai</span>
+            </li>
+            <li class="tool-item">
+              <span class="tool-logo"><img src="assets/tools/claude.svg" width="40" height="40" alt="" decoding="async"></span>
+              <span class="tool-name">Claude</span>
+            </li>
+            <li class="tool-item" data-tool-seed="chatgpt">
+              <span class="tool-logo"><img src="assets/tools/openai.svg" width="40" height="40" alt="" decoding="async"></span>
+              <span class="tool-name">ChatGPT</span>
+            </li>
+            <li class="tool-item">
+              <span class="tool-logo"><img src="assets/tools/obsidian.svg" width="40" height="40" alt="" decoding="async"></span>
+              <span class="tool-name">Obsidian</span>
+            </li>
+          </ul>
+        </section>
       </div>
+      <p class="tools-footer">Ulike verktøy. Samme nysgjerrighet.</p>
     </section>
 
       </div><!-- /.portal-page -->
@@ -351,6 +410,7 @@ window.addEventListener('error', (e) => {
 <script src="portal-impact.js"></script>
 <script src="portal-reaction.js"></script>
 <script src="script.js"></script>
+<script src="tools-page.js"></script>
 <script type="module" src="room-scene.js"></script>
 <script type="module" src="portal-aura.js"></script>
 <script>

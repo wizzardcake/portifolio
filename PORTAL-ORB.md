@@ -154,6 +154,27 @@ await portalMatter.project('prosjekter', {
 This optional target changes the destination only; it does not replace the card's
 activation/retrieval lifecycle or change the camera.
 
+### Page presentations
+
+A page can give its opening its own character without owning the flight. It
+registers a presentation, and `project()` uses it whenever that page opens:
+
+```js
+portalMatter.registerPresentation('verktoy', {
+  target: base => ({...base, width: base.width * 1.06}), // optional destination
+  begin() {},            // the page starts forming
+  sample(frame) {},      // every orb frame while it forms and while it is open
+  end() {},              // restored, reset or replaced by another page
+});
+```
+
+`sample` receives `{progress, pose, target, reducedMotion, settled}`: the
+transition's progress (0..1), the orb's drawn pose and the page's target on the
+same frame. It may return the orb material's opacity (0..1), so the page can
+take over from the glass before it has become a rectangle; returning nothing
+keeps the ordinary glass handover. Pass `null` as the descriptor to remove one.
+Verktøy is the only page with a presentation (`tools-page.js`, `TOOLS-PAGE.md`).
+
 The rings, flare, sparks and suction are set in `portal-reaction.js`
 (`portalReaction.configure`, `PORTAL-REACTION.md`). A plain dip's distance and speed
 are set there too.
@@ -189,7 +210,11 @@ agree.
 ## Runtime
 
 - It uses the same single WebGL context and pixel cap as before: at most 640 px a side,
-  at most 1.5 × DPR.
+  at most 1.5 × DPR. Its canvas's backing store grows in 32 px steps rather than
+  every frame of a morph, and not at all while a page presentation fades the glass
+  out: each resize makes the browser wait for the GPU, which stalled frames badly
+  while a page was being drawn around it. The shape is unaffected (it follows the
+  element's own aspect).
 - It runs at about 30 fps at rest, and at full rate during transitions and drops.
   While the dived drop is out of sight it draws nothing, only clearing its canvas.
 - The shader adds a 10-step march through the interior. Actual frame pacing depends

@@ -81,7 +81,9 @@ export function createRoomArchitecture(THREE,{aperture,alcove,tower,lancets,stai
   lancets.forEach(w=>frame(w,radial(w),.65));
   // Forked tracery in the large opening, with a small pointed eye. It lives
   // behind the front moulding, leaving most of the sky/moon unobstructed.
-  const join=aperture.shoulder-.19,eyeY=aperture.peak-.22;
+  // The fork springs just under the shoulders, leaving each light below it a
+  // clear frame: the moon in the left one, the far castle in the right.
+  const join=aperture.shoulder-.06,eyeY=aperture.peak-.22;
   const spring=.36,branchX=aperture.halfWidth*(1-spring*spring);
   const branchY=aperture.shoulder*(1-spring)**2+2*(aperture.shoulder+.6*(aperture.peak-aperture.shoulder))*spring*(1-spring)+aperture.peak*spring*spring;
   metal.push(rod([back(0,aperture.sill,-.105),back(0,join,-.105)],.016,1));
@@ -100,7 +102,7 @@ export function createRoomArchitecture(THREE,{aperture,alcove,tower,lancets,stai
   // existing helical nosing line, never changing a tread or the flight path.
   const railAt=i=>at(stair.from-i*stair.step,stair.inner+.03,tread(i)+tuning.railHeight);
   const helix=new THREE.Curve();helix.getPoint=(t,target=new THREE.Vector3())=>target.copy(railAt(t*stair.count));
-  const handrail=new THREE.TubeGeometry(helix,32,tuning.railRadius,6,false);
+  const handrail=new THREE.TubeGeometry(helix,28,tuning.railRadius,5,false);
   const fascia=[];
   for(let j=0;j<stair.count*2;j++) {
     const a=j/2,b=(j+1)/2;
@@ -116,7 +118,7 @@ export function createRoomArchitecture(THREE,{aperture,alcove,tower,lancets,stai
   // bronze tracery shares its pointed-eye language with the window details.
   for(let i=0;i<=stair.count;i+=2) {
     const p=railAt(i),base=i===0?0:tread(i-1),height=p.y-base;
-    metal.push(new THREE.CylinderGeometry(.012,.018,height,6).translate(p.x,base+height/2,p.z));
+    metal.push(new THREE.CylinderGeometry(.012,.018,height,6,1,true).translate(p.x,base+height/2,p.z));
     stone.push(box(.068,.05,.068,p.x,base+.035,p.z));
     if(i<stair.count) {
       const points=Array.from({length:9},(_,j)=>{

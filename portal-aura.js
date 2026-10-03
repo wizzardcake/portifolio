@@ -6,8 +6,10 @@ const screen = document.getElementById('screen');
 const view = window.sceneCamera;
 const room = window.studyRoom;
 const motion = matchMedia('(prefers-reduced-motion: reduce)');
+// light: the spill on the room is kept under the moonlight and the green from
+// upstairs, so the open portal leads without tinting the whole room.
 export const AURA_DEFAULTS = Object.freeze({
-  intensity: 1, rim: .62, haze: .30, particles: .65, light: 1,
+  intensity: 1, rim: .62, haze: .30, particles: .65, light: .65,
   pulseAmount: .075, pulseSeconds: 14, moteCount: 28, refraction: 1.4
 });
 const settings = {...AURA_DEFAULTS};
@@ -72,10 +74,12 @@ const motes=Array.from({length:32},(_,i)=>{
 
 // Existing reveal/impact lights remain under room-scene.js's control. Extra
 // spill starts at the opening, falls off locally, and uses room layer 0 only
-// (never the cloth/chair overlay's layer 1). No extra shadow maps.
+// (never the cloth/chair overlay's layer 1). No extra shadow maps. Its reach
+// ends short of the walls nearest the viewer, so the spill gathers round the
+// table instead of washing the room's sides in jade and violet.
 const lights = room ? [
-  new THREE.PointLight('#45d9b3',0,4.0,2),
-  new THREE.PointLight('#9560d8',0,3.8,2)
+  new THREE.PointLight('#45d9b3',0,2.7,2),
+  new THREE.PointLight('#9560d8',0,2.6,2)
 ] : [];
 lights.forEach((light,i)=>{light.name='portal aura '+(i?'violet':'jade');room.scene.add(light);});
 let width=1,height=1,units=1,elapsed=0,fade=0,pulse=1;

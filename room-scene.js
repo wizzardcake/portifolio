@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three/three.module.js';
 import {createRitualTable} from './table-model.js';
 import {createRitualCloth} from './ritual-cloth.js';
+import {createNightSky} from './night-sky.js';
 
 // Architecture and physical furniture. Portal, orb and HTML reader stay in their
 // own renderers; scene-camera.js gives both branches the same projection.
@@ -50,10 +51,13 @@ scene.background = new THREE.Color('#16181d');
 // the table itself (portal mask, contact shadow, under-table glow) stay in scene.
 const shell = new THREE.Group();
 shell.name = 'room shell'; shell.position.z = -placement.forward; scene.add(shell);
-const camera = new THREE.PerspectiveCamera(view.fov,innerWidth/innerHeight,.035,24);
+// Far enough for the night outside the windows (night-sky.js reaches 34 m).
+const camera = new THREE.PerspectiveCamera(view.fov,innerWidth/innerHeight,.035,60);
 let renderer;
 try {
-  const options={antialias:true,alpha:false,powerPreference:'low-power'};
+  // The drawing buffer is kept between frames: the night outside redraws
+  // only the window, over the rest of the last full frame.
+  const options={antialias:true,alpha:false,powerPreference:'low-power',preserveDrawingBuffer:true};
   const context=canvas.getContext('webgl2',options)||canvas.getContext('webgl',options);
   if(!context)throw new Error('WebGL unavailable');
   renderer = new THREE.WebGLRenderer({canvas,context,...options});
@@ -477,199 +481,13 @@ if (renderer) {
     new THREE.CircleGeometry(tower.r+T,48).rotateX(Math.PI/2).translate(tower.x,tower.height,tower.z),
   ]),ceilingMaterial,false);
 
-  // ---- The view out of the windows: a moonlit purple night over a misty
-  // valley, painted on a wide arc of a cylinder well outside the back wall and
-  // the tower, so each window shows its own part of it, with real depth as the
-  // camera moves. The walls hide it everywhere else. It is static: the room
-  // only redraws on change. Heights are metres in the room; the horizon sits a
-  // little below the seated eye, as seen from high up in a tower. From the
-  // chair the alcove window spans about 186-197 degrees and -.4 to 3 m; the
-  // tower's lancets look out higher, at about 130-160 degrees.
-  // Tunable, live with studyRoom.sky.configure({...}), which repaints it:
-  //   horizon     height of the horizon on it (lower: more sky in the windows)
-  //   brightness  multiplies the whole painted sky
-  //   moon        [degrees around the room, metres high, disc radius in degrees]
-  //   glow        the moon's bloom, corona and halo ring (0-2)
-  //   nebula      the band of stars and coloured dust above the tower (0-2)
-  //   mist        the haze along the horizon and in the valleys (0-2)
-  // radius (metres from the room's centre) and the arc it covers are fixed.
-  const sky={radius:12,horizon:.3,brightness:1,moon:[194,2.15,1.3],glow:1,nebula:1,mist:1,
-    from:80,to:230,bottom:-6,top:10};
-  function purpleSky() {
-    const W=2048,Hc=1024,image=document.createElement('canvas');image.width=W;image.height=Hc;
-    const g=image.getContext('2d');
-    // Its own seeded random, so the room's other textures stay as they were.
-    let seed=4217;const rnd=()=>(seed=seed*16807%2147483647)/2147483647;
-    // Canvas x runs left to right as seen from inside; y from a height in
-    // metres. A metre of sky is about 64 px either way.
-    const yAt=h=>(sky.top-h)/(sky.top-sky.bottom)*Hc,xAt=degrees=>(sky.to-degrees)/(sky.to-sky.from)*W;
-    const perDegree=W/(sky.to-sky.from),horizon=yAt(sky.horizon),G=sky.glow,N=sky.nebula,M=sky.mist;
-    const soft=(x,y,rx,ry,stops)=>{
-      g.save();g.translate(x,y);g.scale(rx,ry);
-      const glow=g.createRadialGradient(0,0,0,0,0,1);
-      stops.forEach(([at,color])=>glow.addColorStop(at,color));
-      g.fillStyle=glow;g.fillRect(-1,-1,2,2);g.restore();
-    };
-    const moon={x:xAt(sky.moon[0]),y:yAt(sky.moon[1]),r:sky.moon[2]*perDegree};
-    // Distance from the moon in its own radii: its light washes out what is near.
-    const fromMoon=(x,y)=>Math.hypot(x-moon.x,y-moon.y)/moon.r;
-
-    // Night air: deep indigo overhead, violet lower down, a lilac glow along
-    // the horizon; around the moon the air is paler and bluer.
-    const air=g.createLinearGradient(0,0,0,horizon);
-    air.addColorStop(0,'#060316');air.addColorStop(.4,'#100929');air.addColorStop(.64,'#1f1146');
-    air.addColorStop(.8,'#341c66');air.addColorStop(.92,'#553690');air.addColorStop(1,'#8a65c0');
-    g.fillStyle=air;g.fillRect(0,0,W,horizon+2);
-    soft(moon.x,moon.y,moon.r*32,moon.r*24,[[0,`rgba(186,176,255,${.22*G})`],[.35,`rgba(150,132,236,${.1*G})`],[1,'rgba(120,100,210,0)']]);
-
-    // A band of faint stars and coloured dust arcing up over the tower, where
-    // the moon does not wash it out: violet, rose and a little teal, split by
-    // darker lanes.
-    const band=t=>({x:xAt(176-78*t),y:yAt(6.5-6.2*t)});
-    const hues=['150,110,255','214,120,210','90,200,214'];
-    for(let i=0;i<150;i++) {
-      const t=rnd(),{x,y}=band(t),s=rnd()-.5,wash=Math.min(1,fromMoon(x,y)/30);
-      const hue=hues[i%3],a=(.035+rnd()*.05)*N*wash;
-      soft(x,y+s*Math.abs(s)*240,40+rnd()*90,26+rnd()*50,[[0,`rgba(${hue},${a})`],[1,`rgba(${hue},0)`]]);
-    }
-    for(let i=0;i<40;i++) {
-      const {x,y}=band(rnd());
-      soft(x+(rnd()-.5)*60,y+(rnd()-.5)*30,50+rnd()*70,6+rnd()*10,[[0,`rgba(6,3,18,${.18*N})`],[1,'rgba(6,3,18,0)']]);
-    }
-    const star=(x,y,size,alpha)=>{g.fillStyle=`rgba(${232+rnd()*23|0},${226+rnd()*24|0},255,${alpha})`;g.fillRect(x-size/2,y-size/2,size,size);};
-    for(let i=0;i<900;i++) {
-      const {x,y}=band(rnd()),s=(rnd()+rnd()+rnd()-1.5)*90;
-      if(y+s<horizon*.92) star(x+(rnd()-.5)*30,y+s,.6+rnd()*.9,(.2+rnd()*.5)*N*Math.min(1,fromMoon(x,y)/30));
-    }
-    // Stars everywhere else, thinning toward the horizon and fading near the
-    // moon; a few brighter ones keep a soft glow, the brightest a fine glint.
-    for(let i=0;i<1500;i++) {
-      const x=rnd()*W,y=rnd()*horizon*.95,fade=(1-y/horizon)**.7*Math.min(1,fromMoon(x,y)/14);
-      star(x,y,.6+rnd()*1.2*fade,(.15+rnd()*.6)*fade);
-    }
-    const bright=(x,y,glint)=>{
-      const f=Math.min(1,fromMoon(x,y)/10)*(1-y/horizon*.5);if(f<.2) return;
-      soft(x,y,6,6,[[0,`rgba(225,220,255,${.5*f})`],[1,'rgba(225,220,255,0)']]);star(x,y,1.8,.95*f);
-      if(glint) for(const [w,h] of [[24,1.1],[1.1,24]]) soft(x,y,w,h,[[0,`rgba(236,232,255,${.55*f})`],[1,'rgba(236,232,255,0)']]);
-    };
-    for(let i=0;i<36;i++) bright(rnd()*W,rnd()*horizon*.85,i%6===0);
-    // Two for the alcove window, right of the mullion and clear of the moon.
-    bright(xAt(188.3),yAt(2.5),true);bright(xAt(190.2),yAt(2.95),false);
-
-    // High, thin cirrus drawn out across the sky, lit lavender by the moon.
-    for(let i=0;i<16;i++) {
-      const x=rnd()*W,y=yAt(2.4+rnd()*4),length=120+rnd()*260,lit=Math.max(0,1-fromMoon(x,y)/45);
-      g.save();g.translate(x,y);g.rotate((rnd()-.5)*.25);
-      soft(0,0,length,3+rnd()*5,[[0,`rgba(${170+70*lit|0},${150+70*lit|0},255,${.05+.12*lit})`],[1,'rgba(170,150,255,0)']]);
-      g.restore();
-    }
-    // The horizon's glow, brightest under the moon.
-    const low=g.createLinearGradient(0,yAt(1.3),0,horizon);
-    low.addColorStop(0,'rgba(180,140,235,0)');low.addColorStop(.7,`rgba(196,160,240,${.2*M})`);low.addColorStop(1,`rgba(214,186,250,${.28*M})`);
-    g.fillStyle=low;g.fillRect(0,yAt(1.3),W,horizon-yAt(1.3)+1);
-    soft(moon.x,horizon,moon.r*22,moon.r*4,[[0,`rgba(225,205,255,${.3*M*G})`],[1,'rgba(225,205,255,0)']]);
-    // Low cloud banks: dark violet bodies whose upper edges catch the
-    // moonlight, silver near the moon. Kept off the moon's face.
-    for(let i=0;i<30;i++) {
-      const cx=rnd()*W,cy=yAt(sky.horizon+.5+rnd()*rnd()*3),spread=80+rnd()*220,puffs=5+rnd()*6|0;
-      if(fromMoon(cx,cy)<5) continue;
-      for(let p=0;p<puffs;p++) {
-        const x=cx+(rnd()-.5)*spread*2,y=cy+(rnd()-.5)*14,rx=40+rnd()*90,ry=rx*(.22+rnd()*.16);
-        if(fromMoon(x,y)<3.2) continue;
-        const lit=Math.max(0,1-fromMoon(x,y)/26);
-        soft(x,y,rx,ry,[[0,`rgba(24,12,48,${.42+rnd()*.22})`],[.7,'rgba(26,14,52,.18)'],[1,'rgba(26,14,52,0)']]);
-        soft(x+rx*.05,y-ry*.55,rx*.75,ry*.42,[[0,`rgba(${160+lit*90|0},${136+lit*100|0},${230+lit*25|0},${.06+lit*.38})`],[1,'rgba(160,136,230,0)']]);
-      }
-    }
-
-    // The moon, low in the upper left of the alcove window as seen from the
-    // chair; it is what shines in through that window. A wide bloom in the
-    // air, a soft corona, a thin halo ring (rose inside, pale teal outside),
-    // and the disc: pale silver-lavender, cooler at its limb, with grey-violet
-    // maria. A thin veil of cloud drifts over its lower edge, lit from behind.
-    soft(moon.x,moon.y,moon.r*13,moon.r*12,[[0,`rgba(222,212,255,${.5*G})`],[.16,`rgba(186,166,248,${.26*G})`],[.45,`rgba(140,112,220,${.09*G})`],[1,'rgba(120,96,200,0)']]);
-    soft(moon.x,moon.y,moon.r*3.4,moon.r*3.4,[[0,`rgba(246,242,255,${.75*G})`],[.3,`rgba(228,220,255,${.42*G})`],[.7,`rgba(200,186,255,${.12*G})`],[1,'rgba(190,175,255,0)']]);
-    soft(moon.x,moon.y,moon.r*6.2,moon.r*6.2,[[0,'rgba(255,190,235,0)'],[.78,'rgba(255,190,235,0)'],[.84,`rgba(255,190,235,${.07*G})`],
-      [.9,`rgba(200,205,255,${.08*G})`],[.95,`rgba(150,235,230,${.05*G})`],[1,'rgba(150,235,230,0)']]);
-    const disc=g.createRadialGradient(moon.x-moon.r*.2,moon.y-moon.r*.22,0,moon.x,moon.y,moon.r);
-    disc.addColorStop(0,'#fefcff');disc.addColorStop(.55,'#f3efff');disc.addColorStop(.86,'#e0d8fc');disc.addColorStop(1,'#cabff4');
-    g.save();g.beginPath();g.arc(moon.x,moon.y,moon.r,0,Math.PI*2);g.fillStyle=disc;g.fill();g.clip();
-    for(const [dx,dy,s,a] of [[-.32,-.18,.42,.24],[.2,.12,.32,.2],[.02,-.46,.24,.16],[-.18,.36,.26,.18],[.38,-.28,.18,.14],[-.05,.05,.2,.1]])
-      soft(moon.x+dx*moon.r,moon.y+dy*moon.r,s*moon.r,s*moon.r*.85,[[0,`rgba(146,132,196,${a})`],[1,'rgba(146,132,196,0)']]);
-    g.restore();
-    for(let i=0;i<7;i++) soft(moon.x+(i-3)*moon.r*.85,moon.y+moon.r*(.62+.1*Math.sin(i*1.7)),moon.r*1.5,moon.r*.2,
-      [[0,'rgba(86,64,150,.32)'],[1,'rgba(86,64,150,0)']]);
-    soft(moon.x+moon.r*.2,moon.y+moon.r*.46,moon.r*3.6,moon.r*.1,[[0,`rgba(244,238,255,${.45*G})`],[1,'rgba(244,238,255,0)']]);
-
-    // The land under the night: ranges paler and hazier with distance, a far
-    // castle on the farthest ridge, mist in the valleys, a lake carrying the
-    // moon's path, and dark near hills. Each ridge catches a thin moonlit rim
-    // on the moon's side.
-    const range=(base,height,phase,sharp,fill,rim)=>{
-      const top=x=>{
-        const r=(f,p)=>1-Math.abs(Math.sin(x*f+phase*p));
-        return base+height*(.55*r(.0031,1)**sharp+.3*r(.0083,1.9)**(sharp*1.4)+.15*(.5+.5*Math.sin(x*.027+phase*3.3)));
-      };
-      g.beginPath();g.moveTo(0,Hc);
-      for(let x=0;x<=W;x+=3) g.lineTo(x,yAt(top(x)));
-      g.lineTo(W,Hc);g.closePath();g.fillStyle=fill;g.fill();
-      g.beginPath();for(let x=0;x<=W;x+=3) x?g.lineTo(x,yAt(top(x))):g.moveTo(x,yAt(top(x)));
-      const edge=g.createLinearGradient(moon.x-700,0,moon.x+700,0);
-      edge.addColorStop(0,'rgba(220,205,255,0)');edge.addColorStop(.5,rim);edge.addColorStop(1,'rgba(220,205,255,0)');
-      g.strokeStyle=edge;g.lineWidth=1.4;g.stroke();
-      return top;
-    };
-    const mist=(h,depth,alpha)=>{
-      const y=yAt(h),haze=g.createLinearGradient(0,y-depth,0,y+depth);
-      haze.addColorStop(0,'rgba(196,170,245,0)');haze.addColorStop(.5,`rgba(196,170,245,${alpha*M})`);haze.addColorStop(1,'rgba(196,170,245,0)');
-      g.fillStyle=haze;g.fillRect(0,y-depth,W,depth*2);
-    };
-    const far=range(sky.horizon-.02,.5,1.3,1.6,'#5a428f','rgba(226,210,255,.5)');
-    // The far castle: slender spires with a few lit windows and a pale teal
-    // light at the tallest; another tower in a wider world. In metres:
-    // [offset, width, height] of each spire from its foot on the ridge.
-    const cx=xAt(188.6),ground=far(cx)-.02,m=perDegree*180/Math.PI/sky.radius;
-    const castle='#3e2b6a';g.fillStyle=castle;
-    g.fillRect(cx-.3*m,yAt(ground+.18),.68*m,.18*m+2);
-    for(const [dx,w,h] of [[-.28,.07,.38],[-.16,.1,.55],[0,.12,.78],[.13,.08,.5],[.24,.06,.34],[.34,.05,.26]]) {
-      const x=cx+dx*m,top=yAt(ground+h);
-      g.fillRect(x-w*m/2,top,w*m,yAt(ground)-top+2);
-      g.beginPath();g.moveTo(x-w*m*.62,top+1);g.lineTo(x,top-w*m*2.2);g.lineTo(x+w*m*.62,top+1);g.closePath();g.fill();
-    }
-    for(const [dx,h] of [[-.16,.4],[0,.52],[0,.34],[.13,.36],[-.28,.24],[.24,.22]])
-      soft(cx+dx*m,yAt(ground+h),2.2,2.2,[[0,'rgba(255,214,150,.95)'],[1,'rgba(255,190,110,0)']]);
-    soft(cx,yAt(ground+.78+.12*2.2*.6),5,5,[[0,'rgba(150,250,228,.9)'],[1,'rgba(110,230,210,0)']]);
-    mist(sky.horizon+.04,22,.18);
-    range(sky.horizon-.18,.3,4.1,1.2,'#2f1e55','rgba(214,196,255,.4)');
-    mist(sky.horizon-.14,16,.14);
-    // The lake at the mid range's foot, the sky's glow on it and the moon's
-    // path of glints coming toward the tower.
-    const lakeTop=sky.horizon-.2,lakeY=yAt(lakeTop),lakeBottom=yAt(sky.horizon-.8);
-    const water=g.createLinearGradient(0,lakeY,0,lakeBottom);
-    water.addColorStop(0,'#4a3580');water.addColorStop(.4,'#2a1a52');water.addColorStop(1,'#170c2e');
-    g.fillStyle=water;g.fillRect(0,lakeY,W,lakeBottom-lakeY);
-    soft(moon.x,lakeY+6,moon.r*2.6,moon.r*.4,[[0,`rgba(225,215,255,${.3*G})`],[1,'rgba(225,215,255,0)']]);
-    for(let i=0;i<80;i++) {
-      const t=rnd(),y=lakeY+3+t*(lakeBottom-lakeY-3),spread=moon.r*(.7+t*2.6);
-      const x=moon.x+(rnd()-.5)*spread,length=moon.r*(.35+rnd()*1.1)*(.6+t);
-      soft(x,y,length,1.2,[[0,`rgba(238,232,255,${(.6-.35*t)*(.4+rnd()*.6)})`],[1,'rgba(238,232,255,0)']]);
-    }
-    mist(lakeTop-.06,10,.12);
-    range(sky.horizon-.6,.26,2.2,1,'#140b26','rgba(176,156,236,.3)');
-    for(let i=0;i<8;i++) soft(xAt(150+rnd()*60),yAt(sky.horizon-.5-rnd()*.14),2.2,2.2,[[0,'rgba(255,214,150,.9)'],[1,'rgba(255,190,110,0)']]);
-    range(sky.horizon-1.05,.2,5.7,1,'#0d0819','rgba(150,130,210,.18)');
-    const map=new THREE.CanvasTexture(image);
-    // Mirrored: the cylinder's inside is seen from its centre.
-    map.colorSpace=THREE.SRGBColorSpace;map.wrapS=THREE.RepeatWrapping;map.repeat.x=-1;map.offset.x=1;
-    map.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
-    return map;
-  }
-  const outside=new THREE.Mesh(
-    new THREE.CylinderGeometry(sky.radius,sky.radius,sky.top-sky.bottom,32,1,true,
-      sky.from*Math.PI/180,(sky.to-sky.from)*Math.PI/180).translate(0,(sky.top+sky.bottom)/2,0),
-    new THREE.MeshBasicMaterial({map:purpleSky(),side:THREE.BackSide,toneMapped:false,
-      color:new THREE.Color().setScalar(sky.brightness)}));
-  outside.name='sky outside the windows';shell.add(outside);
+  // ---- The view out of the windows (night-sky.js): a moonlit purple night
+  // over a misty valley, in layers at real distances behind the walls, which
+  // hide it everywhere but the windows. It is composed as seen from the chair,
+  // and part of it moves (see "The night outside is alive" below).
+  const night=createNightSky(THREE,{eye:{x:0,y:view.seated.eye,z:view.seated.distance+placement.forward},
+    anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy())});
+  shell.add(night.group);
 
   // The armchair the seated camera sits in: centred in front of the table and
   // facing it, placed so the seated eye (scene-camera.js) is just in front of
@@ -788,7 +606,7 @@ if (renderer) {
   const fromWindow=(dx,y,r0,r1,strength,motes)=>{
     const from=new THREE.Vector3(aperture.x+dx,y,alcove.back+.03);
     const to=from.clone().addScaledVector(moonWay,(y-.04)/-moonWay.y);
-    return {from:from.toArray(),to:to.toArray(),r0,r1,color:skyLight,strength,motes,moonlit:true};
+    return {from:from.toArray(),to:to.toArray(),r0,r1,color:skyLight,strength,motes,moonlit:true,veiled:true};
   };
   // The upstairs shafts start in the tower room, above the well, so from the
   // room they emerge from behind the ring beam, brightest at the top. They fall
@@ -808,20 +626,23 @@ if (renderer) {
     fromWindow(0,1.2,.42,.7,.06,0),
   ];
   const lightInAir=new THREE.ShaderMaterial({
-    vertexShader:`attribute vec3 tint;varying vec3 vTint,vNormal,vView,vWorld;varying float vAlong;
+    // uMoonlight: how much of the moon is clear of cloud, for the alcove
+    // window's own beams (veiled).
+    uniforms:{uMoonlight:{value:1}},
+    vertexShader:`attribute vec3 tint;attribute float veiled;varying vec3 vTint,vNormal,vView,vWorld;varying float vAlong,vVeiled;
       void main(){vec4 mv=modelViewMatrix*vec4(position,1.);vNormal=normalize(normalMatrix*normal);vView=-mv.xyz;
-        vAlong=uv.y;vTint=tint;vWorld=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*mv;}`,
-    fragmentShader:`varying vec3 vTint,vNormal,vView,vWorld;varying float vAlong;
+        vAlong=uv.y;vTint=tint;vVeiled=veiled;vWorld=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*mv;}`,
+    fragmentShader:`uniform float uMoonlight;varying vec3 vTint,vNormal,vView,vWorld;varying float vAlong,vVeiled;
       void main(){
         float core=pow(abs(dot(normalize(vNormal),normalize(vView))),1.7);
         float ends=smoothstep(1.,.9,vAlong)*smoothstep(0.,.55,vAlong);
         float streaks=.78+.22*sin(vWorld.x*7.+vWorld.y*4.3+vWorld.z*6.1)*sin(vWorld.x*2.9-vWorld.z*3.7);
-        gl_FragColor=vec4(vTint*core*ends*streaks,1.);
+        gl_FragColor=vec4(vTint*core*ends*streaks*mix(1.,uMoonlight,vVeiled),1.);
       }`,
     transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
   lightInAir.forceSinglePass=true;
-  const shaftParts={position:[],normal:[],uv:[],tint:[]},q=new THREE.Quaternion(),a=new THREE.Vector3(),b=new THREE.Vector3();
-  const dust={position:[],tint:[],size:[]};
+  const shaftParts={position:[],normal:[],uv:[],tint:[],veiled:[]},q=new THREE.Quaternion(),a=new THREE.Vector3(),b=new THREE.Vector3();
+  const dust={position:[],tint:[],size:[],drift:[],phase:[]};
   // Vertex ranges of the sky's beams and of their dust, for windowLight.shafts.
   const moonShafts=[],moonDust=[];
   for(const beam of beams) {
@@ -834,7 +655,7 @@ if (renderer) {
     // Written straight to the display: sRGB values, scaled by the strength.
     const c=new THREE.Color(beam.color).convertLinearToSRGB();
     for(const key of ['position','normal','uv']) shaftParts[key].push(...g.attributes[key].array);
-    for(let i=0;i<g.attributes.position.count;i++) shaftParts.tint.push(c.r*beam.strength,c.g*beam.strength,c.b*beam.strength);
+    for(let i=0;i<g.attributes.position.count;i++){shaftParts.tint.push(c.r*beam.strength,c.g*beam.strength,c.b*beam.strength);shaftParts.veiled.push(beam.veiled?1:0);}
     // Dust suspended in the shaft, denser toward its axis.
     const side=new THREE.Vector3().crossVectors(axis,Math.abs(axis.y)>.9?new THREE.Vector3(1,0,0):new THREE.Vector3(0,1,0)).normalize();
     const other=new THREE.Vector3().crossVectors(axis,side);
@@ -843,16 +664,24 @@ if (renderer) {
       const p=a.clone().lerp(b,t).addScaledVector(side,Math.cos(angle)*radius).addScaledVector(other,Math.sin(angle)*radius);
       dust.position.push(p.x,p.y,p.z);
       const glow=(.5+random()*.5)*(1-t*.6);dust.tint.push(c.r*glow,c.g*glow,c.b*glow);dust.size.push(.008+random()*.014);
+      // The alcove window's dust drifts (see the dust's shader); a hashed
+      // phase, so the room's seeded random stays as it was.
+      const n=dust.drift.length,h=Math.sin(n*12.9898)*43758.5453;dust.drift.push(beam.veiled?1:0);dust.phase.push((h-Math.floor(h))*100);
     }
     if(beam.moonlit){moonShafts.push([first,shaftParts.tint.length/3]);moonDust.push([firstMote,dust.tint.length/3]);}
   }
   const shaftGeometry=new THREE.BufferGeometry();
-  for(const [key,size] of [['position',3],['normal',3],['uv',2],['tint',3]])
+  for(const [key,size] of [['position',3],['normal',3],['uv',2],['tint',3],['veiled',1]])
     shaftGeometry.setAttribute(key,new THREE.Float32BufferAttribute(shaftParts[key],size));
   const shafts=new THREE.Mesh(shaftGeometry,lightInAir);shafts.name='light shafts';shafts.renderOrder=5;shell.add(shafts);
-  const dustMaterial=new THREE.ShaderMaterial({uniforms:{uFocal:{value:600}},
-    vertexShader:`attribute vec3 tint;attribute float size;uniform float uFocal;varying vec3 vTint;
-      void main(){vec4 mv=modelViewMatrix*vec4(position,1.);vTint=tint;gl_PointSize=max(1.5,size*uFocal/-mv.z);gl_Position=projectionMatrix*mv;}`,
+  // Dust in the alcove window's moonlight (drift) floats in a slow, small
+  // wander and shimmers, dimming with the moonlight; the rest stays still.
+  const dustMaterial=new THREE.ShaderMaterial({uniforms:{uFocal:{value:600},uTime:{value:0},uMoonlight:{value:1}},
+    vertexShader:`attribute vec3 tint;attribute float size,drift,phase;uniform float uFocal,uTime,uMoonlight;varying vec3 vTint;
+      void main(){float t=uTime+phase;
+        vec3 p=position+drift*vec3(sin(t*.31)*.035,sin(t*.23+1.7)*.03,cos(t*.27)*.035);
+        vec4 mv=modelViewMatrix*vec4(p,1.);vTint=tint*mix(1.,uMoonlight*(.72+.28*sin(t*1.3)),drift);
+        gl_PointSize=max(1.5,size*uFocal/-mv.z);gl_Position=projectionMatrix*mv;}`,
     fragmentShader:`varying vec3 vTint;
       void main(){float d=length(gl_PointCoord-.5);gl_FragColor=vec4(vTint*smoothstep(.5,.05,d)*1.6,1.);}`,
     transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});
@@ -860,6 +689,8 @@ if (renderer) {
   dustGeometry.setAttribute('position',new THREE.Float32BufferAttribute(dust.position,3));
   dustGeometry.setAttribute('tint',new THREE.Float32BufferAttribute(dust.tint,3));
   dustGeometry.setAttribute('size',new THREE.Float32BufferAttribute(dust.size,1));
+  dustGeometry.setAttribute('drift',new THREE.Float32BufferAttribute(dust.drift,1));
+  dustGeometry.setAttribute('phase',new THREE.Float32BufferAttribute(dust.phase,1));
   const motes=new THREE.Points(dustGeometry,dustMaterial);motes.name='dust in the light';motes.renderOrder=6;shell.add(motes);
   const shaftTint=shaftGeometry.attributes.tint.array.slice(),dustTint=dustGeometry.attributes.tint.array.slice();
   // The air just inside the alcove window glows faintly where the moonlight
@@ -1470,13 +1301,58 @@ if (renderer) {
     if(cloth.layers.isEnabled(1)) renderFront();
   }
   requestAnimationFrame(pulse);
+  // ---- The night outside is alive: cloud drifting over the moon, mist in
+  // the valleys, the lake's glitter, fireflies, and the moonlight coming in
+  // dimming a little whenever cloud crosses the moon. Only the part of the
+  // room that changes is redrawn for it, about 24 times a second: the alcove
+  // window and the moonbeam it sends in, with the shadow maps left as they
+  // are; the rest of the canvas keeps its last full frame. Still for reduced
+  // motion.
+  const windowPoints=(()=>{
+    const points=[],add=(x,y,z)=>points.push(new THREE.Vector3(x,y,z));
+    for(const x of [aperture.x-aperture.halfWidth-.12,aperture.x+aperture.halfWidth+.12])
+      for(const y of [aperture.sill-.12,aperture.peak+.12]) for(const z of [alcove.back-T,alcove.back+.35]) add(x,y,z);
+    // The glow inside the window, and the beams down to the floor.
+    for(const x of [-.7,.7]) for(const y of [-1.1,1.1]) add(windowHaze.position.x+x,windowHaze.position.y+y,windowHaze.position.z);
+    for(const beam of beams) if(beam.veiled) for(const end of [beam.from,beam.to]) for(const d of [-beam.r1,beam.r1])
+      add(end[0]+d,end[1]+d,end[2]+d);
+    return points;
+  })();
+  const windowCorner=new THREE.Vector3();
+  // The window's part of the canvas, in CSS px from the lower left; null off screen.
+  function windowRect() {
+    let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+    for(const point of windowPoints) {
+      windowCorner.copy(point);shell.localToWorld(windowCorner).project(camera);
+      if(windowCorner.z<-1||windowCorner.z>1) continue;
+      const x=(windowCorner.x+1)*innerWidth/2,y=(1-windowCorner.y)*innerHeight/2;
+      x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y);
+    }
+    x0=Math.max(0,Math.floor(x0)-8);y0=Math.max(0,Math.floor(y0)-8);
+    x1=Math.min(innerWidth,Math.ceil(x1)+8);y1=Math.min(innerHeight,Math.ceil(y1)+8);
+    return x1>x0&&y1>y0?[x0,innerHeight-y1,x1-x0,y1-y0]:null;
+  }
+  let outsideAt=0;
+  function liveOutside(now) {
+    requestAnimationFrame(liveOutside);
+    if(document.hidden||lost||pending||!host.classList.contains('is-ready')||stillMotion.matches||now-outsideAt<40) return;
+    outsideAt=now;night.update(now/1000);
+    const light=1-.42*night.veil();
+    lightInAir.uniforms.uMoonlight.value=dustMaterial.uniforms.uMoonlight.value=light;
+    dustMaterial.uniforms.uTime.value=now/1000;windowHaze.material.opacity=.065*windowLight.haze*light;
+    const rect=windowRect();if(!rect) return;
+    renderer.shadowMap.autoUpdate=false;renderer.setScissorTest(true);renderer.setScissor(...rect);
+    camera.layers.set(0);renderer.render(scene,camera);
+    renderer.setScissorTest(false);renderer.shadowMap.autoUpdate=true;
+  }
+  requestAnimationFrame(liveOutside);
   function resize() {
     layoutKey=sizeKey();
     const ratio=Math.min(devicePixelRatio,1.5,Math.sqrt(2600000/(innerWidth*innerHeight)));
     renderer.setPixelRatio(ratio);renderer.setSize(innerWidth,innerHeight,false);
     if(front){front.setPixelRatio(ratio);front.setSize(innerWidth,innerHeight,false);}
     // Dust mote size in device pixels per metre at unit distance.
-    dustMaterial.uniforms.uFocal.value=innerHeight*ratio/2/Math.tan(view.fov*Math.PI/360);
+    dustMaterial.uniforms.uFocal.value=innerHeight*ratio/2/Math.tan(view.fov*Math.PI/360);night.setFocal(dustMaterial.uniforms.uFocal.value);
     refreshTable();invalidate();
   }
   // A dolly frame only changes the projection; geometry and canvas allocation
@@ -1503,13 +1379,7 @@ if (renderer) {
       frontFill.intensity=lighting.front;applyGlow();invalidate();return {...lighting};}},
     // The painted sky ("The view out of the windows"), repainted live, and the
     // moonlight it sends in through the windows ("windowLight").
-    sky:{get values(){return {...sky,moon:[...sky.moon]};},configure(values={}) {
-      for(const [key,value] of Object.entries(values)) {
-        if(key==='moon'&&Array.isArray(value)&&value.length===3&&value.every(Number.isFinite)) sky.moon=[...value];
-        else if(['horizon','brightness','glow','nebula','mist'].includes(key)&&Number.isFinite(value)) sky[key]=Math.max(0,value);
-      }
-      outside.material.map.dispose();outside.material.map=purpleSky();outside.material.color.setScalar(sky.brightness);
-      invalidate();return {...sky,moon:[...sky.moon]};}},
+    sky:{get values(){return night.values;},configure(values={}){const result=night.configure(values);invalidate();return result;}},
     windowLight:{get values(){return {...windowLight};},configure(values={}) {
       for(const [key,value] of Object.entries(values)) if(Object.hasOwn(windowLight,key)&&Number.isFinite(value)) windowLight[key]=Math.max(0,value);
       moon.intensity=windowLight.intensity;windowHaze.material.opacity=.065*windowLight.haze;

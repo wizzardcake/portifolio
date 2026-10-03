@@ -107,6 +107,14 @@
   const contact = {x: .5, y: .5, height: 0, radius: 0, strength: 0, glow: [0, 0, 0],
     breath: .5, dimple: 0, lightPool: 1, shadow: 1};
   let arrival = null; // a card's drop that the page waits for
+  // Page personalities share this clock and pose. They never own the flight.
+  const presentations = new Map();
+  let presentation = null;
+  function endPresentation() {
+    presentation?.end?.();
+    presentation = null;
+    matter.style.opacity = '1';
+  }
 
   function targetRect(nextMode) {
     const w = screen.clientWidth, h = screen.clientHeight;
@@ -404,16 +412,30 @@
     // (!gl) uses this element's own box as the page visual, so it must stay.
     if (transition || mode !== 'page') formed = 0;
     else if (!formed) formed = now;
-    const handover = gl && formed ? (still ? 0 : 1 - smooth((now - formed - 80) / 420)) : 1;
+    // A presentation may cover the material before it reaches its rectangular
+    // page shape. The default glass handoff is unchanged for ordinary pages.
+    const coverage = presentation && mode === 'page' ? presentation.sample?.({
+      progress: t, pose, target, reducedMotion: still, settled: !transition || t === 1,
+    }) : null;
+    const handover = Number.isFinite(coverage) ? clamp(coverage)
+      : gl && formed ? (still ? 0 : 1 - smooth((now - formed - 80) / 420)) : 1;
     canvas.style.opacity = String(handover);
+    if (!gl && presentation) matter.style.opacity = String(handover);
     // Nothing shows while the dormant orb is hidden under the cloth, or once
     // the page has taken over from it: skip the ray march then.
     const unseen = matter.style.visibility === 'hidden' || handover === 0;
     if (gl && !unseen && rect.w > 0 && rect.h > 0 && matter.style.opacity !== '0') {
       // Cap the pixel budget: the surface stays smooth without a full-screen raymarch.
       const ratio = Math.min(devicePixelRatio, 1.5, 640 / Math.max(rect.w, rect.h));
-      const w = Math.max(1, Math.round(rect.w * ratio)), h = Math.max(1, Math.round(rect.h * ratio));
-      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h); }
+      // The backing store grows in 32 px steps, not every frame of a morph:
+      // each resize makes the browser wait for the GPU, which stalls badly
+      // while a page is being drawn around it. The shape is unaffected; it
+      // follows the element's own aspect.
+      const w = Math.max(32, Math.ceil(rect.w * ratio / 32) * 32), h = Math.max(32, Math.ceil(rect.h * ratio / 32) * 32);
+      // Nor while a page's presentation is taking over from the glass: glass
+      // that is fading out needs no new resolution.
+      const fading = presentation && handover < 1;
+      if ((canvas.width !== w || canvas.height !== h) && !fading) { canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h); }
       lights(height, footprint);
       gl.uniform1f(uniforms.time, still ? 0 : now * .001);
       gl.uniform1f(uniforms.aspect, rect.w / rect.h);
@@ -450,7 +472,14 @@
     charge(value, rotation = 0) { charge = value; spin = rotation * Math.PI / 180; },
     // Summons the orb up out of the uncovered portal into its idle hover.
     unlock(duration = 3400) { document.body.classList.add('portal-unlocked'); return transitionTo('idle', duration); },
+    // target(base), begin(), sample(frame)->material opacity, end(). Optional;
+    // registered pages still use project()/restore() and the same responsive target.
+    registerPresentation(appId, descriptor) {
+      if (descriptor) presentations.set(appId, descriptor);
+      else presentations.delete(appId);
+    },
     async project(appId, {target = null} = {}) {
+      endPresentation();
       // A card's drop hands off while rising, with its rendered momentum.
       let flight = false;
       if (arrival) {
@@ -461,16 +490,19 @@
         flight = !!lastDive && lastDive.presence > 0 && !reducedMotion.matches;
         arrival = null;
       }
-      pageTarget = target;
+      presentation = presentations.get(appId) || null;
+      pageTarget = target ?? presentation?.target ?? null;
+      presentation?.begin?.();
       const nextTint = appId === 'ommeg' ? [.52,.21,.28] : ['prosjekter','arbeidserfaring'].includes(appId) ? [.57,.42,.21] : [.24,.56,.49];
       screen.classList.add('is-projecting');
       const complete = await transitionTo('page', settings.pageDuration * 1000, flight, nextTint);
       if (complete) screen.classList.remove('is-projecting');
       return complete;
     },
-    restore() { settleArrival(); screen.classList.remove('is-projecting'); return transitionTo('idle', 950); },
+    restore() { settleArrival(); endPresentation(); screen.classList.remove('is-projecting'); return transitionTo('idle', 950); },
     reset() {
       settleArrival();
+      endPresentation();
       window.portalReaction?.cancel('reset');
       document.body.classList.remove('portal-unlocked'); screen.classList.remove('is-projecting');
       if (transition) transition.resolve(false);

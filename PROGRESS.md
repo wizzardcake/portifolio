@@ -1129,3 +1129,66 @@ shelf and the shelf at three sizes, and the seated views at 1440×900 and
   - The full suite was **not** run for this stage before committing, because
     the battery was nearly empty. It runs later, on the following stage's code
     (logged there).
+
+## Refine 3: A frontal shelf view
+
+**Changed:** `scene-camera.js`: the shelf points, and a control point for each
+format.
+
+- **The shelf point now stands square in front of the study nook.** It is
+  centred on the nook and looks straight at its back wall (heading 90°), from
+  a standing eye of 1.8 m, about 17° down.
+
+  | Format | Position | Looks at | From the nook's opening |
+  | --- | --- | --- | --- |
+  | Landscape | (−0.55, 1.8, −1.55) | (−2.85, 1.1, −1.55) | 1.85 m |
+  | Portrait | (1.0, 1.8, −1.55) | (−2.85, 1.15, −1.55) | 3.4 m |
+
+  - **Landscape** (1440×900): the opening spans about 780 px of 1440. The
+    worktop spans about 650 px and is seen from above. Around the arch you see
+    the walls, the beams and the curve of the corner. The mist lies at the
+    nook's foot, with the trail coming in from the lower left.
+  - **Portrait:** the camera stands far enough back to show the nook's whole
+    width.
+  - **Symmetry:** the nook's centre lands at x = 720 of 1440, and the
+    worktop's front edge is level (y 599 against 601).
+  - **How it was chosen:** I compared 6 landscape and 3 portrait candidates
+    (scratch `cands3`).
+    - Closer than about 1.55 m, the floor where the trail gathers drops below
+      the frame.
+    - A higher eye (1.8 m rather than 1.7 m) shows more of the worktop.
+- **Limit:** the upper shelf is at 1.42 m, so from any natural standing eye
+  only its front edge shows. Things placed on it will still stand in view.
+- **The walk there goes round the table's right,** past the window and the
+  stair, and ends walking straight up to the nook.
+  - **Why not the left:** I compared it frame by frame with a path round the
+    left (scratch `paths3`). That one follows the trail but overshoots, then
+    backs out to the frontal point, so the nook shrinks at the end.
+  - **Clearances (landscape):** about 0.33 m from the table's outline, 0.72 m
+    from the right wall and 1.08 m from the stair tower.
+  - **Portrait** goes round the right as well, 0.39 m clear of the table, and
+    ends with a short sidestep while turning to the nook.
+- **`via` is now per format,** like the points.
+
+### Verification
+
+Screenshots are in `verification/refine-stage3/`: the entry, three frames of
+the walk and the shelf at three sizes, and the sheets `sheet-walk-1440` and
+`sheet-walk-390`.
+
+- **The view:** frontal and symmetric, with usable space on the worktop, no
+  clipping, and walls, beams and floor around the arch.
+- **The walk:** reads naturally. The cloth's inscription sweeps past the lower
+  left at mid-walk, and the nook grows steadily to the frontal view.
+- **Seated:** identical to the refine baseline with the cloth on. With the
+  portal open, only animated content differs.
+- **Tests:** syntax checks passed, and the full suite ran on this stage's code.
+  This run also counts for refine 2, whose full run was pending.
+  - Architecture, table, cloth, `portal` (7/7), and the environment,
+    foundation, cloth and retrieval checks passed.
+  - During the run I started the next stage's edits in the same file, so I
+    reran the six later suites on the clean stage 3 file. Depth, impact, aura,
+    orb and tools passed.
+  - `portal --depth-only` failed once on its lit-mist threshold, the known
+    intermittent failure from Phase 0; this stage does not touch the portal's
+    depth. Run alone it then passed 3/3.

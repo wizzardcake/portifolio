@@ -35,18 +35,24 @@
     // until the real tabletop's front edge spans at most `fit` of the
     // viewport width.
     seated: {eye: 1.18, distance: 1.6, tilt: 15, fit: {wide: .94, portrait: .8}},
-    // Shelf: standing beside the table's left, turned three-quarters toward
-    // the study nook: its worktop and shelf large and seen a little from above,
-    // the alcove window in view so it stays the same room, the table and the
-    // chair behind the eye. Portrait views are narrow and stand further back.
+    // Shelf: standing square in front of the study nook, centred on it and
+    // looking straight at its back wall (heading 90 degrees) from a standing
+    // eye, a little down: the whole worktop seen from above, the shelf, the
+    // arch with the walls and beams around it, and the mist gathered at its
+    // foot. The table and the chair are behind and to the left. Portrait views
+    // are narrow, so they stand further back to keep the nook's whole width.
     shelf: {
-      wide: {position: [-1.3, 1.61, -.15], lookAt: [-2.45, .85, -1.75]},
-      portrait: {position: [-1.35, 1.62, .7], lookAt: [-2.7, .85, -1.45]},
+      wide: {position: [-.55, 1.8, -1.55], lookAt: [-2.85, 1.1, -1.55]},
+      portrait: {position: [1, 1.8, -1.55], lookAt: [-2.85, 1.15, -1.55]},
     },
     // A leg that must go round something passes a control point: the eye is
     // drawn toward it on a smooth curve, while its heading blends between the
-    // ends. Entry to shelf goes round the chair's and the table's left.
-    via: {'entry>shelf': [-.95, 1.6, 2.2]},
+    // ends. Entry to shelf goes round the table's right, past the window and
+    // the stair, and ends walking straight up to the nook.
+    via: {
+      wide: {'entry>shelf': [2.7, 1.75, -1.7]},
+      portrait: {'entry>shelf': [2.1, 1.78, 1]},
+    },
     // The entry's quiet life, so the view never stands dead still: the
     // standing eye sways a little and leans toward the pointer. Metres and
     // degrees; none under reduced motion or on touch. The slow sway is
@@ -107,8 +113,8 @@
     // way along the walk between them). The shelf, where the table is out of
     // view, takes no shift; legs to or from it blend the two.
     const anchored = p => anchorY - focal * (-p.up * units) / (p.depth * units);
-    const {leg} = state, ends = [aim(points[leg.from]), aim(points[leg.to])], t = leg.progress;
-    const now = pose(ends[0], ends[1], t, state.via[leg.from + '>' + leg.to] ?? state.via[leg.to + '>' + leg.from]);
+    const {leg} = state, ends = [aim(points[leg.from]), aim(points[leg.to])], t = leg.progress, via = state.via[format];
+    const now = pose(ends[0], ends[1], t, via[leg.from + '>' + leg.to] ?? via[leg.to + '>' + leg.from]);
     const lens = (name, end) => name === 'shelf' ? innerHeight / 2 : anchored(pose(end, end, 0));
     const originY = leg.from !== 'shelf' && leg.to !== 'shelf' ? anchored(now)
       : lens(leg.from, ends[0]) + (lens(leg.to, ends[1]) - lens(leg.from, ends[0])) * t;

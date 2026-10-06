@@ -1330,9 +1330,11 @@ if (renderer) {
     for(const m of [chairWood,velvet]) if(m.opacity!==presence) {
       m.transparent=presence<1;m.depthWrite=presence>=1;m.opacity=presence;m.needsUpdate=true;
     }
-    // The smoke thins away as the visitor walks in, and is gone once seated.
-    const walked=Math.min(1,Math.max(0,(view.approach-.1)/.5));
-    smoke.presence=1-walked*walked*(3-2*walked);
+    // Walking to the chair, the trail to the nook thins away first; the
+    // chair's own stays to lead them in, and is gone as they sit down.
+    const walked=(from,to)=>{const t=Math.min(1,Math.max(0,(view.approach-from)/(to-from)));return t*t*(3-2*t);};
+    smoke.setPresence('to the study nook',1-walked(.05,.4));
+    smoke.setPresence('into the chair',1-walked(.45,.85));
     if(stillMotion.matches) smoke.update(0);
     renderFront();
   }

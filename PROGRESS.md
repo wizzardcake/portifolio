@@ -604,3 +604,47 @@ The questions from the brief:
 - **Frame rate:** entry idle 59.5 fps with the smoke against 60.3 fps without, in
   the same run; no measurable cost from the extra branch.
 - **Tests:** all 14 suites passed.
+
+## Stage 4: Chair route
+
+**Changed:** `room-smoke.js` and `room-scene.js`. Each trail now has its own
+material; they share every uniform except their presence, and the same shader
+program. This adds `smoke.setPresence(name, value)` and `smoke.presenceOf(name)`.
+
+### Behaviour
+
+- **The chair's branch is the guide on the way in.** Once the visitor chooses
+  the chair, the trail to the nook thins away over the first part of the walk
+  (`approach` 0.05–0.4). The chair's branch stays until they reach the chair and
+  thins away as they sit (0.45–0.85). Seated, both are gone.
+- **Furniture:** the branch goes round the chair's right side, curls round its
+  right back leg and in under the seat, where the chair's legs and seat hide it
+  correctly. It ends at z ≈ 1.4, under the seat, and never runs on toward the
+  table or the portal (the table's near edge is at z ≈ 0.6).
+- **Narrow screens:** the armchair fades out on the way in, because the seated
+  eye sits behind it. The chair's branch fades over the same stretch of the
+  walk, so the smoke is never left without the chair it leads to.
+- **The camera's path is still the straight placeholder.** The smoke reaches the
+  chair from its right side and the eye arrives from behind and above the
+  backrest, which reads as walking up to the chair and sitting down. A curved
+  walk that follows the smoke is for later (see the stage 6 structure).
+
+### Verification
+
+Screenshots are in `verification/stage4/`, all inspected.
+
+- **Along the walk:** `route-0…8-try1` at 1440×900 and `route-0…8-portrait`, at
+  `approach` 0, 0.07, 0.23, 0.42, 0.58, 0.74, 0.87, 0.98 and seated.
+  - From the entry, the chair's branch curls round the chair's leg and under it
+    (close-up `chair-zoom`, scratch).
+  - The trail to the nook has gone by 0.42.
+  - The chair's branch shows at the chair's foot until about 0.42; after that it
+    is below the frame, and it has gone before the eye drops into the seat.
+- **Seated, compared with the baseline:**
+  - With the cloth on, it is the same as stage 1 (the 67×33 px patch of sky)
+    at both 1440×900 and 390×844.
+  - With the portal open, only animated content differs. The heat map shows the
+    orb's inside and rim (its float phase), the water, sparks and clouds; the
+    table, room and cards are unchanged. That is 0.07 % of pixels at 1440×900
+    and 3.4 % at 390×844, varying with when the reveal ran.
+- **Tests:** all 14 suites passed.

@@ -140,30 +140,48 @@ export function createRoomSmoke(THREE, {trails, anisotropy = 1}) {
 
   const group = new THREE.Group();
   group.name = 'smoke on the floor';
+  // Each trail has its own material, so it can thin away on its own; all of
+  // them share every other uniform (time, growth, tuning) and one program.
+  const shared = {...material.uniforms};
+  delete shared.uPresence;
+  const presences = new Map();
   let triangles = 0, longest = 0;
   for (const trail of trails) {
     const curve = new THREE.CatmullRomCurve3(trail.points.map(([x, z]) => new THREE.Vector3(x, .012, z)), false, 'centripetal');
     longest = Math.max(longest, curve.getLength());
+    const own = material.clone();
+    own.uniforms = {...shared, uPresence: {value: 1}};
+    const meshes = [];
     for (const settings of trail.strands) {
       // A trail may set how far it takes to gather (fadeIn) and to thin away (fadeOut).
       const geometry = strand(curve, {fadeIn: trail.fadeIn ?? 1.6, fadeOut: trail.fadeOut ?? .9, ...settings});
       triangles += geometry.index.count / 3;
-      const mesh = new THREE.Mesh(geometry, material);
+      const mesh = new THREE.Mesh(geometry, own);
       mesh.name = trail.name + ' smoke'; mesh.frustumCulled = false; mesh.renderOrder = 4;
-      group.add(mesh);
+      group.add(mesh); meshes.push(mesh);
     }
+    presences.set(trail.name, {uniform: own.uniforms.uPresence, meshes});
   }
+  const refresh = () => { group.visible = [...presences.values()].some(p => p.uniform.value > .001); };
   return {
     group, material,
     // seconds: the animation clock; reveal: metres of trail grown in so far.
     update(seconds, reveal = longest + 2) {
-      material.uniforms.uTime.value = seconds;
-      material.uniforms.uReveal.value = reveal;
+      shared.uTime.value = seconds;
+      shared.uReveal.value = reveal;
     },
     // Live tuning: gain, far, thin, veil, brightness (uniform values).
-    tuning: Object.fromEntries(['Gain', 'Far', 'Thin', 'Veil', 'Brightness'].map(k => [k.toLowerCase(), material.uniforms['u' + k]])),
-    set presence(value) { material.uniforms.uPresence.value = value; group.visible = value > .001; },
-    get presence() { return material.uniforms.uPresence.value; },
-    stats: {strands: group.children.length, triangles, longest},
+    tuning: Object.fromEntries(['Gain', 'Far', 'Thin', 'Veil', 'Brightness'].map(k => [k.toLowerCase(), shared['u' + k]])),
+    // How present one trail is (0..1), or all of them at once.
+    setPresence(name, value) {
+      const trail = presences.get(name);
+      trail.uniform.value = value;
+      for (const mesh of trail.meshes) mesh.visible = value > .001;
+      refresh();
+    },
+    set presence(value) { for (const name of presences.keys()) this.setPresence(name, value); },
+    get presence() { return Math.max(...[...presences.values()].map(p => p.uniform.value)); },
+    presenceOf: name => presences.get(name).uniform.value,
+    stats: {strands: group.children.length, triangles, longest, trails: [...presences.keys()]},
   };
 }

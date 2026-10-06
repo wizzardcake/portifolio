@@ -1347,6 +1347,7 @@ if (renderer) {
     const nook=(1-eased(view.approach,.05,.4))*(1-.15*eased(toShelf,.6,1));
     smoke.setPresence('to the study nook',nook);smoke.setPresence('gathering at the nook',nook);
     smoke.setPresence('into the chair',(1-eased(view.approach,.45,.85))*(1-eased(toShelf,.05,.4)));
+    if(!smoke.group.visible) smokeShown=false;
     if(stillMotion.matches) smoke.update(0);
     renderFront();
   }
@@ -1362,12 +1363,12 @@ if (renderer) {
   // 30 fps; in its flight the cloth is redrawn with the room anyway (and moved
   // by the flight alone). Still for reduced motion.
   // The smoke drifts in the same pulse, and grows in from the visitor's feet
-  // each time they arrive at the entry (whole at once under reduced motion).
+  // whenever it appears after being gone: on arriving, and back at the entry
+  // after sitting down (whole at once under reduced motion).
   const stillMotion=matchMedia('(prefers-reduced-motion: reduce)');
-  let lastPulse=0,smokeState='',smokeSince=0;
+  let lastPulse=0,smokeShown=false,smokeSince=0;
   function smokeReveal(now) {
-    const state=stage.dataset.approach;
-    if(state!==smokeState){if(state==='entry')smokeSince=now;smokeState=state;}
+    if(!smokeShown){smokeShown=true;smokeSince=now;}
     return Math.max(0,(now-smokeSince-600)/1000*1.6);
   }
   function pulse(now) {

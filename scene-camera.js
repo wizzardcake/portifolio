@@ -213,7 +213,60 @@
   }, {passive: true});
   root.addEventListener('pointerleave', () => { pointer.x = pointer.y = 0; });
   document.addEventListener('visibilitychange', wake);
-  still.addEventListener('change', wake);
+  still.addEventListener('change', () => {
+    // Reduced motion switched on mid-walk: arrive at once.
+    if (still.matches && move) { const {to, resolve} = move; move = null; state.leg.progress = to; update(); resolve(true); }
+    wake();
+  });
+
+  // ---- Where the visitor is: five named states over the points and legs.
+  //   ENTRY             standing at the room's entry
+  //   CHAIR_APPROACH    on the leg between the entry and the chair
+  //   SEATED            in the chair: the table and the portal
+  //   SHELF_APPROACH    on the leg between the entry and the shelf
+  //   SHELF_INSPECTION  standing at the shelf
+  // go(place) walks to 'entry', 'chair' or 'shelf' along the legs (through
+  // the entry if need be); at once under reduced motion or with {instant:
+  // true}, and then the new state holds as soon as go() returns. It resolves
+  // true on arrival, false if another go() took over. The idle life is on
+  // where the visitor stands (entry, shelf). Each change is announced as a
+  // 'room-navigation' event, detail {state, previous}.
+  const arrival = {entry: 'ENTRY', chair: 'SEATED', shelf: 'SHELF_INSPECTION'};
+  const walking = {seated: 'CHAIR_APPROACH', shelf: 'SHELF_APPROACH'};
+  const legOf = {chair: 'seated', shelf: 'shelf'};
+  // Walking times for a whole leg, ms (the walk in keeps its original pace).
+  state.durations = {seated: 5400, shelf: 4600};
+  let navigation = 'SEATED', journey = 0;
+  function announce(next) {
+    if (next === navigation) return;
+    const previous = navigation;
+    navigation = next;
+    idling = next === 'ENTRY' || next === 'SHELF_INSPECTION';
+    wake();
+    dispatchEvent(new CustomEvent('room-navigation', {detail: {state: next, previous}}));
+  }
+  Object.defineProperty(state, 'navigation', {enumerable: true, get: () => navigation});
+  state.go = (place, {instant = false} = {}) => {
+    if (!Object.hasOwn(arrival, place)) throw new TypeError('sceneCamera.go: no place called ' + place);
+    const id = ++journey, target = legOf[place];
+    state.stop();
+    // The way there, as [leg, progress] steps: off the wrong leg first (back
+    // to the entry), then out along the place's own leg.
+    const steps = [];
+    if (state.leg.progress > 0 && state.leg.to !== target) steps.push([state.leg.to, 0]);
+    if (target) steps.push([target, 1]);
+    const next = () => {
+      if (id !== journey) return Promise.resolve(false);
+      if (!steps.length) { announce(arrival[place]); return Promise.resolve(true); }
+      const [to, progress] = steps.shift(), from = state.leg.to === to ? state.leg.progress : 0;
+      const span = Math.abs(progress - from);
+      if (instant || still.matches || span < 1e-6) { state.setLeg('entry', to, progress); return next(); }
+      if (state.leg.to !== to) state.setLeg('entry', to, from);
+      announce(walking[to]);
+      return state.moveTo(progress, state.durations[to] * Math.max(.35, span)).then(arrived => arrived && next());
+    };
+    return next();
+  };
 
   window.sceneCamera = state;
   new ResizeObserver(update).observe(screen);

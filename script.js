@@ -40,34 +40,43 @@
   const SPIN_DEG_PER_PX = 0.5; // purely visual — how fast the wireframe ball turns
   const NORMAL_PULSE_DUR = 5; // matches the site's normal resting pulse speed
   const NORMAL_SPARK_DUR = 6; // matches the site's normal resting spark speed
-  // The visitor arrives standing far back in the room (scene-camera.js's
-  // entry point), and the view waits there, quietly alive, until they choose
-  // the chair. The walk to it is a real camera move shared by the room and
-  // the CSS portal, never a zoom; for now along a straight path. The table
-  // stays on one horizontal plane throughout and after unlocking.
-  // data-approach on #deviceTilt: entry -> walking -> ready (seated).
+  // The visitor arrives standing far back in the room, and the view waits
+  // there, quietly alive, until they choose where to go: the chair (the
+  // table and its portal) or the study nook's shelf. Where they are is the
+  // camera's navigation state (scene-camera.js: ENTRY, CHAIR_APPROACH,
+  // SEATED, SHELF_APPROACH, SHELF_INSPECTION); every move is a real camera
+  // move shared by the room and the CSS portal, never a zoom. The table stays
+  // on one horizontal plane throughout and after unlocking.
+  // data-approach on #deviceTilt follows it: entry, walking, ready (seated)
+  // or shelf.
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const POSES = ['intro-pose', 'intro-pose-zoomed'];
   const roomShell = document.getElementById('roomShell');
   const entryTargets = document.getElementById('entryTargets');
   const goChair = document.getElementById('goChair');
-  let approachAnimation = null;
+  const goShelf = document.getElementById('goShelf');
+  const camera = window.sceneCamera;
+  let approachAnimation = null; // set while walking (the cloth waits for it)
 
   function setPose(pose) {
     deviceTilt.classList.remove(...POSES);
     if (pose) deviceTilt.classList.add(pose);
   }
 
+  // The page's side of each navigation state.
+  addEventListener('room-navigation', ({detail: {state}}) => {
+    const approach = {ENTRY: 'entry', SEATED: 'ready', SHELF_INSPECTION: 'shelf'}[state] ?? 'walking';
+    deviceTilt.dataset.approach = approach;
+    approachAnimation = approach === 'walking' ? {state} : null;
+    showEntryTargets(state === 'ENTRY');
+    if (state === 'SEATED') clothControl.removeAttribute('aria-disabled');
+    else { clothControl.setAttribute('aria-disabled', 'true'); clothControl.tabIndex = -1; }
+  });
+
   // Seated, at once: where every way in ends (the walk, reduced motion, skip).
   function cancelApproach() {
-    approachAnimation = null;
-    window.sceneCamera.stop();
-    window.sceneCamera.setIdle(false);
-    window.sceneCamera.setApproach(1);
+    camera.go('chair', {instant: true});
     deviceTilt.classList.remove('intro-walking');
-    deviceTilt.dataset.approach = 'ready';
-    clothControl.removeAttribute('aria-disabled');
-    showEntryTargets(false);
   }
 
   function sitDown() {
@@ -77,20 +86,14 @@
     clothControl.tabIndex = 0;
   }
 
-  // Standing at the entry, waiting for the visitor. The CSS transition stays
-  // off until seated, so no pose change is ever animated by the wrapper.
+  // Standing at the entry, waiting for the visitor (also the dev back
+  // button's reset). The CSS transition stays off until seated, so no pose
+  // change is ever animated by the wrapper.
   function enterRoom() {
-    approachAnimation = null;
-    window.sceneCamera.stop();
     measureScreen();
     deviceTilt.classList.add('intro-walking');
     setPose('intro-pose');
-    window.sceneCamera.setApproach(0);
-    window.sceneCamera.setIdle(true);
-    deviceTilt.dataset.approach = 'entry';
-    clothControl.setAttribute('aria-disabled', 'true');
-    clothControl.tabIndex = -1;
-    showEntryTargets(true);
+    camera.go('entry', {instant: true});
     // Without the room's renderer there is no room to stand in: sit down.
     if (roomShell?.classList.contains('room-fallback')) sitDown();
   }
@@ -98,51 +101,66 @@
   // The chair was chosen: walk there and sit down (at once under reduced motion).
   // keyboard: chosen with Enter or Space, so the focus moves on to the cloth.
   function walkToChair(keyboard = false) {
-    if (deviceTilt.dataset.approach !== 'entry') return;
-    const arrive = () => { sitDown(); if (keyboard) clothControl.focus({preventScroll: true}); };
-    showEntryTargets(false);
-    window.sceneCamera.setIdle(false);
-    if (reducedMotion.matches) { arrive(); return; }
-    deviceTilt.dataset.approach = 'walking';
-    const animation = {};
-    approachAnimation = animation;
-    window.sceneCamera.moveTo(1, 5400).then(arrived => {
-      if (arrived && approachAnimation === animation) arrive();
+    if (camera.navigation !== 'ENTRY') return;
+    camera.go('chair').then(arrived => {
+      if (!arrived) return;
+      sitDown();
+      if (keyboard) clothControl.focus({preventScroll: true});
     });
   }
-  reducedMotion.addEventListener('change', () => {
-    if (reducedMotion.matches && approachAnimation) sitDown();
+  // The shelf was chosen: walk there and stand looking at it. Escape walks
+  // back to the entry (the final navigation UI is still to be designed).
+  function walkToShelf() {
+    if (camera.navigation === 'ENTRY') camera.go('shelf');
+  }
+  function leaveShelf(keyboard = false) {
+    if (!['SHELF_INSPECTION', 'SHELF_APPROACH'].includes(camera.navigation)) return;
+    camera.go('entry').then(arrived => { if (arrived && keyboard) goShelf?.focus({preventScroll: true}); });
+  }
+  addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !['SHELF_INSPECTION', 'SHELF_APPROACH'].includes(camera.navigation)) return;
+    event.preventDefault();
+    leaveShelf(true);
   });
   if (roomShell) new MutationObserver(() => {
     if (roomShell.classList.contains('room-fallback') && deviceTilt.dataset.approach !== 'ready') sitDown();
   }).observe(roomShell, {attributes: true, attributeFilter: ['class']});
 
-  // The places to go from the entry: invisible buttons over the chair and the
-  // table, which the room draws. Re-placed whenever the camera moves.
+  // The places to go from the entry: invisible buttons laid over what the
+  // room draws there, the chair with the table, and the study nook.
+  // Re-placed whenever the camera moves.
   function showEntryTargets(on) {
     if (!entryTargets) return;
     entryTargets.hidden = !on;
     if (on) placeEntryTargets();
     else if (entryTargets.contains(document.activeElement)) document.activeElement.blur();
   }
-  function placeEntryTargets() {
-    if (!entryTargets || entryTargets.hidden) return;
-    const camera = window.sceneCamera, table = screenEl.querySelector('.portal-table');
-    const halfWidth = table.clientWidth / camera.units / 2 + .05, halfDepth = table.clientHeight / camera.units / 2 + .05;
-    // The armchair stands where room-scene.js puts it, just behind the seated eye.
-    const chair = camera.seated.distance - .06, corners = [];
-    for (const x of [-halfWidth, halfWidth]) for (const z of [-halfDepth, halfDepth]) corners.push([x, 0, z], [x, camera.tableHeight, z]);
-    for (const x of [-.32, .32]) for (const z of [chair - .28, chair + .36]) corners.push([x, 0, z], [x, 1.05, z]);
+  function cover(button, points) {
     let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
-    for (const corner of corners) {
-      const p = camera.project(...corner);
+    for (const point of points) {
+      const p = camera.project(...point);
       if (p.depth < .1) continue;
       left = Math.min(left, p.x); right = Math.max(right, p.x); top = Math.min(top, p.y); bottom = Math.max(bottom, p.y);
     }
-    if (!(right > left)) return;
-    Object.assign(goChair.style, {left: left - 12 + 'px', top: top - 12 + 'px', width: right - left + 24 + 'px', height: bottom - top + 24 + 'px'});
+    if (!button || !(right > left)) return;
+    Object.assign(button.style, {left: left - 12 + 'px', top: top - 12 + 'px', width: right - left + 24 + 'px', height: bottom - top + 24 + 'px'});
+  }
+  function placeEntryTargets() {
+    if (!entryTargets || entryTargets.hidden) return;
+    const table = screenEl.querySelector('.portal-table');
+    const halfWidth = table.clientWidth / camera.units / 2 + .05, halfDepth = table.clientHeight / camera.units / 2 + .05;
+    // The armchair stands where room-scene.js puts it, just behind the seated eye.
+    const chair = camera.seated.distance - .06, chairPoints = [], nookPoints = [];
+    for (const x of [-halfWidth, halfWidth]) for (const z of [-halfDepth, halfDepth]) chairPoints.push([x, 0, z], [x, camera.tableHeight, z]);
+    for (const x of [-.32, .32]) for (const z of [chair - .28, chair + .36]) chairPoints.push([x, 0, z], [x, 1.05, z]);
+    // The nook's opening in the left wall (room-scene.js: z -2.6 to -0.5,
+    // its arch 2.12 m high), and the floor in front where the smoke gathers.
+    for (const z of [-2.6, -.5]) nookPoints.push([-2.4, 0, z], [-2.4, 2.12, z], [-2.05, 0, z]);
+    cover(goChair, chairPoints);
+    cover(goShelf, nookPoints);
   }
   addEventListener('scene-camera-change', placeEntryTargets);
+  goShelf?.addEventListener('click', walkToShelf);
   // A click from the keyboard (Enter or Space) carries no pointer detail.
   goChair?.addEventListener('click', event => walkToChair(event.detail === 0));
 

@@ -480,6 +480,29 @@ try {
     'The WebGL canvas must be hidden once fully morphed into a page');
   console.log('PASS: 1920x910 projected page fits the viewport, canvas hidden in page mode');
 
+  // From the entry the visitor can also walk to the study nook's shelf and
+  // back (scene-camera.js's navigation states). The table is behind them
+  // there, its portal hidden and its cloth out of reach.
+  await cdp('Emulation.setDeviceMetricsOverride', {width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+  await cdp('Page.navigate', {url:`http://127.0.0.1:${port}/`});
+  await until(`!!window.portalMatter && window.sceneCamera?.navigation === 'ENTRY' && !document.querySelector('#entryTargets').hidden`);
+  await click('#goShelf');
+  await until(`sceneCamera.navigation !== 'ENTRY'`);
+  assert.equal(await evaluate(`sceneCamera.navigation + ':' + document.querySelector('#deviceTilt').dataset.approach`),
+    'SHELF_APPROACH:walking', 'Choosing the nook walks to the shelf');
+  await until(`sceneCamera.navigation === 'SHELF_INSPECTION'`, 15000);
+  assert.deepEqual(await evaluate(`({approach: document.querySelector('#deviceTilt').dataset.approach,
+    targets: document.querySelector('#entryTargets').hidden, cloth: document.querySelector('#tableCloth').getAttribute('aria-disabled'),
+    behind: document.querySelector('#screen').classList.contains('is-behind'), fov: studyRoom.camera.fov})`),
+    {approach: 'shelf', targets: true, cloth: 'true', behind: true, fov: 72}, 'At the shelf the table is behind the visitor and out of reach');
+  await shot('00s-shelf');
+  await cdp('Input.dispatchKeyEvent', {type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await cdp('Input.dispatchKeyEvent', {type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await until(`sceneCamera.navigation === 'ENTRY'`, 15000);
+  assert.equal(await evaluate(`document.querySelector('#deviceTilt').dataset.approach + ':' + !document.querySelector('#entryTargets').hidden`),
+    'entry:true', 'Escape walks back to the entry');
+  console.log('PASS: the walk to the shelf and back');
+
   // Observe the approach inside the page. Software-rendered screenshots can
   // take longer than the dolly itself; testing its old state after capturing
   // an image is a race, not a reliable assertion about cloth input gating.
@@ -658,6 +681,11 @@ try {
   await cdp('Page.addScriptToEvaluateOnNewDocument', {source:`const getContext=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type==='webgl'?null:getContext.call(this,type,...args)}`});
   await cdp('Page.reload'); await until(`!!window.portalMatter && typeof window.bringHandCardToFront === 'function'`);
   assert.equal(await evaluate(`document.querySelector('#deviceTilt').dataset.approach`), 'entry', 'Reduced motion also starts at the entry, waiting for the visitor');
+  assert.equal(await evaluate(`document.querySelector('#goShelf').click(), sceneCamera.navigation + ':' + document.querySelector('#deviceTilt').dataset.approach`),
+    'SHELF_INSPECTION:shelf', 'Reduced motion skips the walk to the shelf');
+  await cdp('Input.dispatchKeyEvent', {type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await cdp('Input.dispatchKeyEvent', {type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await until(`sceneCamera.navigation === 'ENTRY'`, 2000);
   assert.equal(await evaluate(`document.querySelector('#goChair').click(), document.querySelector('#deviceTilt').dataset.approach + ':' + sceneCamera.approach`),
     'ready:1', 'Reduced motion skips the camera journey to the chair');
   assert.equal(await evaluate(`document.querySelector('#portalMatter').classList.contains('webgl')`), false);

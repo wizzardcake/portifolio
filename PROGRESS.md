@@ -724,3 +724,145 @@ Screenshots are in `verification/stage5/`, all inspected.
   machine has intermittent stalls since the Windows update; the timeout in my
   capture script was raised.
 - **Tests:** 13 of 14 suites passed in the full run. `orb-check` failed once on a timing check ("It opens after pinch-off": the orb was still `idle` at the 1,447 ms sample), in code this stage did not touch. Run alone it passed 5/5 twice: a frame-timing flake on the slower machine.
+
+## Stage 6: Navigation states
+
+**Changed:**
+- `scene-camera.js`: the states, `go()` and the `room-navigation` event.
+- `script.js`: the page now follows the state. It adds the nook's target and
+  Escape.
+- `index.html`: `#goShelf`.
+- `room-scene.js`: when the smoke grows in.
+- `tests/portal-check.mjs`: a navigation check.
+
+### Structure
+
+- **Five named states over the existing points and legs.** They live in
+  `scene-camera.js` beside the legs they name. There is no new module and no
+  second loop.
+
+  | State | Where the camera is |
+  | --- | --- |
+  | `ENTRY` | At the entry point (progress 0 on any leg) |
+  | `CHAIR_APPROACH` | Moving on the entry–seat leg, in either direction |
+  | `SEATED` | At the seat |
+  | `SHELF_APPROACH` | Moving on the entry–shelf leg, in either direction |
+  | `SHELF_INSPECTION` | At the shelf |
+
+- **`sceneCamera.go(place)`** takes `'entry'`, `'chair'` or `'shelf'`.
+  - It plans the way as leg steps: back to the entry first if the camera is on
+    another leg, then out along the place's own leg. Passing through the entry
+    is not arriving there, so `ENTRY` is not announced on the way.
+  - It walks the steps with the existing driver (`moveTo`, smoothstep). A whole
+    leg takes 5.4 s to the seat (as before) and 4.6 s to the shelf; part of a
+    leg takes proportionally less.
+  - It resolves `true` on arrival, or `false` if another `go()` has taken over.
+  - Under reduced motion, or with `{instant: true}`, it jumps there at once, and
+    the new state already holds when `go()` returns. The page relies on that,
+    for example when ▶ sits down and reveals in one click.
+- **`sceneCamera.navigation`** is the current state. Each change dispatches a
+  `room-navigation` event with `{state, previous}`. The value starts as
+  `SEATED`, because that is where the leg starts, so the first event on load is
+  `SEATED → ENTRY`.
+- **The idle life follows the state.** The sway and the lean run where the
+  visitor stands (the entry and the shelf), and stop while walking and while
+  seated.
+- **Reset:** `go('entry')` works from anywhere. The dev ◀ uses it, instantly.
+- **The data is unchanged:** points (position plus `lookAt`), legs, and `via`
+  control points. The states are only names over them, so real walk animations
+  can later replace a leg's path without changing the page.
+
+### The page side
+
+- **`script.js` no longer moves the camera itself.** One listener maps each
+  state onto the page:
+  - `data-approach` becomes `entry`, `walking`, `ready` (seated) or `shelf`.
+  - The entry targets show only at `ENTRY`.
+  - The cloth takes input only when `SEATED`.
+
+  The chair, ◀/▶ and the room's fallback all go through `go()`.
+- **`#goShelf`** is an invisible button over the nook, like `#goChair`. It
+  covers the nook's opening and the floor in front where the smoke gathers, and
+  is labelled "Gå bort til hylla i nisjen". The plan had the shelf reachable
+  only from the console, but the shelf view needed a way in to be tried as a
+  visitor would.
+- **Escape walks back from the shelf.** When the keyboard is used, the focus
+  returns to `#goShelf`.
+- **The smoke grows in from the visitor's feet whenever it appears after being
+  gone:** on arrival, and back at the entry after sitting down. It is no longer
+  keyed to `data-approach`, which now has a fourth value. Back from the shelf it
+  was never gone, so it does not grow in again. Its presence along each leg is
+  unchanged from stages 4 and 5.
+- **Fixed on the way:** while the first `go()` was async, an instant move could
+  finish after a newer one had started and announce a stale state. `go()` is now
+  synchronous whenever nothing has to move, and every step checks that its
+  journey is still the current one.
+
+### Verification
+
+Screenshots are in `verification/stage6/`, all inspected.
+
+- **The flow at 1440×900**, with real pointer clicks and keys sent over CDP.
+  The state log reads:
+
+  ```
+  SEATED>ENTRY (load) | ENTRY>SHELF_APPROACH | SHELF_APPROACH>SHELF_INSPECTION |
+  SHELF_INSPECTION>SHELF_APPROACH (Escape) | SHELF_APPROACH>ENTRY |
+  ENTRY>CHAIR_APPROACH | CHAIR_APPROACH>SEATED | SEATED>ENTRY (◀) |
+  ENTRY>SHELF_APPROACH | SHELF_APPROACH>SHELF_INSPECTION |
+  SHELF_INSPECTION>SHELF_APPROACH | SHELF_APPROACH>CHAIR_APPROACH | CHAIR_APPROACH>SEATED
+  ```
+
+  The last line is `go('shelf')` followed by `go('chair')`, which passes
+  through the entry.
+  - **Entry:** both targets are placed. The nook's is 202 × 322 px, and the point
+    clicked on the nook hits `#goShelf`.
+  - **At the shelf (`nav-shelf`):** `data-approach` is `shelf`, the targets are
+    hidden, the portal is hidden behind the eye, and the cloth is disabled
+    (tabindex −1).
+  - **Back at the entry (`nav-back-at-entry`):** the targets are back, the
+    focus ring sits on the nook, and the smoke stayed put.
+  - **Seated (`nav-seated`):** `ready`, the cloth enabled with tabindex 0,
+    pitch 75 and no smoke.
+  - **Interrupted:** `go('shelf')`, then `go('entry')` 1.2 s later. The first
+    resolves `false` and the second `true`, back at the start of the leg.
+- **No extra loops.** rAF requests per file over 2 s, stage 5 commit against
+  stage 6 in the same session:
+
+  | View | Stage 5 | Stage 6 |
+  | --- | --- | --- |
+  | Entry | camera 110, room 248, effects 110, script 110 | 111, 251, 111, 111 |
+  | Seated, covered | room 226, effects 113, script 113 | 228, 114, 114 |
+  | Seated, portal open | room 240; effects, surface, depth and aura 114 each | 239; 113 each |
+
+  The same loops run in both, at the same rates.
+- **Reduced motion.**
+  - Every move is instant, and the log has no approach states:
+    `SEATED>ENTRY | ENTRY>SHELF_INSPECTION | SHELF_INSPECTION>ENTRY | ENTRY>SEATED`.
+  - Switching it on mid-walk (25 % of the way to the shelf) arrives at once.
+  - The camera driver requests no frames at the entry or the shelf. The smoke
+    is a still frame (`reduced-entry`, `reduced-shelf`, `reduced-seated`).
+- **Compared with stage 5 by image difference.**
+  - The entry and the seated view with the cloth on are pixel-identical at
+    1440×900 and at 390×844 (DPR 2).
+  - With the portal open, only the animated orb, water and clouds differ.
+  - Against the baseline, the seated view with the cloth on still differs only
+    in the 67×33 px patch of sky.
+  - CSS and WebGL stay registered to within 0.16 px.
+- **Tests.** In the full run, 12 of 14 suites passed.
+  - `portal` and `portal --foundation-only` hit CDP timeouts while my capture
+    scripts were running at the same time. Run alone, they passed 7/7 and 6/6.
+  - New in `portal-check`: a walk from the entry to the shelf and back. It
+    checks the states, `data-approach`, the hidden targets, the disabled cloth,
+    the hidden portal and FOV 72 at the shelf, and Escape back to the entry.
+    The reduced-motion block now also checks that the shelf round trip is
+    instant.
+
+### Still weak
+
+- **Pointer users have no way back from the shelf.** Only Escape or ◀ returns.
+  A minimal way back is for the glue pass; the final navigation UI is still to
+  be designed.
+- **The hit areas are rectangles.** At the entry, the nook's area overlaps the
+  top left of the chair's, a strip of floor beside the chair's left post. Inside
+  the overlap the nook wins.

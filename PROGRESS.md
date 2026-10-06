@@ -1330,3 +1330,45 @@ Screenshots are in `verification/refine-stage4/`:
 - **The look is pointer-only.** Keyboard and touch users reach the chair from
   the shelf by way of the entry: Escape or a click, then the chair.
 - **The walk round the table** passes 0.30 m from the table's outline.
+
+## Refine 5: Holistic pass
+
+I walked the whole visit as a visitor would, on the virtual clock at
+1440×900 (`verification/refine-final/sheet-visit-final`):
+- the entry, with the narrower smoke growing in and parting;
+- choosing the shelf, and the frontal shelf view;
+- looking round with the pointer and turning to the chair;
+- clicking the chair, and sitting down.
+
+**Changed:** `scene-camera.js`, two values.
+
+- **The walk to the shelf was three times faster than the others.** After
+  refine 2 and 3 its path is 7.2 m long (it was 4.1 m), still walked in 4.6 s:
+  1.57 m/s on average, 2.35 m/s at its fastest. The shelf to the seat runs at
+  0.81 m/s and the walk in at 0.52 m/s. It now takes 6.6 s, about 1.1 m/s, so
+  the room's walks share one pace. The walk in keeps its original, deliberate
+  pace.
+- **The turn into the seat from the shelf starts a little earlier in
+  landscape** (progress^1.5 instead of ^1.8). The dark front half of the room
+  fills the view for a shorter stretch before the lit window and stair come
+  round. The peak turn drops to about 55°/s, the same as the look's cap.
+  Portrait keeps 1.8; with 1.5 the chair slips out of its narrow view at
+  mid-walk.
+
+### Checked and left as they are
+
+- **Camera distances** across the states read as one room. The entry stands
+  far back, the shelf at a reading distance, and the seat as before.
+- **The smoke's width** suits the room from the entry, from the shelf and when
+  turning round.
+- **Mouse-look against the entry's idle:** at the entry the pointer only leans
+  the view a little; at the shelf it turns it. That is deliberate, since the
+  shelf is the place to look round, and both use the same spring-like easing
+  and the same pointer.
+- **Lighting:**
+  - The window's moonbeam and the green stair light carry the walks to the
+    shelf and into the seat.
+  - The portal's aura sleeps under the cloth throughout.
+  - The front half of the room stays dark. That shows most on the walk from the
+    shelf to the chair, and it needs light, not glue.
+- **Tests:** all 14 suites passed on this code.

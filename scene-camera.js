@@ -64,7 +64,7 @@
     // the left round the table's left in landscape, to the right round its
     // right in portrait.
     turn: {
-      wide: {'shelf>seated': {ease: 1.8, left: true}},
+      wide: {'shelf>seated': {ease: 1.5, left: true}},
       portrait: {'shelf>seated': {ease: 1.8}},
     },
     // At the shelf the view follows the pointer: a slight look round the
@@ -306,8 +306,10 @@
   const pointOf = {entry: 'entry', chair: 'seated', shelf: 'shelf'};
   const approaching = {seated: 'CHAIR_APPROACH', shelf: 'SHELF_APPROACH'};
   // The legs, each walked either way, and their walking times for the whole
-  // leg, ms (the walk in keeps its original pace).
-  state.durations = {'entry>seated': 5400, 'entry>shelf': 4600, 'shelf>seated': 5200};
+  // leg, ms: the walk in to the table keeps its original, slow pace; the
+  // longer walks to and from the shelf (about 7 and 4 m) go at about a metre
+  // a second.
+  state.durations = {'entry>seated': 5400, 'entry>shelf': 6600, 'shelf>seated': 5200};
   // The leg between two points, as [from, to, the progress that reaches b].
   const between = (a, b) => state.durations[a + '>' + b] ? [a, b, 1] : state.durations[b + '>' + a] ? [b, a, 0] : null;
   let navigation = 'SEATED', journey = 0;

@@ -69,7 +69,7 @@
     const approach = {ENTRY: 'entry', SEATED: 'ready', SHELF_INSPECTION: 'shelf'}[state] ?? 'walking';
     deviceTilt.dataset.approach = approach;
     approachAnimation = approach === 'walking' ? {state} : null;
-    showEntryTargets(state === 'ENTRY');
+    showEntryTargets(state);
     if (leaveShelfButton) leaveShelfButton.hidden = state !== 'SHELF_INSPECTION';
     if (state === 'SEATED') clothControl.removeAttribute('aria-disabled');
     else { clothControl.setAttribute('aria-disabled', 'true'); clothControl.tabIndex = -1; }
@@ -100,10 +100,11 @@
     if (roomShell?.classList.contains('room-fallback')) sitDown();
   }
 
-  // The chair was chosen: walk there and sit down (at once under reduced motion).
+  // The chair was chosen, from the entry or from the shelf after turning
+  // toward it: walk there and sit down (at once under reduced motion).
   // keyboard: chosen with Enter or Space, so the focus moves on to the cloth.
   function walkToChair(keyboard = false) {
-    if (camera.navigation !== 'ENTRY') return;
+    if (!['ENTRY', 'SHELF_INSPECTION'].includes(camera.navigation)) return;
     camera.go('chair').then(arrived => {
       if (!arrived) return;
       sitDown();
@@ -130,23 +131,29 @@
     if (roomShell.classList.contains('room-fallback') && deviceTilt.dataset.approach !== 'ready') sitDown();
   }).observe(roomShell, {attributes: true, attributeFilter: ['class']});
 
-  // The places to go from the entry: invisible buttons laid over what the
-  // room draws there, the chair with the table, and the study nook.
-  // Re-placed whenever the camera moves.
-  function showEntryTargets(on) {
+  // The places to go: invisible buttons laid over what the room draws there.
+  // At the entry the chair (with the table) and the study nook; at the shelf
+  // the chair, once the visitor has turned far enough to see it. Re-placed
+  // whenever the camera moves.
+  function showEntryTargets(state) {
     if (!entryTargets) return;
+    const on = state === 'ENTRY' || state === 'SHELF_INSPECTION';
     entryTargets.hidden = !on;
+    if (goShelf) goShelf.hidden = state !== 'ENTRY';
     if (on) placeEntryTargets();
     else if (entryTargets.contains(document.activeElement)) document.activeElement.blur();
   }
+  // A button over the screen box of some world points; hidden while any of
+  // them is behind the eye, or less than a hand's breadth of it is on screen.
   function cover(button, points) {
+    if (!button) return;
     let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
     for (const point of points) {
       const p = camera.project(...point);
-      if (p.depth < .1) continue;
+      if (p.depth < .1) { button.hidden = true; return; }
       left = Math.min(left, p.x); right = Math.max(right, p.x); top = Math.min(top, p.y); bottom = Math.max(bottom, p.y);
     }
-    if (!button || !(right > left)) return;
+    button.hidden = Math.min(right, innerWidth) - Math.max(left, 0) < 48 || Math.min(bottom, innerHeight) - Math.max(top, 0) < 48;
     Object.assign(button.style, {left: left - 12 + 'px', top: top - 12 + 'px', width: right - left + 24 + 'px', height: bottom - top + 24 + 'px'});
   }
   function placeEntryTargets() {
@@ -161,7 +168,7 @@
     // its arch 2.12 m high), and the floor in front where the smoke gathers.
     for (const z of [-2.6, -.5]) nookPoints.push([-2.4, 0, z], [-2.4, 2.12, z], [-2.05, 0, z]);
     cover(goChair, chairPoints);
-    cover(goShelf, nookPoints);
+    if (camera.navigation === 'ENTRY') cover(goShelf, nookPoints);
   }
   addEventListener('scene-camera-change', placeEntryTargets);
   // A click from the keyboard (Enter or Space) carries no pointer detail.

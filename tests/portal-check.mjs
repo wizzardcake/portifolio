@@ -491,17 +491,31 @@ try {
   assert.equal(await evaluate(`sceneCamera.navigation + ':' + document.querySelector('#deviceTilt').dataset.approach`),
     'SHELF_APPROACH:walking', 'Choosing the nook walks to the shelf');
   await until(`sceneCamera.navigation === 'SHELF_INSPECTION'`, 15000);
+  const targetShown = selector => `(b => !b.hidden && !b.closest('[hidden]'))(document.querySelector('${selector}'))`;
   assert.deepEqual(await evaluate(`({approach: document.querySelector('#deviceTilt').dataset.approach,
-    targets: document.querySelector('#entryTargets').hidden, back: !document.querySelector('#leaveShelf').hidden,
+    nook: ${targetShown('#goShelf')}, chair: ${targetShown('#goChair')}, back: !document.querySelector('#leaveShelf').hidden,
     cloth: document.querySelector('#tableCloth').getAttribute('aria-disabled'),
     behind: document.querySelector('#screen').classList.contains('is-behind'), fov: studyRoom.camera.fov})`),
-    {approach: 'shelf', targets: true, back: true, cloth: 'true', behind: true, fov: 72}, 'At the shelf the table is behind the visitor and out of reach');
+    {approach: 'shelf', nook: false, chair: false, back: true, cloth: 'true', behind: true, fov: 72}, 'At the shelf the table is behind the visitor and out of reach');
   await shot('00s-shelf');
   await click('#leaveShelf');
   await until(`sceneCamera.navigation === 'ENTRY'`, 15000);
   assert.equal(await evaluate(`document.querySelector('#deviceTilt').dataset.approach + ':' + !document.querySelector('#entryTargets').hidden + ':' + document.querySelector('#leaveShelf').hidden`),
     'entry:true:true', 'A click at the shelf walks back to the entry');
-  console.log('PASS: the walk to the shelf and back');
+  // At the shelf the view follows the pointer: toward the left edge it turns
+  // round far enough to see the chair, which then takes a click straight to
+  // the seat (the same seated view as walking in from the entry).
+  await click('#goShelf');
+  await until(`sceneCamera.navigation === 'SHELF_INSPECTION'`, 15000);
+  await cdp('Input.dispatchMouseEvent', {type:'mouseMoved', x:2, y:500, buttons:0});
+  await until(`${targetShown('#goChair')} && sceneCamera.camera.yaw > 150`, 8000);
+  await shot('00t-shelf-turned');
+  await click('#goChair');
+  await until(`sceneCamera.navigation === 'CHAIR_APPROACH'`, 3000);
+  await until(`sceneCamera.navigation === 'SEATED' && document.querySelector('#deviceTilt').dataset.approach === 'ready'`, 15000);
+  assert.deepEqual(await evaluate(`({yaw: sceneCamera.camera.yaw, pitch: sceneCamera.camera.pitch, approach: sceneCamera.approach, cloth: document.querySelector('#tableCloth').getAttribute('aria-disabled')})`),
+    {yaw: 0, pitch: 75, approach: 1, cloth: null}, 'Turning to the chair at the shelf and choosing it seats the visitor');
+  console.log('PASS: the walk to the shelf and back, and from the shelf to the chair');
 
   // Observe the approach inside the page. Software-rendered screenshots can
   // take longer than the dolly itself; testing its old state after capturing

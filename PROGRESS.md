@@ -1192,3 +1192,141 @@ the walk and the shelf at three sizes, and the sheets `sheet-walk-1440` and
   - `portal --depth-only` failed once on its lit-mist threshold, the known
     intermittent failure from Phase 0; this stage does not touch the portal's
     depth. Run alone it then passed 3/3.
+
+## Refine 4: Looking round at the shelf, and back to the chair
+
+**Changed:**
+- `scene-camera.js`: the look, a direct leg from the shelf to the seat, and the
+  way planner.
+- `script.js`: the chair's target at the shelf.
+- `room-scene.js`: a front wall with a doorway.
+- `index.html`: a comment.
+- `tests/portal-check.mjs`.
+
+### The look
+
+At `SHELF_INSPECTION` the view follows the pointer. It uses the existing
+pointer listener and the one driver loop; there is no new listener and no new
+loop.
+
+- **Near the middle** the look is slight: about 1°, plus the existing lean's
+  parallax.
+- **Toward either edge** it turns progressively, along a smoothstep from 30 %
+  to 95 % of the way to the edge, up to 75° at the very edge. It also tilts
+  ±3° up or down with the pointer's height.
+- **Movement:** it follows like a critically damped spring, capped at 55°/s.
+  It eases back to the nook when the pointer returns to the middle or leaves
+  the window.
+- **Redraws:** every frame only while it turns, otherwise at the idle's pace.
+- **None under reduced motion or on touch,** as for the rest of the standing
+  life. Switching reduced motion on lets go of the look at once.
+
+### Reaching the chair
+
+- **The chair is reachable.** From the frontal shelf point it stands about 100°
+  round to the left in landscape (72° in portrait). The 75° maximum brings it
+  about 25° inside the frame, together with the table, with no change to the
+  camera point.
+- **The open front.** Turning that far looked straight into the room's open
+  front end: a flat grey void behind the chair (`look-left-try1`). The opening
+  lies directly behind the chair, so no smaller turn avoids it. I asked, and
+  the decision was a front wall with a doorway.
+- **The front wall** closes the room's open end (z = +5.9).
+  - **The doorway** is where the visitor came in: x 0.25 to 1.35 and 2.1 m
+    high, behind the entry point. The smoke's trunk starts just inside it, and
+    a dark passage of 1 m lies beyond.
+  - **Built from single-sided flat faces** merged into the existing stone and
+    plinth meshes. There is no new draw call, and the room renders 9,971
+    triangles instead of 9,947, still under 10,000. Faces seen only from
+    inside cast no shadow into the room.
+  - **It is never visible from the entry or the seat;** both are pixel-identical
+    to before.
+
+### The chair at the shelf
+
+- The chair's invisible target (with the table, as at the entry) appears at
+  the shelf once the chair is in view: all its corners in front of the eye,
+  and at least 48 px of it on screen.
+- A click walks to the seat (`CHAIR_APPROACH` → `SEATED`), at once under
+  reduced motion.
+- Clicking anywhere else still walks back to the entry.
+
+### The leg from the shelf to the seat
+
+- **A direct leg** (`shelf>seated`, 5.2 s) goes round the table: its left in
+  landscape, 0.30 m clear of the table's outline, and its right in portrait,
+  where the seat is behind the chair.
+- **The look is carried along** from where the walk set off, and let go as the
+  heading turns.
+- **The heading** follows progress^1.8. It keeps facing the chair while
+  walking round the table, then turns into the seat's view as the visitor sits
+  down, at no more than about 59°/s.
+- **Turn direction:** in landscape it turns the long way, to the left across
+  the chair. The short way stared into the left wall at mid-walk. In portrait
+  it turns the short way.
+- **Exactly 0 at the seat:** headings are now reported in (−180°, 180°], so the
+  seat's heading is exactly 0 however it was reached. The orb's shader uses it
+  linearly.
+- **The way planner** now walks direct legs between any two places, each leg
+  either way. The walking states are named for where the walk leads; walking
+  back to the entry, for where it comes from. `durations` is keyed by leg.
+
+### Verification
+
+Screenshots are in `verification/refine-stage4/`:
+- `sheet-look-try3`: shelf, slight, left, centre, right, left again, and the
+  walk to the chair with the earlier turn;
+- `look-left-try1` (the open end, before the wall) and `look-left-try3` (with
+  the wall);
+- `sheet-chair-try4`: the walk with the left turn;
+- `sheet-portrait` and `sheet-portrait2`: portrait;
+- `reduced-shelf-pointer-left`: reduced motion.
+
+- **The look,** at 1440×900 on the virtual clock:
+
+  | Pointer | Yaw |
+  | --- | --- |
+  | Slight | 90.9° |
+  | Left edge | 165.6° |
+  | Back to the middle | 90.2° |
+  | Right edge | 14.4° |
+
+  The largest step per frame while turning is 0.93°, which is the speed cap;
+  there is no snapping.
+- **The chair target** appears when turned left and covers the chair and the
+  table.
+- **A click on the chair** runs `ENTRY > SHELF_APPROACH > SHELF_INSPECTION >
+  CHAIR_APPROACH > SEATED`. The visitor is seated at x 0, z 1.665, eye 1.18,
+  yaw 0, pitch 75 (z 2.53 in portrait). The walk faces the chair until it is
+  close.
+- **Seated,** reached through the entry on the deterministic capture: identical
+  to the refine baseline with the cloth on, with registration within 0.1 px.
+- **The entry and the shelf view** are pixel-identical to stage 3, because the
+  wall is not in view.
+- **The frames of the walk to the shelf differ slightly.** The walk now carries
+  the entry's sway and lean and lets them go along the leg, instead of within
+  about a second.
+- **Reduced motion:** with the pointer at the shelf's left edge, the view stays
+  at 90° and the chair target stays hidden. A click goes to the entry, and the
+  chair from there seats the visitor at once.
+- **Frame rate** (1440×900, laptop charging again):
+
+  | View | fps |
+  | --- | --- |
+  | Entry, idle | 60.3 |
+  | Shelf, idle | 60.3 |
+  | Looking round at the shelf (left, right, centre over 6 s) | 58.3, with 11 frames over 20 ms |
+  | Scripted walk, for reference | 51.2 |
+
+- **Tests:** all 14 suites passed. `portal-check` now also checks that no
+  target shows while looking at the nook, that the view turns at the left
+  edge, and that the chair then seats the visitor at yaw 0 and pitch 75.
+
+### Still weak
+
+- **The front of the room is dark.** Turning to the chair shows a dark wall and
+  a barely visible doorway. The chair reads against it, but with little
+  contrast.
+- **The look is pointer-only.** Keyboard and touch users reach the chair from
+  the shelf by way of the entry: Escape or a click, then the chair.
+- **The walk round the table** passes 0.30 m from the table's outline.

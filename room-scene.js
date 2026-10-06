@@ -324,7 +324,25 @@ if (renderer) {
   const nookBack=new THREE.Shape().moveTo(nook.back-T,0);
   nookBack.lineTo(nook.front+T,0);nookBack.lineTo(nook.front+T,nookTop);
   nookBack.lineTo(nook.back-T,nookTop);nookBack.closePath();
+  // The front wall closes the room behind the entry. Its doorway, where the
+  // visitor came in, opens on a short dark passage. It is seen only when the
+  // visitor turns round at the shelf, so it is a few flat faces turned into
+  // the room rather than blocks: the room's triangle budget is nearly spent,
+  // and faces seen only from the room cast no shadow into it.
+  const door={x0:.25,x1:1.35,height:2.1,passage:1};
+  const doorX=(door.x0+door.x1)/2,doorWidth=door.x1-door.x0,doorDeep=T+door.passage,doorIn=room.front+doorDeep/2;
+  const face=(w,h,x,y,z,turn)=>worldUV(turn(new THREE.PlaneGeometry(w,h)).translate(x,y,z));
+  const facingIn=g=>g.rotateY(Math.PI);
   mesh('stone shell',merge([
+    face(door.x0-room.left,H,(room.left+door.x0)/2,H/2,room.front,facingIn),
+    face(room.right-door.x1,H,(door.x1+room.right)/2,H/2,room.front,facingIn),
+    face(doorWidth,H-door.height,doorX,(door.height+H)/2,room.front,facingIn),
+    // The doorway's reveals run on as the passage's sides; its head, floor and end.
+    face(doorDeep,door.height,door.x0,door.height/2,doorIn,g=>g.rotateY(Math.PI/2)),
+    face(doorDeep,door.height,door.x1,door.height/2,doorIn,g=>g.rotateY(-Math.PI/2)),
+    face(doorWidth,doorDeep,doorX,door.height,doorIn,g=>g.rotateX(Math.PI/2)),
+    face(doorWidth,doorDeep,doorX,.002,doorIn,g=>g.rotateX(-Math.PI/2)),
+    face(doorWidth,door.height,doorX,door.height/2,room.front+doorDeep,facingIn),
     extrudeX(leftShape,T,room.left),
     extrudeX(nookShell,nook.depth-T,room.left-T),
     extrudeX(nookBack,T,room.left-nook.depth),
@@ -427,6 +445,11 @@ if (renderer) {
     block(alcove.left-corner.x,plinth,proud,(corner.x+alcove.left)/2,plinth/2,room.back+proud/2),
     block(backJoin-.12-alcove.right,plinth,proud,(alcove.right+backJoin-.12)/2,plinth/2,room.back+proud/2),
     block(proud,plinth,room.front-rightJoin-.12,room.right-proud/2,plinth/2,(rightJoin+.12+room.front)/2),
+    // Along the front wall, either side of the doorway: its face and its top.
+    face(door.x0-room.left-proud,plinth,(room.left+proud+door.x0)/2,plinth/2,room.front-proud,facingIn),
+    face(door.x0-room.left-proud,proud,(room.left+proud+door.x0)/2,plinth,room.front-proud/2,g=>g.rotateX(-Math.PI/2)),
+    face(room.right-proud-door.x1,plinth,(door.x1+room.right-proud)/2,plinth/2,room.front-proud,facingIn),
+    face(room.right-proud-door.x1,proud,(door.x1+room.right-proud)/2,plinth,room.front-proud/2,g=>g.rotateX(-Math.PI/2)),
   ]),stairStone);
 
   // Dark timber: cross beams ending on a curved ring beam over the tower

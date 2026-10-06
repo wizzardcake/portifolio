@@ -1372,3 +1372,61 @@ I walked the whole visit as a visitor would, on the virtual clock at
   - The front half of the room stays dark. That shows most on the walk from the
     shelf to the chair, and it needs light, not glue.
 - **Tests:** all 14 suites passed on this code.
+
+## Final verification of the refinements (`acecad4`)
+
+- **Tests:** all 14 suites passed on the final code. Every changed script and
+  test passes `node --check`.
+- **Console:** I ran three complete visits with real clicks at 1440×900,
+  1920×1080 and 390×844 (DPR 2): entry → nook → shelf → click back → chair →
+  seated → reveal. A second run at each size went entry → shelf → look left,
+  right and left again → click the chair → seated. Neither showed a browser
+  error or warning.
+- **The seated POV** on the deterministic capture:
+  - With the cloth on, it is identical to the refine baseline at all three
+    sizes. Against the original Phase 0 baseline only the known patch of sky
+    differs (0.007 %, 0.006 % and 0.025 % of pixels).
+  - With the portal open, only animated content differs.
+  - CSS and WebGL stay registered to within 0.22 px.
+  - Reached from the shelf, the seat lands at exactly yaw 0 and pitch 75, at
+    the same position.
+- **Portal, cards, cloth and orb:** covered by the suites. The portal (cards,
+  projection, retrieval, reset, keyboard), the cloth, the orb, aura, impact,
+  depth and the Verktøy page all pass, and every full visit ends with the
+  reveal.
+- **Reduced motion:** every move is instant. At the shelf the pointer leaves
+  the view at 90° and the chair target hidden. A click goes to the entry, and
+  the chair from there seats the visitor at once.
+- **Frame rate:** an A/B against `73e14f9`, interleaved over two rounds with
+  the laptop charging (fps; walks are bound by the room's full redraw):
+
+  | View | `73e14f9`, round 1 | Final, round 1 | `73e14f9`, round 2 | Final, round 2 |
+  | --- | --- | --- | --- | --- |
+  | Entry, idle | 60.4 | 60.4 | 59.4 | 60.0 |
+  | Seated | 60.2 | 60.2 | 60.2 | 60.0 |
+  | Portal open | 59.4 | 60.2 | 60.2 | 60.2 |
+  | Shelf, idle | 59.8 | 60.2 | 60.4 | 60.2 |
+  | Real walk to the chair | 35.2 | 32.4 | 34.8 | 35.2 |
+  | Scripted walk | 39 | 36 | 33 | 36.2 |
+  | Real walk to the shelf | 32.2 | 33.3 | 38.7 | 38.0 |
+
+  Looking round at the shelf runs at 58.3 fps.
+
+  **Room budget:**
+
+  | View | `73e14f9` | Final |
+  | --- | --- | --- |
+  | Entry and seated | 26 calls, 9,947 triangles | 26 calls, 9,971 triangles (the front wall) |
+  | Shelf | 20 calls, 6,951 triangles | 14 calls, 6,843 triangles (the frontal view sees less) |
+- **`git diff 73e14f9..HEAD`** touches only this task's files: `index.html`
+  (a comment), `room-scene.js`, `room-smoke.js`, `scene-camera.js`,
+  `script.js`, `tests/portal-check.mjs` and `PROGRESS.md`. No unrelated edits.
+- **Screenshots** are in `verification/refine-final/`:
+  - the visit: `sheet-visit-final`;
+  - each size: `entry-*`, `walk-*`, `shelf-*`;
+  - looking round: `look-left/right/centre/slight-look-*`;
+  - the walk to the chair: `chair-walk-*-look-*`;
+  - seated: `seated-from-shelf-look-*`, `seated-covered/open-*`;
+  - full visits: `tour-*`;
+  - reduced motion: `final-reduced-shelf-pointer-left`;
+  - 1920×1080: `sheet-1920`.

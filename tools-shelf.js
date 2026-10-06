@@ -76,10 +76,6 @@ function tube(points, radius = .002, segments = 12) {
   return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p))), segments, radius, 5, false);
 }
 
-function ring(radius, width, y) {
-  return new THREE.TorusGeometry(radius, width, 5, 40).rotateX(Math.PI / 2).translate(0, y, 0);
-}
-
 function roundedShape(w, h, r) {
   const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
   s.moveTo(x + r, y); s.lineTo(x + w - r, y);
@@ -143,7 +139,7 @@ function enamelGeometry(shape) {
   // Remove that microscopic edge before extrusion, or the bevel spikes at
   // the seam (especially visible on the blue disk in an oblique view).
   const contour=[];
-  for(const point of shape.getPoints(9))if(!contour.length||point.distanceToSquared(contour[contour.length-1])>1e-14)contour.push(point);
+  for(const point of shape.getPoints(8))if(!contour.length||point.distanceToSquared(contour[contour.length-1])>1e-14)contour.push(point);
   if(contour[0].distanceToSquared(contour[contour.length-1])<1e-14)contour.pop();
   shape=new THREE.Shape(contour);shape.closePath();
   const source=bevel(shape,.028,.004,2),p=source.attributes.position,uv=source.attributes.uv;
@@ -216,7 +212,7 @@ export function createFigmaObject(options = {}) {
   const stone = {color: '#696a61', rough: .82, metal: 0, grain: 'speckle'};
   const bronze = {color: '#9d7849', rough: .38, metal: .72, grain: 'turned'}, dark = {color: '#272a28', rough: .85, metal: 0};
   turned(a, [[.086,0],[.102,.006],[.108,.016],[.108,.025],[.097,.0305],[.094,.0335],[.086,.047],[.096,.051],
-    [.098,.0555],[.098,.0585],[.091,.066],[.075,.066],[.073,.0685],[.062,.0685],[.056,.0685],[0,.0685]], 28,
+    [.098,.0555],[.098,.0585],[.091,.066],[.075,.066],[.073,.0685],[.062,.0685],[.056,.0685],[0,.0685]], 24,
     k => k === 4 || k === 8 ? bronze : k >= 11 ? dark : stone, {segment: 13, count: 20, finish: bronze});
   const cloud = new THREE.Group(); cloud.position.y = .228; group.add(cloud);
   const r = .031, unit = .066;
@@ -479,35 +475,38 @@ export function createGrimoireObject(options = {}) {
 export function createCrystalBallObject(options = {}) {
   const a=artifact('AI / nebula crystal',options),{group,mesh,material}=a;
   const bronze=material({color:'#80613e',metalness:.76,roughness:.36});
-  const shadowBronze=material({color:'#2c3933',metalness:.67,roughness:.55});
   const inlay=material({color:'#276f68',metalness:.3,roughness:.3,emissive:'#15574f',emissiveIntensity:.4});
-  const baseProfile=[[.077,0],[.088,.006],[.091,.015],[.089,.023],[.072,.030],[.056,.040],[.041,.051],[.039,.065],[.050,.079],[.062,.087],[.066,.098],[.061,.107],[.052,.110],[0,.110]];
-  mesh(new THREE.LatheGeometry(baseProfile.map(p=>new THREE.Vector2(...p)),40),shadowBronze);
-  const ornament=[ring(.087,.003,.017),ring(.072,.002,.032),ring(.042,.002,.055),ring(.064,.0024,.096)];
-  const gems=[];
-  for(let i=0;i<12;i++) {
-    const angle=i/12*TAU;
-    ornament.push(tube([[.066,.033,0],[.055,.045,.003],[.043,.067,0],[.057,.087,-.003]],.0019,9).rotateY(angle));
-    ornament.push(new THREE.SphereGeometry(.003,8,6).translate(.084,.025,0).rotateY(angle));
-  }
-  // Four swept claws cradle the glass; the wider feet stay within .22 m depth.
+  // The patinated base, its four bright bronze bands and twelve studs: one
+  // lathe, its finishes painted along the profile.
+  const patina={color:'#2c3933',rough:.55,metal:.67,grain:'turned'},bright={color:'#80613e',rough:.36,metal:.76,grain:'turned'};
+  turned(a,[[.077,0],[.088,.006],[.091,.015],[.0905,.019],[.089,.023],[.072,.030],[.0665,.0335],[.056,.040],
+    [.041,.051],[.0402,.057],[.039,.065],[.050,.079],[.062,.087],[.066,.0945],[.066,.0985],[.061,.107],[.052,.110],[0,.110]],20,
+    k=>k===2||k===5||k===8||k===13?bright:patina,{segment:3,count:12,finish:bright});
+  const ornament=[],gems=[];
+  // Six swept wires climb the waist; four claws cradle the glass, and four
+  // feet keep the wider base within .22 m.
+  for(let i=0;i<6;i++)
+    ornament.push(tube([[.066,.033,0],[.055,.045,.003],[.043,.067,0],[.057,.087,-.003]],.0019,4).rotateY(i/6*TAU+TAU/24));
   for(let i=0;i<4;i++) {
     const angle=Math.PI/4+i*TAU/4;
-    ornament.push(tube([[.073,.023,0],[.104,.016,0],[.106,.008,0]],.005,8).rotateY(angle));
-    ornament.push(tube([[.051,.081,0],[.080,.098,0],[.088,.126,0],[.090,.149,0]],.004,12).rotateY(angle));
-    ornament.push(new THREE.SphereGeometry(.0055,10,8).translate(.090,.149,0).rotateY(angle));
-    gems.push(new THREE.SphereGeometry(.006,10,8).scale(1,.7,.6).translate(.073,.032,0).rotateY(angle));
+    ornament.push(tube([[.073,.023,0],[.104,.016,0],[.106,.008,0]],.005,4).rotateY(angle));
+    ornament.push(tube([[.051,.081,0],[.080,.098,0],[.088,.126,0],[.090,.149,0]],.004,6).rotateY(angle));
+    ornament.push(new THREE.SphereGeometry(.0055,6,4).translate(.090,.149,0).rotateY(angle));
+    gems.push(new THREE.SphereGeometry(.006,6,4).scale(1,.7,.6).translate(.073,.032,0).rotateY(angle));
   }
   mesh(merged(ornament),bronze);mesh(merged(gems),inlay);
 
+  // One sphere is both the glass and the mist inside it: the shell's veil,
+  // rim and glint, and a sparse scatter of pinpricks, are part of the same
+  // shader rather than a transparent second sphere and 27 tiny ones.
   const mist=a.own(new THREE.ShaderMaterial({
-    uniforms:{uTime:{value:0},uHover:{value:0}},
+    uniforms:{uTime:{value:0},uHover:{value:0},uSpark:{value:0}},
     vertexShader:`varying vec3 vLocal; varying vec3 vWorld; varying vec3 vNormal; varying vec3 vEye;
-      void main(){vLocal=position/.099; vec4 w=modelMatrix*vec4(position,1.);vWorld=w.xyz;
+      void main(){vLocal=position/.105; vec4 w=modelMatrix*vec4(position,1.);vWorld=w.xyz;
       vec3 eye=cameraPosition-w.xyz;vEye=vec3(dot(eye,modelMatrix[0].xyz),dot(eye,modelMatrix[1].xyz),dot(eye,modelMatrix[2].xyz));
       vNormal=normalize(mat3(modelMatrix)*normal);gl_Position=projectionMatrix*viewMatrix*w;}`,
     fragmentShader:`precision highp float;
-      uniform float uTime; uniform float uHover; varying vec3 vLocal; varying vec3 vWorld; varying vec3 vNormal; varying vec3 vEye;
+      uniform float uTime; uniform float uHover; uniform float uSpark; varying vec3 vLocal; varying vec3 vWorld; varying vec3 vNormal; varying vec3 vEye;
       float hash(vec3 p){p=fract(p*vec3(.1031,.103,.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}
       float noise3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
         return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
@@ -530,32 +529,31 @@ export function createCrystalBallObject(options = {}) {
         vec3 hue=mix(teal,violet,smoothstep(-.5,.6,p.x+p.y*.45+broad*.4));
         vec3 color=vec3(.004,.012,.017)+hue*(cloud*.58+filament*.16+core+distant*.11)*smoothstep(0.,.6,ndv)*(1.+uHover*.38);
         color+=vec3(.08,.39,.31)*core+mix(teal,violet,.55)*rim*.31;
+        // The glass over it holds back a little of the mist and adds a faint
+        // pale veil. The mist fills a sphere 6% smaller than the glass, so
+        // near the outline the eye sees through glass alone: there the ball
+        // turns clear (cos 0.33 = the inner sphere grazed), the thickness of the shell.
+        float filled=smoothstep(.28,.38,ndv);
+        color=mix(vec3(.05,.08,.08)+rim*vec3(.30,.40,.38),color*.82+vec3(.72,.84,.81)*.008,filled);
         float glint=pow(max(dot(reflect(-V,N),normalize(vec3(-.5,.8,1.))),0.),190.);
         color+=vec3(1.,.82,.61)*glint*.6;
-        gl_FragColor=vec4(color,1.);
+        // Pinpricks on the inner glass, twinkling a little.
+        vec3 cell=floor(vLocal*9.),f=fract(vLocal*9.)-.5;float h=hash(cell+7.);
+        color+=vec3(.55,.86,.81)*step(.93,h)*smoothstep(.16,0.,length(f))*(.75+.25*sin(uSpark+h*40.));
+        gl_FragColor=vec4(color,mix(.24,1.,filled));
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
+    transparent:true,
   }));
   const center=.211;
-  const core=mesh(new THREE.SphereGeometry(.099,40,28),mist);core.position.y=center;core.castShadow=false;
-  const glass=a.own(new THREE.MeshPhysicalMaterial({color:'#b7d5cf',metalness:.08,roughness:.11,
-    transparent:true,opacity:.20,depthWrite:false,clearcoat:1,clearcoatRoughness:.09,side:THREE.FrontSide}));
-  const globe=mesh(new THREE.SphereGeometry(.105,40,28),glass);globe.position.y=center;globe.renderOrder=2;
-  // A sparse set of pinpricks over the inner glass, not billboards around it.
-  const stars=[],rnd=randomSource(947);
-  for(let i=0;i<27;i++) {
-    const y=rnd()*2-1,angle=rnd()*TAU,r=.102;
-    stars.push(new THREE.SphereGeometry(i%7===0?.00085:.00045,5,4).translate(Math.sqrt(1-y*y)*Math.cos(angle)*r,center+y*r,Math.sqrt(1-y*y)*Math.sin(angle)*r));
-  }
-  const sparks=material({color:'#8cdbcf',emissive:'#64c5b8',emissiveIntensity:.9,roughness:.4});
-  mesh(merged(stars),sparks).castShadow=false;
+  const globe=mesh(new THREE.SphereGeometry(.105,32,18),mist);globe.position.y=center;globe.name='glass and mist';
   let swirl=0;
   function update(time,delta) {
     const s=a.step(time,delta);if(!s)return;
     if(!s.reduced)swirl+=s.dt*(1+s.hover*2.1);
     mist.uniforms.uTime.value=swirl;mist.uniforms.uHover.value=s.hover;
-    sparks.emissiveIntensity=.75+s.hover*.3+(s.reduced?0:.08*Math.sin(s.t*1.2));
+    mist.uniforms.uSpark.value=s.reduced?0:s.t*1.2;
   }
   update(0,0);
   group.userData.footprint={width:.23,depth:.23,height:.316};

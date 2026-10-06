@@ -124,3 +124,73 @@ Other costs:
   (1440×1000, Iris Xe).
 - **Room comparison:** the room draws 26 calls and 9,971 triangles. Its
   budget is 30 calls and 10,000 triangles.
+
+## Phase 2: Performance budget
+
+**Decided before polishing: at most about 8,200 triangles and 17 draw calls
+for all three objects together.**
+
+- **Why that size:** on the shelf in the room each object is 70–100 px tall.
+  Detail below a few pixels cannot be seen, so it moves from geometry into
+  textures and shaders.
+- **The room's own budget is untouched.** That is 30 calls and 10,000
+  triangles, with 9,971 used. With the objects, a frame that shows the shelf
+  draws about 18k triangles and 43 calls.
+- **Shadows:** every remaining mesh still casts, as before. The mist sphere
+  casts one solid disc, as the old glass shell did.
+
+| Object | Triangles before | Triangles after | Draw calls before | Draw calls after | Owned resources before | Owned resources after |
+| --- | --- | --- | --- | --- | --- | --- |
+| Figma | 6,856 | 3,016 | 9 | 6 | 18 | 14 |
+| Grimoire | 11,935 | 2,439 | 17 | 7 | 33 | 20 |
+| Crystal | 11,730 | 2,696 | 6 | 4 | 12 | 10 |
+| **Total** | **30,521** | **8,151** | **32** | **17** | **63** | **44** |
+
+Preview frame with all three hovering (Iris Xe, 1440×1000): 8,179 triangles
+and 21 calls including the shelf and wall, at 60 fps. Before: 30,563
+triangles, 36 calls and 57.7 fps.
+
+### How
+
+**Turned pieces (`turned()`).** A lathe whose finishes are painted along its
+profile: colour, roughness and metalness maps, and bump only where there is
+grain.
+- **Figma's pedestal:** stone, two bronze bands, a dark dial and its twenty
+  ticks were four meshes and are now one.
+- **The crystal's base:** the patina, four bronze bands and twelve studs went
+  from five meshes to one.
+
+**Figma:**
+- arcs are sampled at 11.25° steps instead of 4.5°;
+- two bevel segments instead of three;
+- 24 segments round instead of 40.
+
+**Grimoire:**
+- **Page edges as texture:** the 42 hairline tubes on the page edges (5,320
+  triangles) are gone. Boards and block got edge strips with UVs of their
+  own, and the leaves are painted on the block's edges as fine layers. This
+  is finer and better than the tubes.
+- **Fewer meshes:**
+  - The two pages are one mesh with one material and a parchment atlas.
+  - The spine joins the boards, and the stitches join the block.
+  - The seven glyph sprites (seven draws) are one `Points` draw.
+
+**Crystal:**
+- **One sphere instead of two:**
+  - The mist and the glass shell are now one sphere with one shader. The
+    glass holds back a little of the mist and adds a faint veil.
+  - Near the outline, where the eye would only pass through glass, the ball
+    turns clear. That keeps the shell's thickness.
+- **27 tiny "star" spheres** became pinpricks in the shader.
+- **Half the swept wires,** and simpler claws and feet.
+
+### Tradeoffs
+
+- **Close-up silhouettes are a little polygonal:** Figma's arcs and the 32×18
+  sphere. They are invisible at shelf distance and visible only in the
+  preview's 0.4 m close-ups.
+- **The crystal's mist** samples the same field at its new radius. It is the
+  same kind of cloud, but its colours depend on how long it has swirled, so
+  before and after shots taken at different moments differ in hue.
+- **The glyph points** are sized from half the canvas height, not the camera
+  lens. Their size in the room was not checked; Phase 3 redesigns them.

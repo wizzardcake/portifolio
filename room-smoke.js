@@ -95,8 +95,11 @@ export function createRoomSmoke(THREE, {trails, anisotropy = 1}) {
   });
 
   // One strand: a low arch swept along the curve, its width and height
-  // varying along the way (fixed per strand, so the shape is calm).
-  function strand(curve, {offset = 0, width = .25, height = .12, phase = 0, speed = 1, density = 1, wobble = .35}) {
+  // varying along the way (fixed per strand, so the shape is calm). Its
+  // sideways offset may drift from `offset` to `offsetEnd` over the first
+  // half, so strands of two branches can cross where the branches part.
+  function strand(curve, {offset = 0, offsetEnd = offset, width = .25, height = .12, phase = 0, speed = 1, density = 1, wobble = .35,
+    fadeIn = 1.6, fadeOut = .9}) {
     const length = curve.getLength(), segments = Math.max(24, Math.round(length * 16)), sides = 8;
     const up = new THREE.Vector3(0, 1, 0), point = new THREE.Vector3(), tangent = new THREE.Vector3(), side = new THREE.Vector3();
     const position = [], normal = [], uv = [], lateral = [], params = [], fade = [], index = [];
@@ -106,12 +109,13 @@ export function createRoomSmoke(THREE, {trails, anisotropy = 1}) {
       side.crossVectors(up, tangent).normalize();
       // Smoothly varying width and height (sums of sines with this strand's phase).
       const vary = k => 1 + wobble * (.6 * Math.sin(s * k + phase) + .4 * Math.sin(s * k * 2.7 + phase * 1.9));
-      const w = width * vary(1.3), h = height * vary(.9);
+      const w = width * vary(1.3), h = height * vary(.9), shift = Math.min(1, u / .5);
+      const across = offset + (offsetEnd - offset) * shift * shift * (3 - 2 * shift);
       // It gathers out of nothing over its first metres and thins away at its end.
-      const ends = Math.min(1, s / 1.6) * Math.min(1, (length - s) / .9);
+      const ends = Math.min(1, s / fadeIn) * Math.min(1, (length - s) / fadeOut);
       for (let j = 0; j <= sides; j++) {
         const a = j / sides * Math.PI, c = Math.cos(a), n = Math.sin(a);
-        position.push(point.x + side.x * (offset + w * c), point.y + h * n, point.z + side.z * (offset + w * c));
+        position.push(point.x + side.x * (across + w * c), point.y + h * n, point.z + side.z * (across + w * c));
         normal.push(side.x * c, n, side.z * c);
         uv.push(s, j / sides);
         lateral.push(side.x, 0, side.z);
@@ -141,7 +145,8 @@ export function createRoomSmoke(THREE, {trails, anisotropy = 1}) {
     const curve = new THREE.CatmullRomCurve3(trail.points.map(([x, z]) => new THREE.Vector3(x, .012, z)), false, 'centripetal');
     longest = Math.max(longest, curve.getLength());
     for (const settings of trail.strands) {
-      const geometry = strand(curve, settings);
+      // A trail may set how far it takes to gather (fadeIn) and to thin away (fadeOut).
+      const geometry = strand(curve, {fadeIn: trail.fadeIn ?? 1.6, fadeOut: trail.fadeOut ?? .9, ...settings});
       triangles += geometry.index.count / 3;
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = trail.name + ' smoke'; mesh.frustumCulled = false; mesh.renderOrder = 4;

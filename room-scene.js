@@ -520,18 +520,28 @@ if (renderer) {
     const m=new THREE.Mesh(geometry,material);m.name=name;m.layers.set(1);chair.add(m);
   }
 
-  // ---- Smoke on the floor (room-smoke.js): a trail of low mist leading from
-  // the visitor's feet at the entry into the room, toward the study nook. It
-  // lives on the foreground layer with the chair and the cloth, so it costs
-  // the room's own canvas nothing; the cloth's pulse below keeps it moving.
-  // Table-centred coordinates [x, z], metres.
+  // ---- Smoke on the floor (room-smoke.js): low mist that gathers at the
+  // visitor's feet at the entry and parts into two trails, one into the
+  // chair, one across the floor to the study nook. Both share the trunk's
+  // first points and part gradually (the chair's share curls in under the
+  // seat from its side, where the floor is in view); strands of each bundle start on the
+  // other's side and cross as they separate. It lives on the foreground layer
+  // with the chair and the cloth, so it costs the room's own canvas nothing;
+  // the cloth's pulse below keeps it moving. Table-centred [x, z], metres.
+  const trunk=[[.75,3.6],[.3,2.85]];
   const smoke=createRoomSmoke(THREE,{anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy()),trails:[
-    {name:'entry to the study nook',points:[[.75,3.6],[.25,2.75],[-.45,2.15],[-1.15,1.45],[-1.7,.55],[-2.05,-.35],[-2.2,-1.05],[-2.25,-1.75]],
+    {name:'to the study nook',points:[...trunk,[-.4,2.2],[-1.15,1.45],[-1.7,.55],[-2.05,-.35],[-2.2,-1.05],[-2.25,-1.75]],
       // A flat veil on the boards, two low drifts over it and one wisp that rises a little.
       strands:[{offset:0,width:.46,height:0,phase:1.3,speed:.7,density:.3,wobble:.55},
-        {offset:-.1,width:.3,height:.06,phase:0,speed:1,density:.7},
-        {offset:.08,width:.38,height:.1,phase:2.1,speed:.8,density:.55},
+        {offset:-.2,offsetEnd:-.1,width:.3,height:.06,phase:0,speed:1,density:.7},
+        {offset:-.06,offsetEnd:.08,width:.38,height:.1,phase:2.1,speed:.8,density:.55},
         {offset:.15,width:.2,height:.15,phase:4.3,speed:1.25,density:.4}]},
+    // The chair's share is thinner: it is near and short, and must not outweigh the long trail.
+    // It is short, so it gathers sooner and thins away under the seat.
+    {name:'into the chair',fadeIn:1.1,fadeOut:.45,points:[...trunk,[.4,2.35],[.46,1.86],[.3,1.5],[.02,1.42]],
+      strands:[{offset:.04,width:.32,height:0,phase:3.7,speed:.75,density:.36,wobble:.6},
+        {offset:.2,offsetEnd:.06,width:.22,height:.05,phase:5.2,speed:1.1,density:.72},
+        {offset:.1,offsetEnd:-.06,width:.15,height:.11,phase:.9,speed:1.3,density:.5}]},
   ]});
   smoke.group.traverse(object=>object.layers.set(1));scene.add(smoke.group);
 

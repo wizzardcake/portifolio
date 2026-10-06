@@ -542,3 +542,65 @@ Screenshots are in `verification/stage2/`, all inspected.
   but the split in stage 3 will need a check.
 - How dense and bright it should be is a matter of taste. It is tunable live and
   should be judged by eye in the glue pass, together with the other trail.
+
+## Stage 3: The split
+
+**Changed:** `room-scene.js` (the routes and their strands) and `room-smoke.js`.
+The smoke module gains two options: a strand's sideways offset can now change
+along its length (`offsetEnd`), and each trail can set its own fade lengths
+(`fadeIn`, `fadeOut`).
+
+### How it divides
+
+- **Two trails share a trunk.** Both pass through the same first two points
+  (`trunk`): from the visitor's feet to about 0.75 m short of the chair's back
+  right. There they part gradually, because each curve has its own tangent.
+  - **To the study nook:** the stage 2 route and its four strands, sweeping left
+    across the floor.
+  - **Into the chair:** three thinner strands round the chair's right side,
+    curling in under the seat.
+- **Why the chair's share goes round the right.** Stood at the entry, the floor
+  straight between the visitor and the chair is almost all below the frame, and
+  the rest is hidden by the chair. A branch straight into the chair (attempt 1)
+  could not be seen at all. One round its left side (attempts 2–3) ran in the
+  same direction on screen as the nook's trail and merged with it. Round its
+  right side, the two branches leave the trunk in opposite directions on screen,
+  so the division reads at once.
+- **Not a Y.**
+  - The strands of each bundle start on the other's side and cross as they
+    separate (`offset` → `offsetEnd` over the first half).
+  - Both bundles wander, so strands overlap now and then.
+  - The trunk is simply where both bundles lie together, so its density hands
+    over smoothly to each branch.
+- **The chair's share is short.** It gathers over 1.1 m and thins away over its
+  last 0.45 m under the seat; with the stage 2 lengths (1.6 m and 0.9 m) it never
+  reached full density. Its strands are thinner (0.36, 0.72 and 0.5), so this
+  branch, close to the visitor, does not outweigh the long one.
+- The chair is on the same layer and hides the smoke under its seat correctly.
+  The branch ends at z ≈ 1.4, well before the table at z ≈ 0.6.
+
+### Verification
+
+Screenshots are in `verification/stage3/`, inspected without labels.
+
+- **Entry:** `entry-1440x900`, `-1920x1080` and `-390x844`.
+- **Growing in:** `grow-1/2/3-*`. Both branches grow out of the trunk together.
+- **Later moment:** `entry-later-*`.
+- **Walking:** `walk-mid/late-*`, where the smoke is gone.
+- **Attempts:** `s3debug` in the scratchpad.
+
+The questions from the brief:
+
+| Question | Answer |
+| --- | --- |
+| Can you tell the trail divides? | Yes. In landscape one part sweeps up and left to the nook while the other curls up and right round the chair's legs. In portrait the chair's part reads as a hook round the right leg. |
+| Does the eye travel to both destinations? | Yes. The left branch carries the eye across the floor to the lit nook, and the right branch ends at the chair, which is itself the strongest shape in the lower half. |
+| Does one branch overpower the other? | The nook's branch is the more visible because it is long. The chair's is deliberately lighter: the chair needs no help to be seen, the nook does. Close enough to balanced. |
+| Does it feel grown rather than constructed? | Mostly. The forms are soft, uneven and moving. The division happens low in the frame, close to the visitor's feet, so the trunk itself is short on screen. |
+
+- **Seated, compared with the baseline:** unchanged with the cloth on (the same
+  67×33 px of sky). With the portal open, only the animated orb, water and
+  clouds differ.
+- **Frame rate:** entry idle 59.5 fps with the smoke against 60.3 fps without, in
+  the same run; no measurable cost from the extra branch.
+- **Tests:** all 14 suites passed.

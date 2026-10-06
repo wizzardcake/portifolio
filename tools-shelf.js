@@ -275,34 +275,54 @@ export function createFigmaObject(options = {}) {
   return {group,update,setHover:a.setHover,dispose:a.dispose};
 }
 
-// Closed curved page/cover volume: top, bottom and edge faces all have real
-// thickness. Width parameter u runs out from the binding; v runs back to front.
+// A closed, curved slab (a board, or the block of leaves): top and bottom
+// follow pageHeight, and the four edges are strips with vertices of their
+// own, so the corners stay crisp. Top and bottom map the left half of the
+// texture (u out from the binding, v back to front); every edge maps the
+// right half, along the edge and up through the thickness (0 bottom, 1 top),
+// so the block's leaves can be painted on its edges instead of modelled.
 function pageHeight(u,v) { return .110 + .027*Math.sin(u*Math.PI*.93) + .010*u - v*.027; }
-function pageVolume(side,width,depth,offset,thickness,nu = 20,nv = 6) {
-  const pos=[],uv=[],idx=[];
-  const add = (u,v,lower) => { pos.push(side*(.003+u*width),pageHeight(u,v)+offset-(lower?thickness:0),v*depth/2);uv.push(u,(v+1)/2); };
-  for (let lower = 0; lower < 2; lower++) for(let j=0;j<=nv;j++) for(let i=0;i<=nu;i++) add(i/nu,j/nv*2-1,lower);
-  const layer=(nu+1)*(nv+1);
-  const quad=(a,b,c,d,flip=false)=> { if(flip) idx.push(a,c,b,a,d,c); else idx.push(a,b,c,a,c,d); };
-  for(let j=0;j<nv;j++) for(let i=0;i<nu;i++) {
-    const k=j*(nu+1)+i;
-    quad(k,k+nu+1,k+nu+2,k+1,side<0);
-    quad(k+layer,k+1+layer,k+nu+2+layer,k+nu+1+layer,side<0);
+function pageVolume(side,width,depth,offset,thickness,nu = 12,nv = 4) {
+  const pos=[],uv=[],idx=[],P=k=>new THREE.Vector3(pos[k*3],pos[k*3+1],pos[k*3+2]);
+  const at=(u,v,lower)=>[side*(.003+u*width),pageHeight(u,v)+offset-(lower?thickness:0),v*depth/2];
+  // A cols × rows grid of quads from f(s, t) -> [position, uv], wound to face outward.
+  function grid(cols,rows,f,outward) {
+    const base=pos.length/3;
+    for(let j=0;j<=rows;j++)for(let i=0;i<=cols;i++){const [p,t]=f(i/cols,j/rows);pos.push(...p);uv.push(...t);}
+    for(let j=0;j<rows;j++)for(let i=0;i<cols;i++) {
+      const a=base+j*(cols+1)+i,b=a+1,c=a+cols+2,d=a+cols+1;
+      const n=new THREE.Vector3().subVectors(P(b),P(a)).cross(new THREE.Vector3().subVectors(P(d),P(a)));
+      if(n.dot(outward)>=0)idx.push(a,b,c,a,c,d);else idx.push(a,c,b,a,d,c);
+    }
   }
-  for(let j=0;j<nv;j++) {
-    let k=j*(nu+1); quad(k,k+layer,k+nu+1+layer,k+nu+1,side<0);
-    k+=nu;quad(k,k+nu+1,k+nu+1+layer,k+layer,side<0);
-  }
-  for(let i=0;i<nu;i++) {
-    quad(i,i+1,i+1+layer,i+layer,side<0);
-    const k=nv*(nu+1)+i;quad(k,k+layer,k+1+layer,k+1,side<0);
-  }
+  const up=new THREE.Vector3(0,1,0),out=new THREE.Vector3(side,0,0);
+  grid(nu,nv,(s,t)=>[at(s,t*2-1,false),[s*.5,t]],up);
+  grid(nu,nv,(s,t)=>[at(s,t*2-1,true),[s*.5,t]],up.clone().negate());
+  grid(nv,1,(s,t)=>[at(1,s*2-1,t<.5),[.5+s*.5,t]],out);
+  grid(nv,1,(s,t)=>[at(0,s*2-1,t<.5),[.5+s*.5,t]],out.clone().negate());
+  for(const v of [-1,1]) grid(nu,1,(s,t)=>[at(s,v,t<.5),[.5+s*.5,t]],new THREE.Vector3(0,0,v));
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
   g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
   return g;
 }
 
-function glyphMaps(a,seed) {
+// Indexed parts into one indexed geometry (position, uv), so smooth normals
+// stay within each part. Takes ownership of the parts.
+function mergedIndexed(parts) {
+  const pos=[],uv=[],idx=[];let offset=0;
+  for(const g of parts) {
+    pos.push(...g.attributes.position.array);uv.push(...g.attributes.uv.array);
+    for(let i=0;i<g.index.count;i++)idx.push(g.index.getX(i)+offset);
+    offset+=g.attributes.position.count;g.dispose();
+  }
+  const r=new THREE.BufferGeometry();r.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  r.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));r.setIndex(idx);r.computeVertexNormals();
+  return r;
+}
+
+// The parchment and its glow (two canvases): aged leaves with illuminated,
+// abstract editor-like marks drawn on both, so only the marks glow.
+function glyphCanvases(seed) {
   const paper=document.createElement('canvas'),light=document.createElement('canvas');
   paper.width=light.width=512;paper.height=light.height=512;
   const p=paper.getContext('2d'),l=light.getContext('2d'),rnd=randomSource(seed);
@@ -341,9 +361,7 @@ function glyphMaps(a,seed) {
     ctx.moveTo(172,67);ctx.lineTo(193,83);ctx.lineTo(172,99);ctx.moveTo(226,67);ctx.lineTo(205,83);ctx.lineTo(226,99);ctx.stroke();
     ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(252,83);ctx.lineTo(431,83);ctx.stroke();
   }
-  const map=a.own(new THREE.CanvasTexture(paper)),emissiveMap=a.own(new THREE.CanvasTexture(light));
-  map.colorSpace=emissiveMap.colorSpace=THREE.SRGBColorSpace;
-  return {map,emissiveMap};
+  return {paper,light};
 }
 
 /** Curved parchment leaves, thick leather boards, walnut lectern, blue glyphs. */
@@ -353,54 +371,68 @@ export function createGrimoireObject(options = {}) {
   const leather=material({color:'#4b2921',map:leatherMap,bumpMap:leatherMap,bumpScale:.0012,roughness:.82});
   const wood=material({color:'#3b281b',map:woodMap,roughness:.69});
   const gold=material({color:'#a5824c',metalness:.65,roughness:.46});
-  const edges=material({color:'#bfa477',roughness:.95});
-  const strata=material({color:'#6b5637',roughness:1});
+  // The block's leaves are painted on its edges, not modelled: the right
+  // half of this map, which the edge strips sample, is fine layers through
+  // the thickness; the left half (the hidden top) is plain. A dark corner
+  // stands in for the binding thread.
+  const edge=document.createElement('canvas');edge.width=512;edge.height=256;
+  {const e=edge.getContext('2d'),rnd=randomSource(5113);
+    e.fillStyle='#bfa477';e.fillRect(0,0,512,256);
+    for(let y=0;y<256;y+=3+Math.floor(rnd()*3)){e.fillStyle=`rgba(${rnd()<.6?'92,70,40':'240,226,190'},${.25+rnd()*.35})`;e.fillRect(256,y,256,1);}
+    e.fillStyle='#4a3a26';e.fillRect(0,240,16,16);}
+  const edgeMap=a.own(new THREE.CanvasTexture(edge));edgeMap.colorSpace=THREE.SRGBColorSpace;
+  const edges=material({map:edgeMap,roughness:.95});
   const stand=[];
   for(const x of [-.075,.075]) {
-    stand.push(bevel(roundedShape(.032,.176,.009),.009,.002).rotateX(-Math.PI/2).translate(x,.0065,0));
+    stand.push(bevel(roundedShape(.032,.176,.009),.009,.002,1,4).rotateX(-Math.PI/2).translate(x,.0065,0));
     stand.push(tube([[x,.015,-.065],[x,.061,-.039],[x,.082,-.050]],.009,5));
     stand.push(tube([[x,.015,.066],[x,.042,.030],[x,.059,.053]],.009,5));
     stand.push(tube([[x,.071,-.075],[x,.056,0],[x,.040,.080]],.008,5));
   }
   stand.push(new THREE.CylinderGeometry(.007,.007,.18,10).rotateZ(Math.PI/2).translate(0,.032,0));
   mesh(merged(stand),wood);
-  const covers=[],blocks=[],lines=[],corners=[];
-  const pages=[];
+  const covers=[],blocks=[],corners=[],leafGrids=[],flutter=[];
   for(const side of [-1,1]) {
     covers.push(pageVolume(side,.147,.202,-.028,.012));
     blocks.push(pageVolume(side,.134,.182,-.004,.023));
-    // Seven irregular, continuous cut-paper edges at both ends and fore-edge.
-    for(let layer=0;layer<7;layer++) {
-      const offset=-.005-layer*.0031;
-      for(const v of [-1,1]) {
-        const pts=Array.from({length:17},(_,i)=>{const u=i/16;return [side*(.003+u*.134),pageHeight(u,v)+offset,v*.091];});
-        lines.push(tube(pts,.00038,16));
-      }
-      lines.push(tube(Array.from({length:7},(_,i)=>{const v=i/3-1;return [side*.137,pageHeight(1,v)+offset,v*.091];}),.00035,6));
-    }
     for(const v of [-1,1]) {
       const x=side*.147,y=pageHeight(1,v)-.025,z=v*.101;
       const guard=new THREE.Shape();guard.moveTo(0,0);guard.lineTo(-side*.024,0);guard.lineTo(0,v*.022);guard.closePath();
       corners.push(new THREE.ExtrudeGeometry(guard,{depth:.002,bevelEnabled:false}).rotateX(-Math.PI/2).translate(x,y,z));
-      corners.push(new THREE.SphereGeometry(.0032,8,6).translate(x-side*.008,y+.003,z-v*.004));
+      corners.push(new THREE.SphereGeometry(.0032,6,4).translate(x-side*.008,y+.003,z-v*.004));
     }
-    const maps=glyphMaps(a,side<0?125:256);
-    const mat=material({...maps,color:'#fff2d5',emissive:'#72c9ff',emissiveIntensity:1.1,roughness:.88,side:THREE.DoubleSide});
-    const g=new THREE.PlaneGeometry(1,1,24,10),p=g.attributes.position,uv=g.attributes.uv;
-    for(let i=0;i<p.count;i++) {const u=uv.getX(i),v=uv.getY(i)*2-1;p.setXYZ(i,side*(.003+u*.134),pageHeight(u,v),v*.091);uv.setY(i,1-uv.getY(i));}
-    // Plane indices point down on the right; turn those to retain lit tops.
+    // A leaf: u out from the binding, v back to front; uv into its half of the atlas.
+    const g=new THREE.PlaneGeometry(1,1,16,6),p=g.attributes.position,uv=g.attributes.uv;
+    for(let i=0;i<p.count;i++) {
+      const u=uv.getX(i),v=uv.getY(i)*2-1;
+      p.setXYZ(i,side*(.003+u*.134),pageHeight(u,v),v*.091);
+      flutter.push([u,1-uv.getY(i),side]);
+      uv.setXY(i,(side<0?0:.5)+u*.5,1-uv.getY(i));
+    }
+    // Plane indices point down on the right; turn those to keep lit tops.
     if(side>0) {const ix=g.index;for(let i=0;i<ix.count;i+=3){const k=ix.getX(i+1);ix.setX(i+1,ix.getX(i+2));ix.setX(i+2,k);}}
-    g.computeVertexNormals();
-    const page=mesh(g,mat);page.name=side<0?'left curved illuminated page':'right curved illuminated page';
-    pages.push({g,mat,base:Float32Array.from(p.array),side});
+    leafGrids.push(g);
   }
-  mesh(merged(covers),leather);mesh(merged(blocks),edges);mesh(merged(lines),strata);mesh(merged(corners),gold);
-  // The round bound spine, stitched bands, and a silk bookmark show even at a
-  // shallow shelf viewing angle. No extra light is used for the writing.
-  mesh(new THREE.CylinderGeometry(.013,.013,.203,14).rotateX(Math.PI/2).translate(0,.077,0),leather);
+  // The round spine shares the boards' leather; twelve stitches share the
+  // block's map (its dark corner).
+  mesh(merged([...covers,new THREE.CylinderGeometry(.013,.013,.203,14).rotateX(Math.PI/2).translate(0,.077,0)]),leather);
   const stitches=[];
-  for(let i=0;i<12;i++)stitches.push(new THREE.BoxGeometry(.006,.0007,.0008).translate(0,.111-i*.00015,-.079+i*.014));
-  mesh(merged(stitches),material({color:'#5d482f',roughness:.95}));
+  for(let i=0;i<12;i++) {
+    const s=new THREE.BoxGeometry(.006,.0007,.0008).translate(0,.111-i*.00015,-.079+i*.014),t=s.attributes.uv;
+    for(let k=0;k<t.count;k++)t.setXY(k,.01,.02);
+    stitches.push(s);
+  }
+  mesh(merged([...blocks,...stitches]),edges);
+  mesh(merged(corners),gold);
+  // Both leaves in one mesh and one material: their parchment and glyphs
+  // side by side in one atlas.
+  const L=glyphCanvases(125),R=glyphCanvases(256);
+  const atlas=(l,r)=>{const c=document.createElement('canvas');c.width=1024;c.height=512;const x=c.getContext('2d');x.drawImage(l,0,0);x.drawImage(r,512,0);return c;};
+  const map=a.own(new THREE.CanvasTexture(atlas(L.paper,R.paper))),emissiveMap=a.own(new THREE.CanvasTexture(atlas(L.light,R.light)));
+  map.colorSpace=emissiveMap.colorSpace=THREE.SRGBColorSpace;
+  const parchment=material({map,emissiveMap,color:'#fff2d5',emissive:'#72c9ff',emissiveIntensity:1.1,roughness:.88,side:THREE.DoubleSide});
+  const leaves=mesh(mergedIndexed(leafGrids),parchment);leaves.name='curved illuminated pages';
+  const resting=Float32Array.from(leaves.geometry.attributes.position.array);
   const silk=material({color:'#185f83',roughness:.65,metalness:.12,side:THREE.DoubleSide});
   const ribbon=new THREE.Shape();ribbon.moveTo(-.005,0);ribbon.lineTo(.005,0);ribbon.lineTo(.006,-.055);ribbon.lineTo(0,-.050);ribbon.lineTo(-.005,-.058);ribbon.closePath();
   mesh(new THREE.ShapeGeometry(ribbon).rotateX(.2).translate(.010,.098,.082),silk);
@@ -409,30 +441,34 @@ export function createGrimoireObject(options = {}) {
   const c=symbol.getContext('2d');c.strokeStyle='#7fdaff';c.lineWidth=4;c.lineCap='round';
   c.shadowColor='#007acc';c.shadowBlur=8;c.beginPath();c.moveTo(23,19);c.lineTo(12,31);c.lineTo(23,43);c.moveTo(41,19);c.lineTo(52,31);c.lineTo(41,43);c.stroke();
   const glyphMap=a.own(new THREE.CanvasTexture(symbol));glyphMap.colorSpace=THREE.SRGBColorSpace;
-  const sprites=[];
-  for(let i=0;i<7;i++) {
-    const mat=a.own(new THREE.SpriteMaterial({map:glyphMap,color:'#49baff',transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending}));
-    const sprite=new THREE.Sprite(mat);sprite.scale.setScalar(.021+(i%3)*.003);sprite.visible=false;sprite.name='lifted blue glyph';group.add(sprite);sprites.push(sprite);
-  }
+  // Seven glyphs that rise from the leaves and fade, in one draw call: their
+  // colour carries the fade (additive, so darker is fainter).
+  const lift=a.own(new THREE.BufferGeometry());
+  lift.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(21),3));
+  lift.setAttribute('color',new THREE.Float32BufferAttribute(new Float32Array(21),3));
+  const glyphs=new THREE.Points(lift,a.own(new THREE.PointsMaterial({map:glyphMap,size:.05,vertexColors:true,
+    transparent:true,depthWrite:false,blending:THREE.AdditiveBlending})));
+  glyphs.name='lifted blue glyphs';glyphs.visible=false;glyphs.frustumCulled=false;group.add(glyphs);
+  const blue=new THREE.Color('#49baff');
   function update(time,delta) {
     const s=a.step(time,delta);if(!s)return;
     const {t,hover:h,reduced}=s;
-    for(const page of pages) {
-      page.mat.emissiveIntensity=1.05+h*1.8+(reduced?0:.14*Math.sin(t*1.5));
-      const p=page.g.attributes.position,uv=page.g.attributes.uv;
-      for(let i=0;i<p.count;i++) {
-        const u=uv.getX(i),v=uv.getY(i);
-        p.setY(i,page.base[i*3+1]+(reduced?0:Math.pow(u,3)*.0018*Math.sin(t*1.7+v*4+page.side)));
-      }
-      p.needsUpdate=true;page.g.computeVertexNormals();
+    parchment.emissiveIntensity=1.05+h*1.8+(reduced?0:.14*Math.sin(t*1.5));
+    const p=leaves.geometry.attributes.position;
+    for(let i=0;i<p.count;i++) {
+      const [u,v,side]=flutter[i];
+      p.setY(i,resting[i*3+1]+(reduced?0:Math.pow(u,3)*.0018*Math.sin(t*1.7+v*4+side)));
     }
-    sprites.forEach((sprite,i)=>{
-      const life=(t*.23+i/7)%1,fade=Math.sin(life*Math.PI)**2;
-      sprite.visible=!reduced&&h>.006;
-      sprite.material.opacity=reduced?0:h*fade*.78;
-      sprite.position.set(Math.sin(i*2.4)*.092+Math.sin(t*.5+i)*.013,.125+life*.16,Math.cos(i*2.7)*.054);
-      sprite.material.rotation=.08*Math.sin(t+i);
-    });
+    p.needsUpdate=true;
+    glyphs.visible=!reduced&&h>.006;
+    if(!glyphs.visible)return;
+    const q=lift.attributes.position,tint=lift.attributes.color;
+    for(let i=0;i<7;i++) {
+      const life=(t*.23+i/7)%1,fade=h*Math.sin(life*Math.PI)**2*.78;
+      q.setXYZ(i,Math.sin(i*2.4)*.092+Math.sin(t*.5+i)*.013,.125+life*.16,Math.cos(i*2.7)*.054);
+      tint.setXYZ(i,blue.r*fade,blue.g*fade,blue.b*fade);
+    }
+    q.needsUpdate=tint.needsUpdate=true;
   }
   update(0,0);
   group.userData.footprint={width:.30,depth:.20,height:.17};

@@ -89,7 +89,7 @@ try{
     const snapshot=()=>toolsPreview.objects.map(o=>{const nodes=[];o.group.traverse(n=>{
       nodes.push([n.position.toArray(),n.rotation.toArray(),n.material?.uniforms?.uTime?.value,n.material?.opacity,n.material?.emissiveIntensity,
         n.name.includes('curved illuminated')?Array.from(n.geometry.attributes.position.array):null]);});return JSON.stringify(nodes);});
-    const before=snapshot();toolsPreview.advance(10);return {static:JSON.stringify(before)===JSON.stringify(snapshot()),sprites:toolsPreview.objects[1].group.children.filter(n=>n.isSprite&&n.visible).length};})()`);
+    const before=snapshot();toolsPreview.advance(10);return {static:JSON.stringify(before)===JSON.stringify(snapshot()),sprites:toolsPreview.objects[1].group.children.filter(n=>(n.isSprite||n.isPoints)&&n.visible).length};})()`);
   assert.ok(reduced.static,'Reduced motion must stop autonomous animation');assert.equal(reduced.sprites,0);
   await evaluate("toolsPreview.focus('all')");await shot('reduced-motion');
   // Each newly allocated GPU resource must be disposed exactly once; second

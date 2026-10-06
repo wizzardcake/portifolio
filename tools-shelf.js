@@ -90,9 +90,50 @@ function roundedShape(w, h, r) {
   return s;
 }
 
-function bevel(shape, depth, amount = .003) {
+function bevel(shape, depth, amount = .003, bevelSegments = 3, curveSegments = 18) {
   return new THREE.ExtrudeGeometry(shape, {depth, steps: 1, bevelEnabled: true,
-    bevelThickness: amount, bevelSize: amount, bevelSegments: 3, curveSegments: 18}).translate(0, 0, -depth / 2);
+    bevelThickness: amount, bevelSize: amount, bevelSegments, curveSegments}).translate(0, 0, -depth / 2);
+}
+
+// A turned piece whose finishes change along its profile: one lathe, one
+// material, one draw call. Each profile segment k (point k to k+1) gets the
+// finish paint(k) returns; finish = {color, rough, metal, grain}: grain is
+// 'speckle' (stone), 'turned' (fine lathe lines in metal) or none, and only
+// grained finishes take bump, so flat ones stay clean where the lathe fans
+// in to its centre. ticks: {segment, count, finish} adds short radial marks
+// across that segment. The lathe's v runs by point index, so the texture is
+// laid out per segment.
+function turned(a, profile, radial, paint, ticks) {
+  const n = profile.length - 1, width = 512, row = 8, height = n * row;
+  const color = document.createElement('canvas'), orm = document.createElement('canvas');
+  color.width = orm.width = width; color.height = orm.height = height;
+  const c = color.getContext('2d'), o = orm.getContext('2d'), rnd = randomSource(4271 + n);
+  const fill = (ctx, style, x, y, w, h) => { ctx.fillStyle = style; ctx.fillRect(x, y, w, h); };
+  // Canvas rows run top-down; texture v runs bottom-up (flipY).
+  const rowOf = k => height - (k + 1) * row;
+  for (let k = 0; k < n; k++) {
+    const f = paint(k), y = rowOf(k);
+    fill(c, f.color, 0, y, width, row);
+    // roughness in G, metalness in B, as three.js reads them
+    fill(o, `rgb(0,${Math.round(f.rough * 255)},${Math.round(f.metal * 255)})`, 0, y, width, row);
+    if (f.grain === 'speckle') for (let i = 0; i < 1400; i++)
+      fill(c, `rgba(${rnd() < .5 ? '20,18,14' : '235,228,214'},${.05 + rnd() * .12})`, rnd() * width, y + rnd() * row, 1, 1);
+    if (f.grain === 'turned') for (let i = 0; i < 10; i++)
+      fill(c, `rgba(${rnd() < .5 ? '40,26,12' : '255,226,170'},${.06 + rnd() * .1})`, 0, y + rnd() * row, width, 1);
+  }
+  if (ticks) {
+    const y = rowOf(ticks.segment), f = ticks.finish;
+    for (let i = 0; i < ticks.count; i++) {
+      const x = (i + .5) / ticks.count * width - 1;
+      fill(c, f.color, x, y + 1, 2, row - 2);
+      fill(o, `rgb(0,${Math.round(f.rough * 255)},${Math.round(f.metal * 255)})`, x, y + 1, 2, row - 2);
+    }
+  }
+  const map = a.own(new THREE.CanvasTexture(color)), ormMap = a.own(new THREE.CanvasTexture(orm));
+  map.colorSpace = THREE.SRGBColorSpace;
+  const material = a.material({map, roughnessMap: ormMap, metalnessMap: ormMap, bumpMap: map, bumpScale: .0008,
+    roughness: 1, metalness: 1});
+  return a.mesh(new THREE.LatheGeometry(profile.map(p => new THREE.Vector2(...p)), radial), material);
 }
 
 // Gently convex enamel faces, with welded smooth normals around the bevel.
@@ -102,10 +143,10 @@ function enamelGeometry(shape) {
   // Remove that microscopic edge before extrusion, or the bevel spikes at
   // the seam (especially visible on the blue disk in an oblique view).
   const contour=[];
-  for(const point of shape.getPoints(20))if(!contour.length||point.distanceToSquared(contour[contour.length-1])>1e-14)contour.push(point);
+  for(const point of shape.getPoints(9))if(!contour.length||point.distanceToSquared(contour[contour.length-1])>1e-14)contour.push(point);
   if(contour[0].distanceToSquared(contour[contour.length-1])<1e-14)contour.pop();
   shape=new THREE.Shape(contour);shape.closePath();
-  const source=bevel(shape,.028,.004),p=source.attributes.position,uv=source.attributes.uv;
+  const source=bevel(shape,.028,.004,2),p=source.attributes.position,uv=source.attributes.uv;
   const boundary=shape.getPoints(40),positions=[],texcoords=[],capNormals=[];
   function emit(a,b,c) {
     for(const v of [a,b,c]) {
@@ -169,21 +210,14 @@ function grainTexture(a, type, seed, size = 256) {
  * Pass the host camera to face the assembled logo toward it in local yaw.
  */
 export function createFigmaObject(options = {}) {
-  const a = artifact('Figma / floating enamel', options), {group, mesh, material} = a;
-  const stoneMap = grainTexture(a, 'stone', 83);
-  const stone = material({color: '#696a61', map: stoneMap, bumpMap: stoneMap, bumpScale: .0015, roughness: .82});
-  const bronze = material({color: '#9d7849', metalness: .72, roughness: .38});
-  const dark = material({color: '#272a28', roughness: .85});
-  const profile = [[.086,0],[.102,.006],[.108,.016],[.108,.025],[.094,.032],[.086,.047],[.096,.051],[.098,.059],[.091,.066],[0,.066]];
-  mesh(new THREE.LatheGeometry(profile.map(p => new THREE.Vector2(...p)), 40), stone);
-  mesh(merged([ring(.096,.0018,.032), ring(.095,.0015,.057)]), bronze);
-  mesh(new THREE.CylinderGeometry(.069,.075,.003,40).translate(0,.068,0), dark);
-  const markings = [];
-  for (let i = 0; i < 20; i++) {
-    const p = i / 20 * TAU;
-    markings.push(new THREE.BoxGeometry(.001,.001,.008).translate(0,.070,.060).rotateY(p));
-  }
-  mesh(merged(markings), bronze);
+  const a = artifact('Figma / floating enamel', options), {group, mesh} = a;
+  // The turned stone pedestal with two bronze bands and a dark dial ring of
+  // twenty bronze ticks: one lathe, its finishes painted along the profile.
+  const stone = {color: '#696a61', rough: .82, metal: 0, grain: 'speckle'};
+  const bronze = {color: '#9d7849', rough: .38, metal: .72, grain: 'turned'}, dark = {color: '#272a28', rough: .85, metal: 0};
+  turned(a, [[.086,0],[.102,.006],[.108,.016],[.108,.025],[.097,.0305],[.094,.0335],[.086,.047],[.096,.051],
+    [.098,.0555],[.098,.0585],[.091,.066],[.075,.066],[.073,.0685],[.062,.0685],[.056,.0685],[0,.0685]], 28,
+    k => k === 4 || k === 8 ? bronze : k >= 11 ? dark : stone, {segment: 13, count: 20, finish: bronze});
   const cloud = new THREE.Group(); cloud.position.y = .228; group.add(cloud);
   const r = .031, unit = .066;
   function logoShape(kind) {

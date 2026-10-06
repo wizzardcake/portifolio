@@ -310,3 +310,129 @@ smoothly, and noise-driven wander keeps it from reading as a Y.
    every suite used to wait for the automatic walk.
 2. **`verification/` stays local and is listed in `.gitignore`.** Only
    `PROGRESS.md` is committed; screenshots are referenced by path.
+
+## Stage 1: Distant entry camera
+
+**Changed:** `scene-camera.js`, `room-scene.js`, `script.js`, `portal.css`,
+`room.css`, `index.html`, and the tests (see below).
+
+### Camera points
+
+- Every camera point is now an eye `position` plus a `lookAt`. The heading (yaw)
+  and the tilt both come from those two points.
+- `approach` (0 to 1) still blends from the entry to the seat. The path is a
+  straight line for now; a curved path through extra points can be added later
+  without changing the data.
+- One projection serves both renderers. Three.js uses `position` plus yaw and
+  pitch (Euler order `YXZ`). The CSS portal adds `--table-view-x` and turns by
+  `rotateZ(--view-yaw)`. Away from the seat, CSS and WebGL now agree to within
+  0.25 px. That was measured at the table's centre and corners, at the entry, mid-walk
+  and seated, in three viewport sizes.
+- `sceneCamera.project()` gives the same projection without three.js; the chair's
+  hit area uses it.
+
+### Entry point
+
+| Format | Position | lookAt | Distance to the table |
+| --- | --- | --- | --- |
+| Landscape | (0.5, 1.6, 3.4) | (−1, 0, −2) | About 3.4 m, twice the seat's 1.665 m |
+| Portrait | (0.6, 1.6, 4.2) | (−1.44, 0, −1.41) | About 4.2 m |
+
+- **Landscape:** turned 15.5° to the left and looking 15.9° down. The room reads
+  as a space: the beams, the warm study nook clearly legible left of centre
+  (about 145 × 225 px at 1440×900, up from about 110 px in the old start view),
+  the gothic window in the middle and the green stair tower on the right. The
+  chair and table anchor the middle and right without being centred on the portal.
+- **Portrait:** it stands further back and turns 20° so that the nook stays in
+  frame. In the old start view the nook was off screen.
+- **How it was chosen:** I compared 23 landscape and 6 portrait candidate points on contact sheets. Those
+  turned more than about 25° made the dark side walls dominate.
+
+### Behaviour
+
+- **The entry waits.** `#deviceTilt` goes `entry` → `walking` → `ready`.
+- **Idle life:** a slow sway (about 2 cm and 0.3°) and a lean toward the pointer
+  (5 cm and 0.4°). The sway redraws at about 15 fps, which moves the view less
+  than 0.15 px per step; it redraws at 30 fps only while the lean is still
+  catching up with the pointer. There is no idle motion on touch, under reduced
+  motion, or in a hidden tab, and it fades out over the first part of the walk.
+- **Going to the chair:** an invisible button (`#goChair`, labelled "Gå til stolen
+  og sett deg ved bordet") lies over the chair and table. It shows the pointer
+  cursor and a focus ring for keyboard users. Choosing it starts the walk:
+  5.4 s, smoothstep, a straight path, as before. Under reduced motion the
+  visitor is seated at once.
+- **The cloth** takes no input until seated.
+- **Dev navigation:** ◀ returns to the entry. ▶ sits down and reveals from any state.
+- **No WebGL** (the room's fallback picture): the visitor is seated immediately.
+- **One driver loop** in `scene-camera.js` runs the walk, the sway and the lean,
+  and only while something moves. The old rAF loop for the walk in `script.js`
+  is gone.
+
+### Rendering
+
+`room-scene.js` now redraws the shadow maps only when something in the room
+changed, not on frames where only the camera moved. The shadows do not depend
+on the camera, so the picture is the same and each such frame costs less.
+
+### Verification
+
+Screenshots are in `verification/stage1/`, all inspected.
+
+- **Entry views:** `entry-1440x900`, `-1920x1080`, `-390x844`, `-844x390` and
+  `-1366x768`.
+- **Seated views:** `seated-covered-*` and `seated-open-*`.
+- **Seated compared with the baseline by image difference:**
+  - With the cloth on, it is pixel-identical apart from a 67×33 px patch of sky in
+    the window: 0.007 % of pixels at 1440×900, 0.006 % at 1920×1080, 0.025 % at
+    390×844.
+  - With the portal open, only animated content differs: the orb's inside, the
+    water, the sparks and the clouds. Their phase depends on when the reveal ran.
+    Every edge and silhouette is identical; I checked the heat map.
+- **Frame rate** (1440×900, Iris Xe):
+
+  | State | Result |
+  | --- | --- |
+  | Entry idle, sway | 60.2 fps, 0 frames over 20 ms |
+  | Entry with pointer parallax | 60.2 fps, 0 frames over 20 ms |
+  | Walk to the chair | 56.4 fps, 18 frames over 20 ms (baseline walk: 49.2 fps, 55 frames over 20 ms) |
+  | Seated | 60.2 fps |
+  | Reduced motion at the entry | 0 room renders in 2 s |
+
+  Measurements on this laptop vary from run to run, by about 3–5 fps in the walk.
+- **Keyboard and pointer:**
+  - `#goChair` is the first Tab stop at the entry, and its focus ring frames the
+    chair and the table (`entry-keyboard-focus.png`).
+  - Enter starts the walk, and once seated the focus moves on to the cloth. A
+    mouse click leaves the focus alone.
+  - Over the target the cursor is a pointer.
+  - At the entry the cloth cannot be reached (tabindex −1, `aria-disabled`, no
+    pointer events).
+  - ◀ returns to the entry, and ▶ from the entry seats and reveals.
+- **Test run:** all 14 suites passed on the final stage 1 code.
+  - An earlier run had one flaky `tools-check` failure ("Multiple formation
+    frames are sampled", the known first-opening hitch of the Verktøy page). It
+    passed 5/5 twice when run alone, and again in the full rerun.
+  - `depth-check` passed 3/3 both times.
+- **Tests:** every wait for `data-approach="ready"` now chooses the chair first
+  (the shared `SEATED` expression in each test file). `portal-check` now checks
+  the entry contract: without a choice the view stays at the entry; the walk
+  still renders intermediate states, moves closer, keeps the FOV and disables
+  the cloth; the tilt changes steadily and ends at exactly 75°. The
+  reduced-motion check asserts the new behaviour: the visitor starts at the
+  entry and choosing the chair seats them at once.
+
+### Still weak
+
+- The near half of the room is very dark at the entry, so the room reads partly
+  as a dark corridor. The smoke on the floor (stages 2–3) is meant to carry the
+  eye there; the lighting is unchanged.
+- From the entry the chair stands only about 1.9 m ahead, so little floor is
+  visible between the visitor and the chair. The chair branch of the smoke will
+  have to come in from the side.
+- In portrait the chair hides part of the table.
+- The chair's hit area is invisible; until the smoke exists only the cursor
+  shows that the chair can be chosen.
+- The portal's own effects (water, depth, orb dive) still assume the eye is on
+  the table's axis: `localEyeX` is published but not used. This only shows when
+  the portal is open and the camera is away from the seat, which is not
+  reachable yet.

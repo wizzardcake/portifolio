@@ -6,6 +6,10 @@ import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
 
+// The entry waits for the visitor (script.js): choosing the chair starts the
+// walk in. Polled by until(): chooses the chair at the entry, true once seated.
+const SEATED = "(document.querySelector('#deviceTilt').dataset.approach === 'entry' && document.querySelector('#goChair').click(), document.querySelector('#deviceTilt').dataset.approach === 'ready')";
+
 const root = resolve(import.meta.dirname, '..'), output = resolve(root, '.qa');
 await mkdir(output, {recursive: true});
 const server = createServer(async (req, res) => {
@@ -81,7 +85,7 @@ try {
     await writeFile(resolve(output, `tools-${name}.png`), Buffer.from(data, 'base64'));
   };
   async function reveal() {
-    await until("!!window.toolsPage && document.querySelector('#deviceTilt').dataset.approach === 'ready'");
+    await until(`!!window.toolsPage && ${SEATED}`);
     await evaluate("document.querySelector('#introForward').click(); true");
     await until("document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight') && portalMatter.canReact");
   }

@@ -74,6 +74,9 @@ if (renderer) {
   renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // Shadow maps are redrawn only when something in the room changed, not for
+  // a frame in which only the camera moved (see invalidate()).
+  renderer.shadowMap.autoUpdate = false;
 
   let seed = 617;
   const random = () => ((seed = Math.imul(seed,1664525)+1013904223 >>> 0) / 4294967296);
@@ -1273,16 +1276,21 @@ if (renderer) {
   scene.traverse(object=>{if(object.isLight)object.layers.enable(1);});
   frontCanvas.addEventListener('webglcontextlost',event=>{event.preventDefault();frontLost=true;frontHost.classList.remove('is-ready');});
   frontCanvas.addEventListener('webglcontextrestored',()=>{frontLost=false;invalidate();});
-  let pending=false, lost=false, layoutKey='';
+  let pending=false, lost=false, layoutKey='', shadowsStale=true;
   const sizeKey=()=>[innerWidth,innerHeight,view.width,view.height,view.units,devicePixelRatio,
     ...Object.values(window.portalTable.geometry).slice(0,3)].join(':');
-  function invalidate() {if(!pending&&!document.hidden&&!lost){pending=true;requestAnimationFrame(draw);}}
+  // cameraOnly: nothing in the room moved, so the shadow maps stay as they are.
+  function invalidate(cameraOnly=false) {
+    if(!cameraOnly) shadowsStale=true;
+    if(!pending&&!document.hidden&&!lost){pending=true;requestAnimationFrame(draw);}
+  }
   function draw() {
     pending=false;if(document.hidden||lost)return;
-    // The approach changes physical camera distance, never the room's scale.
+    // The camera moves physically (scene-camera.js), never the room's scale.
     camera.fov=view.fov;
-    camera.aspect=innerWidth/innerHeight;camera.position.set(0,view.eyeHeight,view.distance);
-    camera.rotation.set(-view.tilt,0,0);
+    camera.aspect=innerWidth/innerHeight;camera.position.set(view.x,view.eyeHeight,view.distance);
+    camera.rotation.set(-view.tilt,view.camera.yaw*Math.PI/180,0,'YXZ');
+    renderer.shadowMap.needsUpdate=shadowsStale;shadowsStale=false;
     camera.setViewOffset(innerWidth,innerHeight,0,innerHeight*.5-view.originY,innerWidth,innerHeight);
     camera.updateProjectionMatrix();camera.updateMatrixWorld();
     camera.layers.set(0);renderer.render(scene,camera);host.classList.add('is-ready');
@@ -1359,9 +1367,9 @@ if (renderer) {
     lightInAir.uniforms.uMoonlight.value=dustMaterial.uniforms.uMoonlight.value=light;
     dustMaterial.uniforms.uTime.value=now/1000;windowHaze.material.opacity=.065*windowLight.haze*light;
     const rect=windowRect();if(!rect) return;
-    renderer.shadowMap.autoUpdate=false;renderer.setScissorTest(true);renderer.setScissor(...rect);
+    renderer.setScissorTest(true);renderer.setScissor(...rect);
     camera.layers.set(0);renderer.render(scene,camera);
-    renderer.setScissorTest(false);renderer.shadowMap.autoUpdate=true;
+    renderer.setScissorTest(false);
   }
   requestAnimationFrame(liveOutside);
   function resize() {
@@ -1375,9 +1383,9 @@ if (renderer) {
   }
   // A dolly frame only changes the projection; geometry and canvas allocation
   // are refreshed only when the viewport or responsive table dimensions change.
-  addEventListener('scene-camera-change',()=>{if(sizeKey()!==layoutKey)resize();else invalidate();});
-  new MutationObserver(invalidate).observe(stage,{attributes:true,attributeFilter:['class','data-approach']});
-  document.addEventListener('visibilitychange',invalidate);
+  addEventListener('scene-camera-change',()=>{if(sizeKey()!==layoutKey)resize();else invalidate(true);});
+  new MutationObserver(()=>invalidate()).observe(stage,{attributes:true,attributeFilter:['class','data-approach']});
+  document.addEventListener('visibilitychange',()=>invalidate());
   canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();lost=true;host.classList.remove('is-ready');document.getElementById('screen').classList.remove('has-table-model');});
   canvas.addEventListener('webglcontextrestored',()=>{lost=false;resize();});
   // Used by the local geometry/registration check and dev inspection.

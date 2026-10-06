@@ -6,6 +6,10 @@ import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
 
+// The entry waits for the visitor (script.js): choosing the chair starts the
+// walk in. Polled by until(): chooses the chair at the entry, true once seated.
+const SEATED = "(document.querySelector('#deviceTilt').dataset.approach === 'entry' && document.querySelector('#goChair').click(), document.querySelector('#deviceTilt').dataset.approach === 'ready')";
+
 const root = process.env.PORTFOLIO_TEST_ROOT || resolve(import.meta.dirname, '..');
 const output = process.env.PORTFOLIO_TEST_ROOT ? resolve(root, 'checks') : resolve(import.meta.dirname, '..', '.qa');
 await mkdir(output, {recursive: true});
@@ -159,7 +163,7 @@ try {
   await cdp('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
   await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/`});
-  await until(`!!window.portalAura && !!window.studyRoom && deviceTilt.dataset.approach==='ready'`);
+  await until(`!!window.portalAura && !!window.studyRoom && ${SEATED}`);
   const dormant=await evaluate(`portalAura.stats`);
   assert.equal(dormant.active,false);assert.ok(dormant.lights.every(x=>x===0));
   await shot('aura-covered');
@@ -235,7 +239,7 @@ try {
   assert.equal((await evaluate(`portalAura.stats`)).active,false,'Reset extinguishes aura without touching the cloth');
   if(!process.argv.includes('--preview-only')) {
     await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type.includes('webgl')?null:original.call(this,type,...args)}`});
-    await cdp('Page.reload');await until(`!!window.portalAura && deviceTilt.dataset.approach==='ready'`);
+    await cdp('Page.reload');await until(`!!window.portalAura && ${SEATED}`);
     await click('#introForward');await until(`document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight')`);
     await assertViewport();await shot('aura-fallback');
     assert.equal((await evaluate(`portalAura.stats`)).lights.length,0,'CSS aura survives unavailable WebGL');

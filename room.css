@@ -13,3 +13,12 @@ body.intro-active .intro-indicator { pointer-events: auto; }
 .room-front { position: absolute; inset: 0; pointer-events: none; }
 .room-front canvas { display: block; width: 100%; height: 100%; }
 .room-front:not(.is-ready) { display: none; }
+/* Where the visitor can go from the entry: invisible hit areas over the room's
+   own furniture (script.js). Only the keyboard focus ring is ever drawn. */
+.entry-targets { position: absolute; inset: 0; pointer-events: none; }
+.entry-targets[hidden] { display: none; }
+.entry-target {
+  position: absolute; margin: 0; padding: 0; border: 0; border-radius: 24px;
+  background: none; pointer-events: auto; cursor: pointer;
+}
+.entry-target:focus-visible { outline: 2px solid rgba(190, 206, 255, .5); outline-offset: 4px; }

@@ -33,8 +33,11 @@ body.intro-active .intro-orbit { visibility: hidden; }
   display: flex; flex: none;
   align-self: center; justify-self: center;
   transform-style: preserve-3d;
+  /* The table centre in the camera's frame (scene-camera.js), the camera's
+     tilt, and its heading as a turn about the table's own vertical. */
   transform: translate(-50%, -50%) perspective(var(--scene-focal, 1300px))
-    translate3d(0, var(--table-view-y, 0px), var(--table-view-z, 0px)) rotateX(var(--view-pitch));
+    translate3d(var(--table-view-x, 0px), var(--table-view-y, 0px), var(--table-view-z, 0px))
+    rotateX(var(--view-pitch)) rotateZ(var(--view-yaw));
   background: none;
   border: 2px solid transparent;
   border-radius: 0;

@@ -40,10 +40,17 @@
   const SPIN_DEG_PER_PX = 0.5; // purely visual — how fast the wireframe ball turns
   const NORMAL_PULSE_DUR = 5; // matches the site's normal resting pulse speed
   const NORMAL_SPARK_DUR = 6; // matches the site's normal resting spark speed
-  // Move only the camera distance. The same landscape tablet and its table
-  // remain on one horizontal plane throughout the shot and after unlocking.
+  // The visitor arrives standing far back in the room (scene-camera.js's
+  // entry point), and the view waits there, quietly alive, until they choose
+  // the chair. The walk to it is a real camera move shared by the room and
+  // the CSS portal, never a zoom; for now along a straight path. The table
+  // stays on one horizontal plane throughout and after unlocking.
+  // data-approach on #deviceTilt: entry -> walking -> ready (seated).
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const POSES = ['intro-pose', 'intro-pose-zoomed'];
+  const roomShell = document.getElementById('roomShell');
+  const entryTargets = document.getElementById('entryTargets');
+  const goChair = document.getElementById('goChair');
   let approachAnimation = null;
 
   function setPose(pose) {
@@ -51,54 +58,93 @@
     if (pose) deviceTilt.classList.add(pose);
   }
 
+  // Seated, at once: where every way in ends (the walk, reduced motion, skip).
   function cancelApproach() {
-    approachAnimation?.cancel();
     approachAnimation = null;
+    window.sceneCamera.stop();
+    window.sceneCamera.setIdle(false);
     window.sceneCamera.setApproach(1);
     deviceTilt.classList.remove('intro-walking');
     deviceTilt.dataset.approach = 'ready';
     clothControl.removeAttribute('aria-disabled');
+    showEntryTargets(false);
   }
 
-  function runApproach() {
+  function sitDown() {
+    setPose('intro-pose-zoomed');
     cancelApproach();
+    void deviceTilt.offsetHeight;
+    clothControl.tabIndex = 0;
+  }
+
+  // Standing at the entry, waiting for the visitor. The CSS transition stays
+  // off until seated, so no pose change is ever animated by the wrapper.
+  function enterRoom() {
+    approachAnimation = null;
+    window.sceneCamera.stop();
     measureScreen();
-    // Disable the CSS transition while setting either endpoint, including
-    // reduced motion and replay. The dial stays still once the shot ends.
     deviceTilt.classList.add('intro-walking');
-    if (reducedMotion.matches) {
-      setPose('intro-pose-zoomed');
-      void deviceTilt.offsetHeight;
-      deviceTilt.classList.remove('intro-walking');
-      clothControl.tabIndex = 0;
-      return;
-    }
     setPose('intro-pose');
-    deviceTilt.dataset.approach = 'walking';
+    window.sceneCamera.setApproach(0);
+    window.sceneCamera.setIdle(true);
+    deviceTilt.dataset.approach = 'entry';
     clothControl.setAttribute('aria-disabled', 'true');
     clothControl.tabIndex = -1;
-    // A real camera dolly shared by the room and CSS portal. Keep the eye
-    // height, downward angle and FOV fixed instead of zooming a flat wrapper.
-    let frame;
-    const started = performance.now();
-    const animation = {cancel: () => cancelAnimationFrame(frame)};
+    showEntryTargets(true);
+    // Without the room's renderer there is no room to stand in: sit down.
+    if (roomShell?.classList.contains('room-fallback')) sitDown();
+  }
+
+  // The chair was chosen: walk there and sit down (at once under reduced motion).
+  // keyboard: chosen with Enter or Space, so the focus moves on to the cloth.
+  function walkToChair(keyboard = false) {
+    if (deviceTilt.dataset.approach !== 'entry') return;
+    const arrive = () => { sitDown(); if (keyboard) clothControl.focus({preventScroll: true}); };
+    showEntryTargets(false);
+    window.sceneCamera.setIdle(false);
+    if (reducedMotion.matches) { arrive(); return; }
+    deviceTilt.dataset.approach = 'walking';
+    const animation = {};
     approachAnimation = animation;
-    const step = now => {
-      if (approachAnimation !== animation) return;
-      const t = Math.min(1, (now - started) / 5400);
-      window.sceneCamera.setApproach(t * t * (3 - 2 * t));
-      if (t < 1) frame = requestAnimationFrame(step);
-      else {
-        setPose('intro-pose-zoomed');
-        cancelApproach();
-        clothControl.tabIndex = 0;
-      }
-    };
-    step(started);
+    window.sceneCamera.moveTo(1, 5400).then(arrived => {
+      if (arrived && approachAnimation === animation) arrive();
+    });
   }
   reducedMotion.addEventListener('change', () => {
-    if (reducedMotion.matches && approachAnimation) runApproach();
+    if (reducedMotion.matches && approachAnimation) sitDown();
   });
+  if (roomShell) new MutationObserver(() => {
+    if (roomShell.classList.contains('room-fallback') && deviceTilt.dataset.approach !== 'ready') sitDown();
+  }).observe(roomShell, {attributes: true, attributeFilter: ['class']});
+
+  // The places to go from the entry: invisible buttons over the chair and the
+  // table, which the room draws. Re-placed whenever the camera moves.
+  function showEntryTargets(on) {
+    if (!entryTargets) return;
+    entryTargets.hidden = !on;
+    if (on) placeEntryTargets();
+    else if (entryTargets.contains(document.activeElement)) document.activeElement.blur();
+  }
+  function placeEntryTargets() {
+    if (!entryTargets || entryTargets.hidden) return;
+    const camera = window.sceneCamera, table = screenEl.querySelector('.portal-table');
+    const halfWidth = table.clientWidth / camera.units / 2 + .05, halfDepth = table.clientHeight / camera.units / 2 + .05;
+    // The armchair stands where room-scene.js puts it, just behind the seated eye.
+    const chair = camera.seated.distance - .06, corners = [];
+    for (const x of [-halfWidth, halfWidth]) for (const z of [-halfDepth, halfDepth]) corners.push([x, 0, z], [x, camera.tableHeight, z]);
+    for (const x of [-.32, .32]) for (const z of [chair - .28, chair + .36]) corners.push([x, 0, z], [x, 1.05, z]);
+    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+    for (const corner of corners) {
+      const p = camera.project(...corner);
+      if (p.depth < .1) continue;
+      left = Math.min(left, p.x); right = Math.max(right, p.x); top = Math.min(top, p.y); bottom = Math.max(bottom, p.y);
+    }
+    if (!(right > left)) return;
+    Object.assign(goChair.style, {left: left - 12 + 'px', top: top - 12 + 'px', width: right - left + 24 + 'px', height: bottom - top + 24 + 'px'});
+  }
+  addEventListener('scene-camera-change', placeEntryTargets);
+  // A click from the keyboard (Enter or Space) carries no pointer detail.
+  goChair?.addEventListener('click', event => walkToChair(event.detail === 0));
 
   let finishing = false;
   let sequenceGen = 0; // bumped whenever the dev nav buttons force-jump state,
@@ -275,7 +321,8 @@
   // wakes the portal, and the orb then rises out of it (runFinishingSequence).
   // The spin-to-unlock seal above is no longer reachable (hidden in CSS).
   let clothPull = null;
-  const clothReady = () => !finishing && !approachAnimation && document.body.classList.contains('table-covered');
+  const clothReady = () => !finishing && !approachAnimation && deviceTilt.dataset.approach === 'ready'
+    && document.body.classList.contains('table-covered');
 
   function stripCloth(dx, dy, instant) {
     clothPull = null;
@@ -556,12 +603,14 @@
     indicator.removeEventListener('pointerdown', onIndicatorDown);
     indicator.addEventListener('pointerdown', onIndicatorDown);
     startSync();
-    runApproach();
+    enterRoom();
   }
 
   function jumpToFinished() {
     if (finishing) return;
     finishing = true;
+    // From the entry or mid-walk: sit down first.
+    if (deviceTilt.dataset.approach !== 'ready') sitDown();
     cumulativeDrag = TOTAL_DRAG_PX;
     cancelInertia();
     if (moveRafHandle !== null) cancelAnimationFrame(moveRafHandle);
@@ -590,7 +639,7 @@
   if (introForwardBtn) introForwardBtn.addEventListener('click', jumpToFinished);
 
   applyProgress(0);
-  runApproach();
+  enterRoom();
 })();
 
 // ==========================================================================

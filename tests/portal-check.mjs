@@ -6,6 +6,10 @@ import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
 
+// The entry waits for the visitor (script.js): choosing the chair starts the
+// walk in. Polled by until(): chooses the chair at the entry, true once seated.
+const SEATED = "(document.querySelector('#deviceTilt').dataset.approach === 'entry' && document.querySelector('#goChair').click(), document.querySelector('#deviceTilt').dataset.approach === 'ready')";
+
 const root = process.env.PORTFOLIO_TEST_ROOT || resolve(import.meta.dirname, '..');
 const output = process.env.PORTFOLIO_TEST_ROOT ? resolve(root, 'checks') : resolve(import.meta.dirname, '..', '.qa');
 await mkdir(output, {recursive: true});
@@ -160,7 +164,7 @@ try {
       await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
       await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
       await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/`});
-      await until(`!!window.studyRoom && document.querySelector('#deviceTilt').dataset.approach==='ready'`);
+      await until(`!!window.studyRoom && ${SEATED}`);
       await evaluate(`document.fonts.ready`);await sleep(250);
       await shot('cloth-rest-'+width);
       const invariants=await evaluate(`JSON.stringify({table:portalTable.geometry,orb:document.querySelector('#portalMatter').getAttribute('style'),camera:sceneCamera.camera})`);
@@ -212,7 +216,7 @@ try {
       await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
       await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
       await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/`});
-      await until(`!!window.studyRoom && document.querySelector('#deviceTilt').dataset.approach==='ready'`);
+      await until(`!!window.studyRoom && ${SEATED}`);
       await click('#introForward');
       await until(`document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight')`);
       await sleep(500);await shot('room-'+width);
@@ -274,7 +278,7 @@ try {
       await assertRemainingHand();await click('#portalRetrieve');await sleep(650);
     }
     await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type.includes('webgl')?null:original.call(this,type,...args)}`});
-    await cdp('Page.reload');await until(`document.querySelector('.room-fallback') && document.querySelector('#deviceTilt').dataset.approach==='ready'`);
+    await cdp('Page.reload');await until(`document.querySelector('.room-fallback') && ${SEATED}`);
     await click('#introForward');await until(`document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight')`);
     await assertViewport();await drag('.hand-card--prosjekter .sub-card',await bounds('.portal-origin'));
     await until(`document.querySelector('#app-prosjekter').classList.contains('active')`);
@@ -287,7 +291,7 @@ try {
       await cdp('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:false});
       await cdp('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion',value:'reduce'}]});
       await cdp('Page.navigate', {url:`http://127.0.0.1:${port}/`});
-      await until(`document.querySelector('#deviceTilt').dataset.approach === 'ready'`);
+      await until(`${SEATED}`);
       await click('#introForward');
       await until(`document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight')`);
       await sleep(350);
@@ -349,7 +353,7 @@ try {
     await cdp('Emulation.setDeviceMetricsOverride', {width:1440,height:1000,deviceScaleFactor:1,mobile:false});
     await cdp('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion',value:'reduce'}]});
     await cdp('Page.navigate', {url:`http://127.0.0.1:${port}/`});
-    await until(`document.querySelector('#deviceTilt').dataset.approach === 'ready'`);
+    await until(`${SEATED}`);
     await sleep(300); await click('#introForward');
     await until(`document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight')`);
     await sleep(300);
@@ -366,7 +370,7 @@ try {
     await cdp('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion',value:'reduce'}]});
     await cdp('Page.navigate', {url:`http://127.0.0.1:${port}/`});
     await until(`!!window.portalMatter`);
-    await until(`document.querySelector('#deviceTilt').dataset.approach === 'ready'`);
+    await until(`${SEATED}`);
     await sleep(300);
     await click('#introForward');
     await until(`document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight')`);
@@ -457,7 +461,7 @@ try {
   await cdp('Emulation.setDeviceMetricsOverride', {width:1920,height:910,deviceScaleFactor:1,mobile:false});
   await cdp('Page.navigate', {url:`http://127.0.0.1:${port}/`});
   await until(`!!window.portalMatter`);
-  await until(`document.querySelector('#deviceTilt').dataset.approach === 'ready'`);
+  await until(`${SEATED}`);
   await pullCloth();
   await until(`document.body.classList.contains('portal-unlocked')`);
   await until(`document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight')`, 20000);
@@ -493,10 +497,14 @@ try {
   await cdp('Page.navigate', {url:`http://127.0.0.1:${port}/`});
   await until(`!!window.portalMatter`);
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:approachProbe.identifier});
-  await sleep(700); await shot('00-approach'); // still across the room, first beat of the walk in
+  // The view waits at the room's entry until the visitor chooses the chair.
+  await sleep(700); await shot('00-entry');
+  await sleep(1200);
+  assert.equal(await evaluate(`document.querySelector('#deviceTilt').dataset.approach`), 'entry', 'Without a choice the view waits at the entry');
+  await click('#goChair');
   await sleep(2000); await shot('00a-approach-mid');
   await sleep(900); await shot('00b-approach-near');
-  await until(`document.querySelector('#deviceTilt').dataset.approach === 'ready'`);
+  await until(`${SEATED}`);
   const approach=await evaluate('approachQA');
   assert.ok(approach.length>=2,'The approach renders intermediate camera states');
   assert.ok(approach.every(frame=>frame.disabled==='true'),'Cloth input is disabled throughout the approach');
@@ -509,7 +517,11 @@ try {
   assert.ok(initial.top>20 && initial.bottom<980, 'Intro portal must fit vertically');
   assert.ok(farPortal.w < middlePortal.w && middlePortal.w <= initial.w, 'The walk must move progressively closer');
   assert.ok(initial.w / initial.h > 2.4, 'The portal must read as a horizontal landscape surface');
-  assert.equal(await evaluate(`sceneCamera.camera.pitch`), approachPitch, 'The tabletop must not rotate during the approach');
+  // From the entry the camera turns to the table and settles into the seat's
+  // fixed look: its tilt changes steadily, never back and forth.
+  assert.ok(approach.every((frame, i) => !i || frame.pitch >= approach[i - 1].pitch - 1e-9) && approachPitch <= 75,
+    'The tilt eases steadily from the entry to the seat: ' + approach.map(frame => frame.pitch).join());
+  assert.equal(await evaluate(`sceneCamera.camera.pitch`), 75, 'Seated, the camera keeps the portal\'s 75-degree pitch');
   assert.ok(await evaluate(`sceneCamera.distance`) < farDistance, 'The approach physically moves the camera toward the table');
   assert.equal(await evaluate(`studyRoom.camera.fov`),72,'The approach does not substitute FOV zoom for camera movement');
   const tablePose = await evaluate(`getComputedStyle(document.querySelector('#screen')).transform`);
@@ -616,7 +628,7 @@ try {
   }
   await cdp('Emulation.setDeviceMetricsOverride', {width:390,height:844,deviceScaleFactor:1,mobile:false});
   await cdp('Page.navigate', {url:`http://127.0.0.1:${port}/`}); await until(`!!window.portalMatter`);
-  await until(`document.querySelector('#deviceTilt').dataset.approach === 'ready'`);
+  await until(`${SEATED}`);
   await shot('07-mobile-locked');
   await click('#introForward');
   await until(`document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight')`);
@@ -645,7 +657,9 @@ try {
   // Verify the CSS material path independently of WebGL availability.
   await cdp('Page.addScriptToEvaluateOnNewDocument', {source:`const getContext=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type==='webgl'?null:getContext.call(this,type,...args)}`});
   await cdp('Page.reload'); await until(`!!window.portalMatter && typeof window.bringHandCardToFront === 'function'`);
-  assert.equal(await evaluate(`document.querySelector('#deviceTilt').dataset.approach`), 'ready', 'Reduced motion skips the camera journey');
+  assert.equal(await evaluate(`document.querySelector('#deviceTilt').dataset.approach`), 'entry', 'Reduced motion also starts at the entry, waiting for the visitor');
+  assert.equal(await evaluate(`document.querySelector('#goChair').click(), document.querySelector('#deviceTilt').dataset.approach + ':' + sceneCamera.approach`),
+    'ready:1', 'Reduced motion skips the camera journey to the chair');
   assert.equal(await evaluate(`document.querySelector('#portalMatter').classList.contains('webgl')`), false);
   assert.equal(await evaluate(`document.querySelector('.screen-tunnel').classList.contains('has-depth')`), false);
   assert.ok(await evaluate(`window.portalMatter.unlock().then(() => window.portalMatter.project('kurs'))`));

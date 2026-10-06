@@ -7,6 +7,10 @@ import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
 
+// The entry waits for the visitor (script.js): choosing the chair starts the
+// walk in. Polled by until(): chooses the chair at the entry, true once seated.
+const SEATED = "(document.querySelector('#deviceTilt').dataset.approach === 'entry' && document.querySelector('#goChair').click(), document.querySelector('#deviceTilt').dataset.approach === 'ready')";
+
 const root = resolve(import.meta.dirname, '..');
 const output = resolve(root, '.qa');
 const serveOnly = process.argv.includes('--serve');
@@ -108,7 +112,7 @@ async function check() {
     const sphere = () => evaluate(`(() => { const r = document.querySelector('#portalMatter').getBoundingClientRect();
       return {x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width * .369}; })()`);
     async function reveal() {
-      await until("!!window.portalOrb && document.querySelector('#deviceTilt').dataset.approach === 'ready'");
+      await until(`!!window.portalOrb && ${SEATED}`);
       await evaluate("document.querySelector('#introForward').click(); true");
       await until("document.body.classList.contains('intro-done') && !document.querySelector('.portal-flight') && portalMatter.canReact");
       await sleep(600);

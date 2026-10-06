@@ -6,6 +6,10 @@ import {resolve,extname,sep} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
+
+// The entry waits for the visitor (script.js): choosing the chair starts the
+// walk in. Polled by until(): chooses the chair at the entry, true once seated.
+const SEATED = "(document.querySelector('#deviceTilt').dataset.approach === 'entry' && document.querySelector('#goChair').click(), document.querySelector('#deviceTilt').dataset.approach === 'ready')";
 const root=resolve(import.meta.dirname,'..'),output=resolve(root,'.qa');
 const serveOnly=process.argv.includes('--serve');
 const server=createServer(async(req,res)=>{
@@ -58,7 +62,7 @@ async function check(){
     await cdp('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
     await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
     await cdp('Page.navigate',{url});
-    await until(`!!window.portalReaction&&deviceTilt.dataset.approach==='ready'`);
+    await until(`!!window.portalReaction&&${SEATED}`);
     assert.deepEqual(await evaluate(`triggerPortalImpact()`),{completed:false,reason:'not-ready'});
     await evaluate(`document.querySelector('#introForward').click();true`);
     await until(`document.body.classList.contains('intro-done')&&portalMatter.canReact&&!document.querySelector('.portal-flight')`);
@@ -131,7 +135,7 @@ async function check(){
     await evaluate(`window.__impactClock=undefined;true`);
     await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`const getContext=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type.includes('webgl')?null:getContext.call(this,type,...args)}`});
     await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
-    await cdp('Page.reload');await until(`!!window.portalReaction&&deviceTilt.dataset.approach==='ready'`);
+    await cdp('Page.reload');await until(`!!window.portalReaction&&${SEATED}`);
     await evaluate(`document.querySelector('#introForward').click();true`);
     await until(`portalMatter.canReact&&document.body.classList.contains('intro-done')&&!document.querySelector('.portal-flight')`);
     await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});

@@ -1,64 +1,116 @@
 /* One perspective definition for the architectural renderer and the existing
-   CSS portal. World coordinates are metres: +Y up, +Z toward the seated viewer.
-   CSS portal coordinates are pixels: +Y toward the viewer, +Z above the table. */
+   CSS portal. World coordinates are metres: +Y up, +Z toward the seated viewer,
+   the table centre at the origin. CSS portal coordinates are pixels: +Y toward
+   the viewer, +Z above the table.
+   The camera stands at named points, each an eye `position` and the point it
+   looks at (`lookAt`). Between two points it moves along a path: straight for
+   now, but a path may later pass through further points of its own.
+   `approach` is the walk from the entry (0) to the seat (1). */
 (() => {
   const screen = document.getElementById('screen');
   const table = screen.querySelector('.portal-table');
   const root = document.documentElement;
+  const still = matchMedia('(prefers-reduced-motion: reduce)');
   const camera = {yaw: 0, pitch: 75};
-  // Two camera states on one fixed downward tilt; `approach` blends them
-  // (0 = wide, 1 = seated). Distances are from the table centre.
+  const radians = Math.PI / 180;
   const state = {camera, tableHeight: .46, fov: 72, approach: 1,
-    // Intro / wide view: standing back at the room's open end, high enough to
-    // see the chair in front of the table and floor behind it. The distance
-    // fits the reference tabletop to `frame` of the viewport width, then steps
-    // back by `retreat`.
-    wide: {eye: 1.55, frame: {wide: .55, portrait: .94}, retreat: 1.1},
+    // Entry: standing well back in the room, about twice the seat's distance
+    // from the table, a little right of its axis and turned toward the study
+    // nook in the left wall: the chair and table anchor the middle, the nook
+    // reads on the left, the window and the stair tower beyond. It looks at the
+    // floor between the table and the nook (a little under 16 degrees down).
+    // Portrait views are narrow, so they stand further back and turn further.
+    entry: {
+      wide: {position: [.5, 1.6, 3.4], lookAt: [-1, 0, -2]},
+      portrait: {position: [.6, 1.6, 4.2], lookAt: [-1.44, 0, -1.41]},
+    },
     // Final seated POV: the eye of someone sitting in the chair centred in
-    // front of the table (seat 0.42 m; the table is knee height). Narrow
-    // viewports back away until the real tabletop's front edge spans at most
-    // `fit` of the viewport width.
-    seated: {eye: 1.18, distance: 1.6, fit: {wide: .94, portrait: .8}}};
+    // front of the table (seat 0.42 m; the table is knee height), looking
+    // `tilt` degrees down along the table's axis. Narrow viewports back away
+    // until the real tabletop's front edge spans at most `fit` of the
+    // viewport width.
+    seated: {eye: 1.18, distance: 1.6, tilt: 15, fit: {wide: .94, portrait: .8}},
+    // The entry's quiet life, so the view never stands dead still: the
+    // standing eye sways a little and leans toward the pointer. Metres and
+    // degrees; none under reduced motion or on touch. The slow sway is
+    // redrawn every frameMs (each step well under a pixel), a lean that is
+    // still following the pointer every leanFrameMs.
+    idle: {sway: [.02, .012], swayYaw: .3, lean: [.05, .025], leanYaw: .4, response: .45, frameMs: 66, leanFrameMs: 33},
+  };
+  const points = {};
+  // A point's heading and tilt (degrees, rounded so a point on an exact
+  // 15-degree line keeps exactly the portal's 75-degree pitch).
+  const round = v => Math.round(v * 1e6) / 1e6;
+  function aim({position: [x, y, z], lookAt: [tx, ty, tz]}) {
+    const run = Math.hypot(tx - x, tz - z);
+    return {position: [x, y, z], yaw: round(Math.atan2(x - tx, z - tz) / radians), tilt: round(Math.atan2(y - ty, run) / radians)};
+  }
+  // The entry's sway and lean, applied on top of the path (see the driver).
+  const offset = {x: 0, y: 0, yaw: 0};
   function update() {
     const width = screen.clientWidth, height = screen.clientHeight;
     const units = Math.max(300, width / 2.06);
-    const pitch = camera.pitch * Math.PI / 180;
-    const tilt = Math.PI / 2 - pitch;
     const focal = innerHeight / (2 * Math.tan(state.fov * Math.PI / 360));
     const portrait = innerWidth < 900 && innerWidth < innerHeight;
-    const {wide, seated} = state, format = portrait ? 'portrait' : 'wide';
+    const format = portrait ? 'portrait' : 'wide', {seated} = state;
+    const seatTilt = seated.tilt * radians;
     // Distance at which a tabletop front edge of `span` metres, `near` metres
     // in front of the table centre, fills `share` of the viewport width.
     const fitting = (span, near, share, eye) => near +
-      (focal * span / (innerWidth * share) - (eye - state.tableHeight) * Math.sin(tilt)) / Math.cos(tilt);
-    // The wide view fits a fixed reference footprint, the original 1.4 x 1.68
-    // tabletop, so resizing the table in portal.css never moves it.
-    const wideDistance = fitting(1.4 * width / units, (portrait ? 1.4 : .94) * height / units,
-      wide.frame[format], wide.eye) + wide.retreat;
+      (focal * span / (innerWidth * share) - (eye - state.tableHeight) * Math.sin(seatTilt)) / Math.cos(seatTilt);
     const framing = window.portalTable?.framing;
     const seatedDistance = Math.max(seated.distance, fitting((framing?.width ?? table.clientWidth) / units,
       (framing?.front ?? (table.offsetTop + table.clientHeight - height / 2)) / units, seated.fit[format], seated.eye));
-    const distance = wideDistance + (seatedDistance - wideDistance) * state.approach;
-    const eyeHeight = wide.eye + (seated.eye - wide.eye) * state.approach;
-    const elevation = eyeHeight - state.tableHeight;
-    const viewY = (elevation * Math.cos(tilt) - distance * Math.sin(tilt)) * units;
-    const viewDistance = (distance * Math.cos(tilt) + elevation * Math.sin(tilt)) * units;
+    points.entry = state.entry[format];
+    // The seat looks along the table's axis, at the tabletop's height.
+    points.seated = {position: [0, seated.eye, seatedDistance],
+      lookAt: [0, state.tableHeight, seatedDistance - (seated.eye - state.tableHeight) / Math.tan(seatTilt)]};
+    const from = aim(points.entry), to = aim(points.seated), t = state.approach;
+    const mix = (a, b) => a + (b - a) * t;
+    const heading = mix(from.yaw, to.yaw) + offset.yaw;
+    camera.yaw = round(heading); camera.pitch = round(90 - mix(from.tilt, to.tilt));
+    const yaw = camera.yaw * radians, tilt = Math.PI / 2 - camera.pitch * Math.PI / 180;
+    // The sway moves the eye along its own right and up.
+    const x = mix(from.position[0], to.position[0]) + offset.x * Math.cos(yaw);
+    const eyeHeight = mix(from.position[1], to.position[1]) + offset.y;
+    const distance = mix(from.position[2], to.position[2]) - offset.x * Math.sin(yaw);
+    // The table centre in the camera's frame: right, up and depth (metres).
+    const dx = -x, dy = state.tableHeight - eyeHeight, dz = -distance;
+    const sinY = Math.sin(yaw), cosY = Math.cos(yaw), sinT = Math.sin(tilt), cosT = Math.cos(tilt);
+    const right = dx * cosY - dz * sinY;
+    const up = -dx * sinY * sinT + dy * cosT - dz * cosY * sinT;
+    const depth = -dx * sinY * cosT - dy * sinT - dz * cosY * cosT;
+    const viewX = right * units, viewY = -up * units, viewDistance = depth * units;
     const anchorY = innerHeight * (portrait ? .60 : .54);
     const originY = anchorY - focal * viewY / viewDistance;
-    Object.assign(state, {width, height, units, tilt, focal, eyeHeight, distance, wideDistance, seatedDistance, viewY, viewDistance, originY, anchorY, appliedPitch:camera.pitch,
-      localEyeY: distance * units, localEyeZ: elevation * units});
-    for (const [key,value] of Object.entries({
+    Object.assign(state, {width, height, units, tilt, focal, x, eyeHeight, distance, seatedDistance, viewX, viewY, viewDistance,
+      originY, anchorY, format, appliedPitch: camera.pitch, elevation: eyeHeight - state.tableHeight,
+      localEyeX: x * units, localEyeY: distance * units, localEyeZ: (eyeHeight - state.tableHeight) * units});
+    for (const [key, value] of Object.entries({
       '--scene-focal': focal, '--scene-origin-y': originY,
-      '--table-view-y': viewY, '--table-view-z': focal - viewDistance,
+      '--table-view-x': viewX, '--table-view-y': viewY, '--table-view-z': focal - viewDistance,
       '--table-leg-length': state.tableHeight * units
-    })) root.style.setProperty(key,value+'px');
-    screen.style.setProperty('--view-pitch',camera.pitch+'deg');
+    })) root.style.setProperty(key, value + 'px');
+    screen.style.setProperty('--view-pitch', camera.pitch + 'deg');
+    screen.style.setProperty('--view-yaw', camera.yaw + 'deg');
     window.dispatchEvent(new Event('scene-camera-change'));
   }
   state.update = update;
+  state.points = points;
   state.setApproach = progress => {
     state.approach = Math.max(0, Math.min(1, progress));
     update();
+  };
+  // Where a world point (metres) lands in the viewport, in CSS pixels: the
+  // same projection as the room's renderer and the CSS portal.
+  state.project = (px, py, pz) => {
+    const yaw = camera.yaw * radians, tilt = state.tilt;
+    const dx = px - state.x, dy = py - state.eyeHeight, dz = pz - state.distance;
+    const sinY = Math.sin(yaw), cosY = Math.cos(yaw), sinT = Math.sin(tilt), cosT = Math.cos(tilt);
+    const right = dx * cosY - dz * sinY;
+    const up = -dx * sinY * sinT + dy * cosT - dz * cosY * sinT;
+    const depth = -dx * sinY * cosT - dy * sinT - dz * cosY * cosT;
+    return {x: innerWidth / 2 + state.focal * right / depth, y: state.originY - state.focal * up / depth, depth};
   };
   // Convert a desired reader-facing viewport rectangle back into portal-local
   // coordinates, so the orb morph and HTML reader continue to share one target.
@@ -71,6 +123,60 @@
       height: Math.min(620,innerHeight*.56)/scale,
       y: y*Math.cos(p)+z*Math.sin(p), z: -y*Math.sin(p)+z*Math.cos(p)};
   };
+
+  // ---- One driver for every camera movement: walking a path (smoothstep, as
+  // the original walk in) and the entry's sway and lean. It runs only while
+  // something moves; the idle life redraws at its own slower pace.
+  let move = null, idling = false, raf = 0, last = 0, drawn = 0, weight = 0;
+  const pointer = {x: 0, y: 0}, lean = {x: 0, y: 0};
+  const wake = () => { if (!raf) raf = requestAnimationFrame(drive); };
+  function drive(now) {
+    raf = 0;
+    const dt = last ? Math.min(.1, (now - last) / 1000) : 0;
+    last = now;
+    const live = idling && !still.matches && !document.hidden;
+    const {idle} = state, ease = response => 1 - Math.exp(-dt / response);
+    // The idle life fades in at the entry and out once the walk starts.
+    weight += ((live && !move ? 1 : 0) - weight) * ease(.6);
+    lean.x += (pointer.x - lean.x) * ease(idle.response);
+    lean.y += (pointer.y - lean.y) * ease(idle.response);
+    const s = now / 1000, wave = (period, phase = 0) => Math.sin(s * 2 * Math.PI / period + phase);
+    offset.x = weight * (idle.sway[0] * wave(11) + idle.lean[0] * lean.x);
+    offset.y = weight * (idle.sway[1] * wave(6.5, 1) - idle.lean[1] * lean.y);
+    offset.yaw = weight * (idle.swayYaw * wave(13, 2) - idle.leanYaw * lean.x);
+    if (move) {
+      if (move.start === null) move.start = now;
+      const t = Math.min(1, (now - move.start) / move.duration);
+      state.approach = move.from + (move.to - move.from) * t * t * (3 - 2 * t);
+      update();
+      if (t >= 1) { const {resolve} = move; move = null; resolve(true); }
+    } else {
+      const following = Math.abs(pointer.x - lean.x) + Math.abs(pointer.y - lean.y) > .02;
+      if (now - drawn > (following ? idle.leanFrameMs : idle.frameMs)) { drawn = now; update(); }
+    }
+    if (move || live || weight > .002) wake();
+    else { weight = 0; offset.x = offset.y = offset.yaw = 0; last = 0; update(); }
+  }
+  // Walk the path to `progress` (1 = seated) over `duration` ms; resolves true
+  // on arrival, false if stopped or replaced.
+  state.moveTo = (progress, duration) => new Promise(resolve => {
+    move?.resolve(false);
+    move = {from: state.approach, to: Math.max(0, Math.min(1, progress)), start: null, duration, resolve};
+    wake();
+  });
+  state.stop = () => { const stopped = move; move = null; stopped?.resolve(false); };
+  Object.defineProperty(state, 'moving', {get: () => !!move});
+  // The idle life at the entry (the driver fades it in and out).
+  state.setIdle = on => { idling = !!on; wake(); };
+  addEventListener('pointermove', event => {
+    if (event.pointerType === 'touch') return;
+    pointer.x = event.clientX / innerWidth * 2 - 1; pointer.y = event.clientY / innerHeight * 2 - 1;
+    if (idling) wake();
+  }, {passive: true});
+  root.addEventListener('pointerleave', () => { pointer.x = pointer.y = 0; });
+  document.addEventListener('visibilitychange', wake);
+  still.addEventListener('change', wake);
+
   window.sceneCamera = state;
   new ResizeObserver(update).observe(screen);
   addEventListener('resize',update);

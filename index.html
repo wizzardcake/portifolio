@@ -337,6 +337,11 @@
   </div><!-- /.device-tilt -->
   <!-- Furniture between the viewer and the table: layered above the CSS table. -->
   <div class="room-front" id="roomFront" aria-hidden="true"><canvas id="roomFrontCanvas"></canvas></div>
+  <!-- The places to go while the visitor stands at the room's entry: script.js
+       lays each over what it stands for in the room's view. -->
+  <div class="entry-targets" id="entryTargets" hidden>
+    <button type="button" class="entry-target" id="goChair" aria-label="Gå til stolen og sett deg ved bordet"></button>
+  </div>
 </div><!-- /.intro-scene -->
       <div class="device-topbar">
         <span class="wordmark" id="wordmark">

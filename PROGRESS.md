@@ -919,3 +919,83 @@ Screenshots are in `verification/stage7/`, all inspected.
   1.5 s later.
 - **`?arrange`:** seated, pitch 75, yaw 0 (`arrange`).
 - **Tests:** all 14 suites passed in one full run.
+
+## Final verification (`937b658`)
+
+- **Tests:** all 14 suites passed in one full run on the final code. Every
+  changed script and test passes `node --check`.
+- **Console:** I ran three complete visits with real clicks, at 1440×900,
+  1920×1080 and 390×844 (DPR 2): entry → nook → shelf → click back → chair →
+  seated → ▶ reveal. There were no browser errors or warnings, and the state
+  sequence was the same at every size.
+- **Screenshots** are in `verification/final/`, all inspected:
+  - The visit: `tour-entry-*`, `tour-shelf-*`, `tour-seated-covered-*` and
+    `tour-seated-open-*`.
+  - Deterministic: `entry-*`, `seated-covered-*` and `seated-open-*`.
+  - Reduced motion: `final-reduced-*`.
+- **The seated POV against the baseline,** by image difference of
+  deterministic captures:
+
+  | Size | Cloth on | Portal open |
+  | --- | --- | --- |
+  | 1440×900 | 0.007 % of pixels, the sky patch only | 0.06 %, animated content only |
+  | 1920×1080 | 0.006 %, the sky patch only | 1.9 %, animated content only |
+  | 390×844 | 0.025 %, the sky patch only | 3.4 %, animated content only |
+
+  - The heat map at 1920×1080 puts every change in the orb, the portal's water
+    and the window's sky. Table, room and cards are identical.
+  - CSS and WebGL stay registered to within 0.22 px at the entry, mid-walk and
+    seated.
+  - The entry is pixel-identical to stage 5 at 1440×900 and 390×844.
+- **Reduced motion:**
+  - Every move is instant, including the click back from the shelf.
+  - The camera requests no frames at the entry or the shelf.
+  - Switching reduced motion on mid-walk arrives at once.
+- **Frame rate:** 1440×900, A/B against the baseline `b65761a`, interleaved
+  over five rounds in one session (fps):
+
+  | Round | Scripted walk, baseline | Scripted walk, final | Real walk to the chair | Real walk to the shelf |
+  | --- | --- | --- | --- | --- |
+  | 1 | 59.6 | 60.2 | 56.8 | 60.0 |
+  | 2 | 59.4 | 46.2 | 42.0 | 46.9 |
+  | 3 | 45.4 | 45.6 | 46.4 | 44.0 |
+  | 4 | 48.2 | 45.4 | 45.2 | 46.4 |
+  | 5 | 41.6 | 41.0 | 40.2 | 39.8 |
+
+  - The scripted walk is the same workload in both: setting `approach` every
+    frame, so the whole room redraws each frame.
+  - The machine slowed down during the session, between the two runs of
+    round 2. Run in the same state, the baseline and the final walk at the same
+    rate, and the real walks match the scripted one.
+  - Idle at the entry, seated (cloth on, and portal open) and at the shelf:
+    60.2–60.4 fps in every round. The one exception is a single baseline run
+    with the portal open, at 58.
+  - The room's budget is unchanged: 26 draw calls and 9,947 triangles at the
+    entry and seated (the same as the baseline), and 20 calls and 6,951
+    triangles at the shelf.
+- **`git diff b65761a..HEAD`** touches only this task's files:
+  - The scripts: `scene-camera.js`, `room-scene.js`, the new `room-smoke.js`,
+    `script.js` and `dev/arrange.js`.
+  - The page: `index.html`, `portal.css` and `room.css`.
+  - The tests, `.gitignore` and `PROGRESS.md`.
+
+  No unrelated edits.
+
+### Open points
+
+- **Merging `feature/loading-veil`.** It is uncommitted, in its own worktree.
+  It defines its own `enterRoom()` in `script.js` and starts the old
+  `runApproach()`, which no longer exists here. Whichever branch merges second
+  must reconcile the two: keep the veil lifting at the room's first frame, drop
+  the automatic walk, and rename one of the two `enterRoom()` functions.
+- **Walk animations.** Legs are straight, or curved through one control point
+  (entry to shelf). Points, legs and control points are data, so new paths
+  need no change to the page.
+- **The navigation UI.** The targets are invisible, and only the cursor, the
+  focus ring and the smoke show where one can go.
+- **Objects on the shelf.** The shelf view and the way back are ready for
+  them; they must sit above `#leaveShelf`.
+- **The portal's own effects** still assume the eye is on the table's axis
+  (`localEyeX` is unused). The flow never opens the portal away from the seat.
+- **The near half of the room is dark at the entry.**
+- **The `?arrange` camera panel** predates the room camera.

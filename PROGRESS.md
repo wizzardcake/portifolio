@@ -436,3 +436,109 @@ Screenshots are in `verification/stage1/`, all inspected.
   the table's axis: `localEyeX` is published but not used. This only shows when
   the portal is open and the camera is away from the seat, which is not
   reachable yet.
+
+## Stage 2: Basic smoke trail
+
+**Changed:** a new `room-smoke.js`, and `room-scene.js`, which mounts the smoke
+and advances it.
+
+### What it is
+
+- **One trail** of low mist on the floor. It starts out of frame at the
+  visitor's feet and curves across the floor into the room, ending at the foot of
+  the study nook, about 6.3 m. I chose this route for the single trail because
+  it is the longest run of floor visible from the entry: from there the chair
+  stands only about 1.9 m ahead. The trail becomes the trunk and the shelf branch
+  in stages 3 and 5; the chair branch splits off in stage 3.
+- **Four strands** on one centripetal Catmull-Rom curve, each a low arch with its
+  own width, height, phase, speed and density: a flat veil on the boards, two low
+  drifts (6 and 10 cm high) and one wisp that rises to about 15 cm.
+- **How it is shaded:**
+  - **Arches:** thickest where the eye looks through their middle, like the
+    room's light shafts.
+  - **The veil:** thicker seen at a glance.
+  - **Wisps:** a 256² tiling noise texture of its own, built at load from its
+    own seeded generator, so the room's shared random sequence (planks, sky,
+    cloth) is untouched. It is sampled three times (a curl field, broad wisps,
+    fine wisps), flows slowly along the trail at each strand's own speed, and
+    breaks up the edges.
+  - **Density:** thicker and thinner stretches drift along the trail; the trail
+    gathers out of nothing over its first 1.6 m and thins away over its last
+    0.9 m.
+  - **Soft saturation** (`1 − e^(−gain·density)`): faint mist still reads, and
+    thick mist never turns solid.
+  - **Colour:** dim teal-grey with a touch of lavender, premultiplied, so it is
+    mostly light with a slight veil over what lies behind.
+- **Motion:** the strands wander up to about 7 cm sideways and swell up and down
+  slowly, each with its own phase, so no two move alike.
+- **Growing in:** each time the visitor arrives at the entry, the trail grows in
+  from their feet at about 1.6 m/s, starting 0.6 s after the room's first frame.
+- **When seated** it is gone: it thins away between `approach` 0.1 and 0.6.
+- **Live tuning:** `studyRoom.smoke.tuning` (gain, far, thin, veil, brightness).
+
+### Rendering
+
+- It is drawn on the foreground canvas (layer 1) with the chair and the cloth,
+  and animated in the existing cloth pulse, which now also runs while the smoke
+  is visible. There is no new loop and no full redraw of the room. The room
+  renderer's budget is untouched, because the smoke's 6,528 triangles are drawn
+  by the foreground renderer.
+- Under reduced motion it is a single still frame, fully grown in. Over 2 s at
+  the entry, neither canvas renders once.
+
+### Verification
+
+Screenshots are in `verification/stage2/`, all inspected.
+
+- **Entry:** `entry-try5`, `entry-smoke-1920x1080` and `entry-smoke-390x844`.
+- **Growing in:** `grow-1/2/3-*`.
+- **Motion:** `entry-later-*`. With the camera held still (idle off), about a
+  third of the trail's pixels change within 3 s and its shape is clearly new
+  after 9 s (scratch close-ups).
+- **Walking:** `walk-mid-*` and `walk-late-*`, where the smoke is gone.
+- **Reduced motion:** `entry-reduced-reduced-1440x900`.
+- **Seated, compared with the baseline:** unchanged, with the same differences as
+  stage 1. With the cloth on, a 67×33 px patch of sky; with the portal open, only
+  the animated orb, water and clouds. The smoke never shows there.
+- **Iterations on the look.** The third attempt was the last, per the
+  three-attempt rule:
+  1. Far too bright and purple, and too tall, so it read as a standing column.
+  2. Dim, low and grounded, but it faded out before the nook.
+  3. Legible all the way, but a solid, milky river.
+  4. Broken up again, but too faint: the second swing on the same balance.
+  5. Six tuning variants on one contact sheet, after adding soft saturation and
+     live tuning. The default (gain 2.2) reads as soft, broken, low smoke all
+     the way to the nook without becoming a tube.
+- **Frame rate (machine state changed).** After a Windows update and restart
+  between the stages (build 26200 → 26300, same Iris Xe and D3D11 path), this
+  laptop is about twice as slow in GPU-heavy frames.
+  - The unchanged baseline code now walks at 28–29 fps; it measured 49 fps in
+    Phase 0. Stage 1 code walks at 24–28.5 fps and stage 2 at 24.5–29 fps,
+    three runs each in one session.
+  - With and without the smoke (A/B in the same run):
+
+    | State | With smoke | Without smoke |
+    | --- | --- | --- |
+    | Entry idle | 59.8 fps | 59.0 fps |
+    | Entry, camera still | 60.5 fps | 59.3 fps |
+    | Walk | 23 fps | 21 fps |
+
+    The smoke adds no measurable cost. Rendered alone in a synchronised timing
+    test, a foreground frame takes about 5 ms more with the smoke than without
+    (13.6 ms against 8.5 ms).
+  - Seated: 60.2 fps.
+  - Absolute numbers from different sessions cannot be compared.
+
+- **Tests:** all 14 suites passed (the test files are unchanged in this stage).
+
+### Still weak
+
+- The trail ends at the foot of the nook's jamb rather than gathering at the
+  worktop; that is stage 5.
+- Close to the camera the trail is a broad, soft patch at the bottom of the
+  frame. It reads as mist at your feet, but it is the widest part of the trail.
+- The smoke is drawn only on the foreground canvas. The chair hides it, but the
+  table and walls cannot. This route never passes behind either from the entry,
+  but the split in stage 3 will need a check.
+- How dense and bright it should be is a matter of taste. It is tunable live and
+  should be judged by eye in the glue pass, together with the other trail.

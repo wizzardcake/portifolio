@@ -3,6 +3,7 @@ import {createRitualTable} from './table-model.js';
 import {createRitualCloth} from './ritual-cloth.js';
 import {createRoomArchitecture,architectureTuning} from './room-architecture.js';
 import {createNightSky} from './night-sky.js';
+import {createRoomSmoke} from './room-smoke.js';
 
 // Architecture and physical furniture. Portal, orb and HTML reader stay in their
 // own renderers; scene-camera.js gives both branches the same projection.
@@ -518,6 +519,21 @@ if (renderer) {
     // Layer 1 only: it renders in the foreground canvas, never the room canvas.
     const m=new THREE.Mesh(geometry,material);m.name=name;m.layers.set(1);chair.add(m);
   }
+
+  // ---- Smoke on the floor (room-smoke.js): a trail of low mist leading from
+  // the visitor's feet at the entry into the room, toward the study nook. It
+  // lives on the foreground layer with the chair and the cloth, so it costs
+  // the room's own canvas nothing; the cloth's pulse below keeps it moving.
+  // Table-centred coordinates [x, z], metres.
+  const smoke=createRoomSmoke(THREE,{anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy()),trails:[
+    {name:'entry to the study nook',points:[[.75,3.6],[.25,2.75],[-.45,2.15],[-1.15,1.45],[-1.7,.55],[-2.05,-.35],[-2.2,-1.05],[-2.25,-1.75]],
+      // A flat veil on the boards, two low drifts over it and one wisp that rises a little.
+      strands:[{offset:0,width:.46,height:0,phase:1.3,speed:.7,density:.3,wobble:.55},
+        {offset:-.1,width:.3,height:.06,phase:0,speed:1,density:.7},
+        {offset:.08,width:.38,height:.1,phase:2.1,speed:.8,density:.55},
+        {offset:.15,width:.2,height:.15,phase:4.3,speed:1.25,density:.4}]},
+  ]});
+  smoke.group.traverse(object=>object.layers.set(1));scene.add(smoke.group);
 
   // ---- Room lighting balance. The base fill stays low, so the lights below
   // shape the room: warm and close around the table and the study nook, cool
@@ -1304,6 +1320,10 @@ if (renderer) {
     for(const m of [chairWood,velvet]) if(m.opacity!==presence) {
       m.transparent=presence<1;m.depthWrite=presence>=1;m.opacity=presence;m.needsUpdate=true;
     }
+    // The smoke thins away as the visitor walks in, and is gone once seated.
+    const walked=Math.min(1,Math.max(0,(view.approach-.1)/.5));
+    smoke.presence=1-walked*walked*(3-2*walked);
+    if(stillMotion.matches) smoke.update(0);
     renderFront();
   }
   function renderFront() {
@@ -1317,14 +1337,23 @@ if (renderer) {
   // cloth lies on the table. Only the foreground layer redraws for it, at about
   // 30 fps; in its flight the cloth is redrawn with the room anyway (and moved
   // by the flight alone). Still for reduced motion.
+  // The smoke drifts in the same pulse, and grows in from the visitor's feet
+  // each time they arrive at the entry (whole at once under reduced motion).
   const stillMotion=matchMedia('(prefers-reduced-motion: reduce)');
-  let lastPulse=0;
+  let lastPulse=0,smokeState='',smokeSince=0;
+  function smokeReveal(now) {
+    const state=stage.dataset.approach;
+    if(state!==smokeState){if(state==='entry')smokeSince=now;smokeState=state;}
+    return Math.max(0,(now-smokeSince-600)/1000*1.6);
+  }
   function pulse(now) {
     requestAnimationFrame(pulse);
-    if(!cloth.visible||document.hidden||lost||stillMotion.matches||now-lastPulse<33) return;
-    lastPulse=now;inscription.uTime.value=now/1000;
-    if(!airborne&&!clothMotion) stirHem(now);
-    if(cloth.layers.isEnabled(1)) renderFront();
+    const smoking=smoke.group.visible;
+    if((!cloth.visible&&!smoking)||document.hidden||lost||stillMotion.matches||now-lastPulse<33) return;
+    lastPulse=now;
+    if(cloth.visible){inscription.uTime.value=now/1000;if(!airborne&&!clothMotion) stirHem(now);}
+    if(smoking) smoke.update(now/1000,smokeReveal(now));
+    if(cloth.layers.isEnabled(1)||smoking) renderFront();
   }
   requestAnimationFrame(pulse);
   // ---- The night outside is alive: cloud drifting over the moon, mist in
@@ -1390,7 +1419,7 @@ if (renderer) {
   canvas.addEventListener('webglcontextrestored',()=>{lost=false;resize();});
   // Used by the local geometry/registration check and dev inspection.
   // hem: the cloth hem wave's parameters, live-tunable from the console.
-  window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,table:artifact,
+  window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,table:artifact,smoke,
     // Room extents in scene (table-relative) coordinates; the plan objects
     // after it (window, tower, alcove, corner) are in plan coordinates.
     dimensions:{...room,back:room.back-placement.forward,front:room.front-placement.forward},

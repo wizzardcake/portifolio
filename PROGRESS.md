@@ -999,3 +999,77 @@ Screenshots are in `verification/stage7/`, all inspected.
   (`localEyeX` is unused). The flow never opens the portal away from the seat.
 - **The near half of the room is dark at the entry.**
 - **The `?arrange` camera panel** predates the room camera.
+
+# Refinements, second round
+
+## Setup
+
+- **Starting point:** `C:\Users\ander\OneDrive\Skrivebord\Portifolio`, on branch
+  `feature/entry-navigation` at `73e14f9`. The working tree was clean.
+- **Baseline captures** are in `verification/refine-baseline/`, taken on a
+  deterministic virtual clock at 1440×900, 1920×1080 and 390×844 (DPR 2):
+  - the entry, with the smoke grown in;
+  - three frames along the walk to the shelf, and the shelf view;
+  - the seated view, with the cloth on and with the portal open.
+- **Baseline frame rate** (1440×900, two runs, fps):
+
+  | View | Run 1 | Run 2 |
+  | --- | --- | --- |
+  | Entry, idle | 59.6 | 60.2 |
+  | Seated, idle | 60.4 | 60.2 |
+  | Portal open | 60.4 | 60.4 |
+  | Shelf, idle | 60.2 | 60.4 |
+  | Real walk to the chair | 38.6 | 42.4 |
+  | Real walk to the shelf | 42.9 | 40.7 |
+  | Scripted walk | 43.6 | 41.8 |
+
+  The room's budget is 26 draw calls and 9,947 triangles at the entry and
+  seated, and 20 calls and 6,951 triangles at the shelf.
+- **Later the site was also open in a browser on this machine** (the local
+  preview), and every measurement ran slower for both builds. Speed is
+  therefore compared A/B within the same round.
+
+## Refine 1: Narrower smoke
+
+**Changed:** `room-scene.js` (the strands) and `room-smoke.js` (the scale of
+the wisps and the wander).
+
+- **Narrower strands.** Every strand's width, sideways offset and height are
+  scaled down; the gathering at the nook is narrowed by about 0.7×.
+  - Width about 0.55×, sideways offset about 0.6×, height about 0.85×.
+  - Density is up 10 % so the narrower mist still reads.
+  - A little more width variation and wander along the way break up the
+    edges.
+- **Wisps rescaled.** Across a strand the wisps were measured from edge to edge,
+  but along it in metres. Narrowing the strands therefore stretched them into
+  streaks along the trail, and attempt 1 read as a smooth ribbon.
+  - Along the trail they are now as long as the strands are wide: the noise
+    scale went from `.42` to `.7` per metre.
+  - The flow keeps its speed in metres per second.
+- **Attempts:** 1 looked like a ribbon; 2 was accepted.
+
+### Verification
+
+Screenshots are in `verification/refine-stage1/`:
+- `entry-try1` and `entry-try2`, with their close-ups;
+- the entry, the walk and the shelf at 1920×1080 and 390×844.
+
+- **Both branches read and balance.** Near the visitor the trail to the nook is
+  about half as wide: about 120–150 px at 1440×900, against about 250–300 px
+  before.
+- **It still reads as smoke:** soft, broken edges and puffs of varying
+  density.
+- **The split** is a soft divergence. It is visible in portrait; at 1440×900 it
+  lies just below the frame, as before.
+- **Seated:** identical to the refine baseline with the cloth on. With the
+  portal open, only the orb's animation differs.
+- **Frame rate:** an A/B against `73e14f9` in the same rounds shows no
+  difference (fps):
+
+  | View | `73e14f9`, round 1 | Narrower, round 1 | `73e14f9`, round 2 | Narrower, round 2 |
+  | --- | --- | --- | --- | --- |
+  | Entry, idle | 44.8 | 43.2 | 40.8 | 40.6 |
+  | Real walk to the chair | 22.2 | 21.0 | 22.8 | 23.0 |
+
+  The machine was under load from the open preview.
+- **Tests:** all 14 suites passed.

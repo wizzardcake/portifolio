@@ -533,23 +533,23 @@ if (renderer) {
     // It ends running along the nook's worktop, where it gathers (below).
     {name:'to the study nook',points:[...trunk,[-.4,2.2],[-1.15,1.45],[-1.7,.55],[-2.02,-.3],[-2.17,-.9],[-2.2,-1.5],[-2.13,-2.05]],
       // A flat veil on the boards, two low drifts over it and one wisp that rises a little.
-      strands:[{offset:0,width:.46,height:0,phase:1.3,speed:.7,density:.3,wobble:.55},
-        {offset:-.2,offsetEnd:-.1,width:.3,height:.06,phase:0,speed:1,density:.7},
-        {offset:-.06,offsetEnd:.08,width:.38,height:.1,phase:2.1,speed:.8,density:.55},
-        {offset:.15,width:.2,height:.15,phase:4.3,speed:1.25,density:.4}]},
+      strands:[{offset:0,width:.26,height:0,phase:1.3,speed:.7,density:.34,wobble:.6},
+        {offset:-.12,offsetEnd:-.06,width:.17,height:.05,phase:0,speed:1,density:.75,wobble:.45},
+        {offset:-.04,offsetEnd:.05,width:.21,height:.085,phase:2.1,speed:.8,density:.6,wobble:.45},
+        {offset:.09,width:.12,height:.13,phase:4.3,speed:1.25,density:.45,wobble:.45}]},
     // At the nook the mist gathers and rises a little along the worktop's
     // front, staying well below its top (0.74 m) and the things that will
     // stand there.
     {name:'gathering at the nook',fadeIn:.5,fadeOut:.55,points:[[-2.12,-.6],[-2.19,-1.1],[-2.2,-1.6],[-2.14,-2.15]],
-      strands:[{offset:0,width:.3,height:.22,phase:2.6,speed:.6,density:.62,wobble:.5},
-        {offset:.06,width:.18,height:.36,phase:5.1,speed:.8,density:.45,wobble:.55},
-        {offset:-.04,width:.4,height:0,phase:3.3,speed:.5,density:.3,wobble:.6}]},
+      strands:[{offset:0,width:.21,height:.22,phase:2.6,speed:.6,density:.62,wobble:.5},
+        {offset:.04,width:.13,height:.36,phase:5.1,speed:.8,density:.45,wobble:.55},
+        {offset:-.03,width:.28,height:0,phase:3.3,speed:.5,density:.3,wobble:.6}]},
     // The chair's share is thinner: it is near and short, and must not outweigh the long trail.
     // It is short, so it gathers sooner and thins away under the seat.
     {name:'into the chair',fadeIn:1.1,fadeOut:.45,points:[...trunk,[.4,2.35],[.46,1.86],[.3,1.5],[.02,1.42]],
-      strands:[{offset:.04,width:.32,height:0,phase:3.7,speed:.75,density:.36,wobble:.6},
-        {offset:.2,offsetEnd:.06,width:.22,height:.05,phase:5.2,speed:1.1,density:.72},
-        {offset:.1,offsetEnd:-.06,width:.15,height:.11,phase:.9,speed:1.3,density:.5}]},
+      strands:[{offset:.02,width:.18,height:0,phase:3.7,speed:.75,density:.4,wobble:.6},
+        {offset:.12,offsetEnd:.04,width:.13,height:.05,phase:5.2,speed:1.1,density:.78,wobble:.45},
+        {offset:.06,offsetEnd:-.04,width:.09,height:.1,phase:.9,speed:1.3,density:.55,wobble:.45}]},
   ]});
   smoke.group.traverse(object=>object.layers.set(1));scene.add(smoke.group);
 

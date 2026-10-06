@@ -55,7 +55,7 @@ export function createRoomSmoke(THREE, {trails, anisotropy = 1}) {
         // A slow wander sideways and a soft rise and fall: never two strands alike.
         float wander = .6 * sin(s * .85 + t * .21) + .4 * sin(s * 2.1 - t * .33 + strand.x * 1.7);
         float swell = .5 + .5 * sin(s * 1.6 + t * .27 + strand.x);
-        vec3 p = position + lateral * wander * .07;
+        vec3 p = position + lateral * wander * .08;
         p.y *= .8 + .45 * swell;
         vec4 mv = modelViewMatrix * vec4(p, 1.);
         vNormal = normalize(normalMatrix * normal); vView = -mv.xyz;
@@ -70,8 +70,9 @@ export function createRoomSmoke(THREE, {trails, anisotropy = 1}) {
         // veil is thickest seen at a glance, through more of it.
         float facing = abs(dot(normalize(vNormal), normalize(vView)));
         float core = mix(pow(facing, 1.35), uVeil * min(1.2, .32 / max(facing, .27)), vFlat);
-        // Wisps flowing along the trail, their pattern curled by a slower field.
-        vec2 p = vec2(vPath.x * .42 - uTime * .035 * vSpeed, vPath.y * .9 + vSeed * .37);
+        // Wisps flowing along the trail, their pattern curled by a slower field;
+        // about as long as the strands are wide, so a narrow trail is no ribbon.
+        vec2 p = vec2(vPath.x * .7 - uTime * .058 * vSpeed, vPath.y * .9 + vSeed * .37);
         vec2 warp = texture2D(uNoise, p * .45 + vec2(uTime * .009, vSeed)).rg - .5;
         float broad = texture2D(uNoise, p + warp * 1.1).r;
         float fine = texture2D(uNoise, p * 2.6 + warp * 1.7 - vec2(uTime * .02, 0.)).g;

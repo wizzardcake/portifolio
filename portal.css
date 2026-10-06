@@ -47,6 +47,9 @@ body.intro-active .intro-orbit { visibility: hidden; }
   isolation: auto;
 }
 .screen.hidden { display: flex; }
+/* The table is behind the camera (on the way to the shelf): nothing of the
+   portal can be projected, and some of its layers set their own visibility. */
+.screen.is-behind, .screen.is-behind * { visibility: hidden !important; }
 /* The tabletop is the aperture (.screen) plus a rim: --rim-x per side as a
    fraction of the aperture width, back/front as fractions of its depth.
    The legs derive from the same values; the camera does not (scene-camera.js). */

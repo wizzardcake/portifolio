@@ -648,3 +648,79 @@ Screenshots are in `verification/stage4/`, all inspected.
     table, room and cards are unchanged. That is 0.07 % of pixels at 1440×900
     and 3.4 % at 390×844, varying with when the reveal ran.
 - **Tests:** all 14 suites passed.
+
+## Stage 5: Shelf route and shelf view
+
+**Changed:**
+- `scene-camera.js`: the shelf point, legs, a control point for curved legs, a
+  lens shift per point, and hiding the portal behind the eye.
+- `portal.css`: the hiding rule.
+- `room-scene.js`: the trail's end, the gathering at the nook, and each trail's
+  presence on the shelf leg.
+
+### Camera
+
+- **Legs.** The camera is now always on a leg `{from, to, progress}` between two
+  named points: entry, seated or shelf. `approach` is derived from it: its
+  progress on the way to the seat, 1 when seated. `setApproach()` still works,
+  and `setLeg(from, to, progress)` and `moveTo()` cover any leg.
+- **The shelf point.**
+  - Landscape: (−1.3, 1.61, −0.15) looking at (−2.45, 0.85, −1.75). That is
+    standing just left of the table and turned 36° toward the nook: a
+    three-quarter view, about 21° downward.
+  - Portrait: (−1.35, 1.62, 0.7) looking at (−2.7, 0.85, −1.45).
+  - I chose them from 10 landscape and 4 portrait candidates on contact sheets.
+    The first try stood almost inside the table's footprint (its left tip is at
+    x ≈ −0.92), and its eye was at shelf height, so the shelf was seen edge-on.
+- **Curved legs.** A leg may pass a control point
+  (`via: {'entry>shelf': [−0.95, 1.6, 2.2]}`). The eye then follows a quadratic
+  curve while its heading blends between the ends. The straight path from the
+  entry to the shelf went over the chair; this one passes about 0.4 m left of
+  the chair and about 0.65 m left of the table's edge. This is the structure
+  for curved walks; the walk animations themselves are still to come.
+- **Lens shift per point.** The entry and the seat keep the table centre at one
+  screen height, exactly as before, also along the walk between them. The shelf,
+  where the table is out of view, takes no shift, and legs to or from the shelf
+  blend the two. Without this, the shift chased a table at the edge of the view
+  and swung.
+- **The CSS portal is hidden while the table is behind the eye**
+  (`#screen.is-behind`, with `!important` because the aura sets its own
+  visibility inline). CSS cannot project it there, and it is out of view anyway.
+
+### Smoke
+
+- The trail to the nook now ends running along the front of the worktop.
+- **"Gathering at the nook"**: three short strands along the worktop's front
+  (a flat veil and wisps up to 0.22 m and 0.36 m), well below its top (0.74 m).
+  From the entry the trail visibly arrives and gathers at the foot of the nook;
+  at the shelf the mist pools under the worktop.
+- **On the shelf leg:** the chair's trail thins away early (progress 0.05–0.4).
+  The nook's stays, only 15 % quieter once the visitor stands there.
+
+### Verification
+
+Screenshots are in `verification/stage5/`, all inspected.
+
+- **The way there:** `shelf-entry/20/40/60/80/100-try2`. The camera turns
+  steadily left and passes left of the chair (which drops out of frame at the
+  bottom) and of the table (the cloth at the bottom right). The trail on the
+  floor leads ahead the whole way. From 100 the table is behind the eye and the
+  portal is hidden.
+- **The shelf view:** `shelf-100-try3` (1440×900), `shelf-100-1920x1080` and
+  `shelf-100-390x844`.
+  - **Usable surface (1440×900):** the worktop spans about 594 × 315 px (14 % of
+    the screen) and is seen from above. The shelf is about 645 × 75 px with its
+    top visible. Five to eight objects could stand on the worktop and a few more
+    on the shelf.
+  - **Context:** in landscape the alcove window with the night sky and
+    moonbeams fills the right third. In portrait the window is out of view, but
+    the beams, the curved wall and the floor still place it in the room.
+  - **Geometry:** no clipping or awkward geometry. The nearest jamb takes the
+    left fifth of the frame.
+- **Seated, compared with the baseline:** unchanged with the cloth on (the same
+  sky patch at 1440×900 and 390×844). With the portal open, only animated
+  content differs.
+- **Captures:** two runs timed out on this machine and passed when retried. The
+  machine has intermittent stalls since the Windows update; the timeout in my
+  capture script was raised.
+- **Tests:** 13 of 14 suites passed in the full run. `orb-check` failed once on a timing check ("It opens after pinch-off": the orb was still `idle` at the 1,447 ms sample), in code this stage did not touch. Run alone it passed 5/5 twice: a frame-timing flake on the slower machine.

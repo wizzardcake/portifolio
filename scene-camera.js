@@ -3,9 +3,10 @@
    the table centre at the origin. CSS portal coordinates are pixels: +Y toward
    the viewer, +Z above the table.
    The camera stands at named points, each an eye `position` and the point it
-   looks at (`lookAt`). Between two points it moves along a path: straight for
-   now, but a path may later pass through further points of its own.
-   `approach` is the walk from the entry (0) to the seat (1). */
+   looks at (`lookAt`): entry, seated and shelf. The camera is always on a
+   leg between two of them ({from, to, progress 0..1}); a leg is straight for
+   now, but may later pass through further points of its own. `approach` is
+   derived from it: how far toward the seat (1 seated, 0 at the entry). */
 (() => {
   const screen = document.getElementById('screen');
   const table = screen.querySelector('.portal-table');
@@ -13,7 +14,8 @@
   const still = matchMedia('(prefers-reduced-motion: reduce)');
   const camera = {yaw: 0, pitch: 75};
   const radians = Math.PI / 180;
-  const state = {camera, tableHeight: .46, fov: 72, approach: 1,
+  const state = {camera, tableHeight: .46, fov: 72,
+    leg: {from: 'entry', to: 'seated', progress: 1},
     // Entry: standing well back in the room, about twice the seat's distance
     // from the table, a little right of its axis and turned toward the study
     // nook in the left wall: the chair and table anchor the middle, the nook
@@ -30,6 +32,18 @@
     // until the real tabletop's front edge spans at most `fit` of the
     // viewport width.
     seated: {eye: 1.18, distance: 1.6, tilt: 15, fit: {wide: .94, portrait: .8}},
+    // Shelf: standing beside the table's left, turned three-quarters toward
+    // the study nook: its worktop and shelf large and seen a little from above,
+    // the alcove window in view so it stays the same room, the table and the
+    // chair behind the eye. Portrait views are narrow and stand further back.
+    shelf: {
+      wide: {position: [-1.3, 1.61, -.15], lookAt: [-2.45, .85, -1.75]},
+      portrait: {position: [-1.35, 1.62, .7], lookAt: [-2.7, .85, -1.45]},
+    },
+    // A leg that must go round something passes a control point: the eye is
+    // drawn toward it on a smooth curve, while its heading blends between the
+    // ends. Entry to shelf goes round the chair's and the table's left.
+    via: {'entry>shelf': [-.95, 1.6, 2.2]},
     // The entry's quiet life, so the view never stands dead still: the
     // standing eye sways a little and leans toward the pointer. Metres and
     // degrees; none under reduced motion or on touch. The slow sway is
@@ -61,28 +75,45 @@
     const framing = window.portalTable?.framing;
     const seatedDistance = Math.max(seated.distance, fitting((framing?.width ?? table.clientWidth) / units,
       (framing?.front ?? (table.offsetTop + table.clientHeight - height / 2)) / units, seated.fit[format], seated.eye));
-    points.entry = state.entry[format];
+    points.entry = state.entry[format]; points.shelf = state.shelf[format];
     // The seat looks along the table's axis, at the tabletop's height.
     points.seated = {position: [0, seated.eye, seatedDistance],
       lookAt: [0, state.tableHeight, seatedDistance - (seated.eye - state.tableHeight) / Math.tan(seatTilt)]};
-    const from = aim(points.entry), to = aim(points.seated), t = state.approach;
-    const mix = (a, b) => a + (b - a) * t;
-    const heading = mix(from.yaw, to.yaw) + offset.yaw;
-    camera.yaw = round(heading); camera.pitch = round(90 - mix(from.tilt, to.tilt));
-    const yaw = camera.yaw * radians, tilt = Math.PI / 2 - camera.pitch * Math.PI / 180;
-    // The sway moves the eye along its own right and up.
-    const x = mix(from.position[0], to.position[0]) + offset.x * Math.cos(yaw);
-    const eyeHeight = mix(from.position[1], to.position[1]) + offset.y;
-    const distance = mix(from.position[2], to.position[2]) - offset.x * Math.sin(yaw);
-    // The table centre in the camera's frame: right, up and depth (metres).
-    const dx = -x, dy = state.tableHeight - eyeHeight, dz = -distance;
-    const sinY = Math.sin(yaw), cosY = Math.cos(yaw), sinT = Math.sin(tilt), cosT = Math.cos(tilt);
-    const right = dx * cosY - dz * sinY;
-    const up = -dx * sinY * sinT + dy * cosT - dz * cosY * sinT;
-    const depth = -dx * sinY * cosT - dy * sinT - dz * cosY * cosT;
-    const viewX = right * units, viewY = -up * units, viewDistance = depth * units;
+    // A pose: where the eye is and how it is turned (the sway on top), and
+    // the table centre in its frame: right, up and depth (metres).
+    const pose = (p, q, t, c) => {
+      const mix = (a, b) => a + (b - a) * t;
+      // Through a control point: a quadratic curve for the eye's position.
+      const along = c ? i => (1 - t) * (1 - t) * p.position[i] + 2 * (1 - t) * t * c[i] + t * t * q.position[i]
+        : i => mix(p.position[i], q.position[i]);
+      const yawDeg = round(mix(p.yaw, q.yaw) + offset.yaw), pitchDeg = round(90 - mix(p.tilt, q.tilt));
+      const yaw = yawDeg * radians, tilt = Math.PI / 2 - pitchDeg * Math.PI / 180;
+      // The sway moves the eye along its own right and up.
+      const x = along(0) + offset.x * Math.cos(yaw);
+      const eyeHeight = along(1) + offset.y;
+      const distance = along(2) - offset.x * Math.sin(yaw);
+      const dx = -x, dy = state.tableHeight - eyeHeight, dz = -distance;
+      const sinY = Math.sin(yaw), cosY = Math.cos(yaw), sinT = Math.sin(tilt), cosT = Math.cos(tilt);
+      return {yawDeg, pitchDeg, tilt, x, eyeHeight, distance,
+        right: dx * cosY - dz * sinY, up: -dx * sinY * sinT + dy * cosT - dz * cosY * sinT,
+        depth: -dx * sinY * cosT - dy * sinT - dz * cosY * cosT};
+    };
     const anchorY = innerHeight * (portrait ? .60 : .54);
-    const originY = anchorY - focal * viewY / viewDistance;
+    // The lens's vertical shift. At the entry and the seat it keeps the table
+    // centre at one height on screen (the original composition, also all the
+    // way along the walk between them). The shelf, where the table is out of
+    // view, takes no shift; legs to or from it blend the two.
+    const anchored = p => anchorY - focal * (-p.up * units) / (p.depth * units);
+    const {leg} = state, ends = [aim(points[leg.from]), aim(points[leg.to])], t = leg.progress;
+    const now = pose(ends[0], ends[1], t, state.via[leg.from + '>' + leg.to] ?? state.via[leg.to + '>' + leg.from]);
+    const lens = (name, end) => name === 'shelf' ? innerHeight / 2 : anchored(pose(end, end, 0));
+    const originY = leg.from !== 'shelf' && leg.to !== 'shelf' ? anchored(now)
+      : lens(leg.from, ends[0]) + (lens(leg.to, ends[1]) - lens(leg.from, ends[0])) * t;
+    camera.yaw = now.yawDeg; camera.pitch = now.pitchDeg;
+    const {tilt, x, eyeHeight, distance, depth} = now;
+    const viewX = now.right * units, viewY = -now.up * units, viewDistance = depth * units;
+    // CSS cannot project a table behind the eye; it is out of view there anyway.
+    const behind = depth < .4;
     Object.assign(state, {width, height, units, tilt, focal, x, eyeHeight, distance, seatedDistance, viewX, viewY, viewDistance,
       originY, anchorY, format, appliedPitch: camera.pitch, elevation: eyeHeight - state.tableHeight,
       localEyeX: x * units, localEyeY: distance * units, localEyeZ: (eyeHeight - state.tableHeight) * units});
@@ -93,12 +124,19 @@
     })) root.style.setProperty(key, value + 'px');
     screen.style.setProperty('--view-pitch', camera.pitch + 'deg');
     screen.style.setProperty('--view-yaw', camera.yaw + 'deg');
+    screen.classList.toggle('is-behind', behind);
     window.dispatchEvent(new Event('scene-camera-change'));
   }
   state.update = update;
   state.points = points;
-  state.setApproach = progress => {
-    state.approach = Math.max(0, Math.min(1, progress));
+  // How far toward the seat: the leg's progress on the way there, 1 seated.
+  Object.defineProperty(state, 'approach', {enumerable: true, get() {
+    const {from, to, progress} = state.leg;
+    return to === 'seated' ? (from === 'seated' ? 1 : progress) : from === 'seated' ? 1 - progress : 0;
+  }});
+  state.setApproach = progress => state.setLeg('entry', 'seated', progress);
+  state.setLeg = (from, to, progress = 0) => {
+    state.leg = {from, to, progress: Math.max(0, Math.min(1, progress))};
     update();
   };
   // Where a world point (metres) lands in the viewport, in CSS pixels: the
@@ -147,7 +185,7 @@
     if (move) {
       if (move.start === null) move.start = now;
       const t = Math.min(1, (now - move.start) / move.duration);
-      state.approach = move.from + (move.to - move.from) * t * t * (3 - 2 * t);
+      state.leg.progress = move.from + (move.to - move.from) * t * t * (3 - 2 * t);
       update();
       if (t >= 1) { const {resolve} = move; move = null; resolve(true); }
     } else {
@@ -157,11 +195,11 @@
     if (move || live || weight > .002) wake();
     else { weight = 0; offset.x = offset.y = offset.yaw = 0; last = 0; update(); }
   }
-  // Walk the path to `progress` (1 = seated) over `duration` ms; resolves true
-  // on arrival, false if stopped or replaced.
+  // Walk the current leg to `progress` (1 = its end) over `duration` ms;
+  // resolves true on arrival, false if stopped or replaced.
   state.moveTo = (progress, duration) => new Promise(resolve => {
     move?.resolve(false);
-    move = {from: state.approach, to: Math.max(0, Math.min(1, progress)), start: null, duration, resolve};
+    move = {from: state.leg.progress, to: Math.max(0, Math.min(1, progress)), start: null, duration, resolve};
     wake();
   });
   state.stop = () => { const stopped = move; move = null; stopped?.resolve(false); };

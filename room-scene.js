@@ -530,12 +530,20 @@ if (renderer) {
   // the cloth's pulse below keeps it moving. Table-centred [x, z], metres.
   const trunk=[[.75,3.6],[.3,2.85]];
   const smoke=createRoomSmoke(THREE,{anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy()),trails:[
-    {name:'to the study nook',points:[...trunk,[-.4,2.2],[-1.15,1.45],[-1.7,.55],[-2.05,-.35],[-2.2,-1.05],[-2.25,-1.75]],
+    // It ends running along the nook's worktop, where it gathers (below).
+    {name:'to the study nook',points:[...trunk,[-.4,2.2],[-1.15,1.45],[-1.7,.55],[-2.02,-.3],[-2.17,-.9],[-2.2,-1.5],[-2.13,-2.05]],
       // A flat veil on the boards, two low drifts over it and one wisp that rises a little.
       strands:[{offset:0,width:.46,height:0,phase:1.3,speed:.7,density:.3,wobble:.55},
         {offset:-.2,offsetEnd:-.1,width:.3,height:.06,phase:0,speed:1,density:.7},
         {offset:-.06,offsetEnd:.08,width:.38,height:.1,phase:2.1,speed:.8,density:.55},
         {offset:.15,width:.2,height:.15,phase:4.3,speed:1.25,density:.4}]},
+    // At the nook the mist gathers and rises a little along the worktop's
+    // front, staying well below its top (0.74 m) and the things that will
+    // stand there.
+    {name:'gathering at the nook',fadeIn:.5,fadeOut:.55,points:[[-2.12,-.6],[-2.19,-1.1],[-2.2,-1.6],[-2.14,-2.15]],
+      strands:[{offset:0,width:.3,height:.22,phase:2.6,speed:.6,density:.62,wobble:.5},
+        {offset:.06,width:.18,height:.36,phase:5.1,speed:.8,density:.45,wobble:.55},
+        {offset:-.04,width:.4,height:0,phase:3.3,speed:.5,density:.3,wobble:.6}]},
     // The chair's share is thinner: it is near and short, and must not outweigh the long trail.
     // It is short, so it gathers sooner and thins away under the seat.
     {name:'into the chair',fadeIn:1.1,fadeOut:.45,points:[...trunk,[.4,2.35],[.46,1.86],[.3,1.5],[.02,1.42]],
@@ -1331,10 +1339,14 @@ if (renderer) {
       m.transparent=presence<1;m.depthWrite=presence>=1;m.opacity=presence;m.needsUpdate=true;
     }
     // Walking to the chair, the trail to the nook thins away first; the
-    // chair's own stays to lead them in, and is gone as they sit down.
-    const walked=(from,to)=>{const t=Math.min(1,Math.max(0,(view.approach-from)/(to-from)));return t*t*(3-2*t);};
-    smoke.setPresence('to the study nook',1-walked(.05,.4));
-    smoke.setPresence('into the chair',1-walked(.45,.85));
+    // chair's own stays to lead them in, and is gone as they sit down. Going
+    // to the shelf, the chair's thins away and the nook's stays, only a little
+    // quieter once they stand there.
+    const eased=(v,from,to)=>{const t=Math.min(1,Math.max(0,(v-from)/(to-from)));return t*t*(3-2*t);};
+    const toShelf=view.leg.to==='shelf'?view.leg.progress:view.leg.from==='shelf'?1-view.leg.progress:0;
+    const nook=(1-eased(view.approach,.05,.4))*(1-.15*eased(toShelf,.6,1));
+    smoke.setPresence('to the study nook',nook);smoke.setPresence('gathering at the nook',nook);
+    smoke.setPresence('into the chair',(1-eased(view.approach,.45,.85))*(1-eased(toShelf,.05,.4)));
     if(stillMotion.matches) smoke.update(0);
     renderFront();
   }

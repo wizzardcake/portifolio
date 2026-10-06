@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>The study — shelf objects</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root{color-scheme:dark;font-family:Georgia,serif;color:#ddcfb9;background:#141717}
+    *{box-sizing:border-box}body{margin:0;overflow:hidden}canvas{display:block;width:100vw;height:100vh;touch-action:none}
+    header{position:absolute;top:36px;left:42px;pointer-events:none}small,.eyebrow{font:10px/1.5 system-ui,sans-serif;text-transform:uppercase;letter-spacing:3px;color:#ac8d61}
+    h1{font-size:30px;font-weight:normal;letter-spacing:-.6px;margin:9px 0}header p{font:12px/1.6 system-ui,sans-serif;color:#a39b8e;margin:0;max-width:370px}
+    aside{position:absolute;top:37px;right:40px;display:flex;gap:7px;align-items:center;font:11px system-ui,sans-serif}
+    button{font:inherit;color:#cabcaa;border:1px solid #67564266;background:#1b2020bd;padding:9px 13px;border-radius:3px;cursor:pointer}button:hover,button[aria-pressed=true]{color:#f0d9b4;border-color:#ae8d59;background:#48403180}
+    button:focus-visible{outline:2px solid #68b9c4;outline-offset:3px}label{margin-left:12px;color:#a69d8e;display:flex;align-items:center;gap:5px}
+    footer{position:absolute;bottom:31px;left:42px;right:42px;display:flex;justify-content:space-between;align-items:flex-end;pointer-events:none}
+    #caption{max-width:380px}#caption h2{font-size:22px;font-weight:normal;margin:5px 0 8px}#caption p{font:12px/1.65 system-ui,sans-serif;color:#b0a391;margin:0}
+    #instructions{font:11px/1.7 system-ui,sans-serif;text-align:right;color:#9b9285}#fps{color:#b89b72}
+    #hover-state{display:block;margin-top:8px;color:#69bcbd;font:10px system-ui,sans-serif;letter-spacing:2px;text-transform:uppercase;min-height:12px}
+    @media(max-width:760px){header{top:23px;left:22px}h1{font-size:23px}header p{max-width:270px}aside{top:132px;left:22px;right:auto;flex-wrap:wrap}footer{left:22px;right:22px;bottom:22px}#instructions{max-width:110px}#caption{max-width:230px}#caption p{font-size:11px}label{margin-left:0}}
+  </style>
+</head>
+<body>
+  <canvas id="preview" aria-label="Interactive three dimensional shelf. Drag to orbit and hover over an object."></canvas>
+  <header><span class="eyebrow">The study / objects of the craft</span><h1>Three tools. Made tangible.</h1><p>Stone, parchment and glass, kept on a quiet shelf.</p></header>
+  <aside aria-label="Preview controls">
+    <button data-view="all" aria-pressed="true">Together</button>
+    <button data-view="figma" aria-pressed="false">Figma</button>
+    <button data-view="grimoire" aria-pressed="false">Grimoire</button>
+    <button data-view="crystal" aria-pressed="false">Crystal</button>
+    <button id="simulate" aria-pressed="false">Hover all</button>
+    <label><input id="still" type="checkbox"> Reduce motion</label>
+  </aside>
+  <footer>
+    <div id="caption"><small id="number">01 — 03 / the collection</small><h2 id="object-title">Tools for a little alchemy</h2><p id="description">Five floating inlays. A book of blue light. A small, restless sky under glass.</p><span id="hover-state"></span></div>
+    <div id="instructions">Drag to orbit · Wheel to zoom<br>Hover to wake · Buttons to inspect<br><span id="fps">Measuring frame rate…</span></div>
+  </footer>
+  <script type="module">
+    import * as THREE from './vendor/three/three.module.js';
+    import {createFigmaObject,createGrimoireObject,createCrystalBallObject} from './tools-shelf.js';
+
+    const canvas=document.querySelector('#preview');
+    const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+    renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+    renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+    renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+    const scene=new THREE.Scene();scene.background=new THREE.Color('#141919');scene.fog=new THREE.Fog('#141919',3,7);
+    const camera=new THREE.PerspectiveCamera(38,innerWidth/innerHeight,.015,15);
+    const media=matchMedia('(prefers-reduced-motion: reduce)'),still=document.querySelector('#still');still.checked=media.matches;
+    media.addEventListener('change',()=>{still.checked=media.matches;});
+    const options={camera,reducedMotion:()=>still.checked};
+    const objects=[createFigmaObject(options),createGrimoireObject(options),createCrystalBallObject(options)];
+    objects.forEach((object,i)=>{object.group.position.x=(i-1)*.48;scene.add(object.group);object.group.userData.toolIndex=i;});
+
+    scene.add(new THREE.HemisphereLight('#8390c4','#4c3a2c',.5),new THREE.AmbientLight('#d8bc99',.06));
+    const key=new THREE.PointLight('#ffbf82',4.2,4,2);key.position.set(-.4,.90,.8);key.castShadow=true;key.shadow.mapSize.set(1024,1024);key.shadow.bias=-.00025;key.shadow.normalBias=.002;key.shadow.camera.near=.05;key.shadow.radius=3;scene.add(key);
+    const fill=new THREE.PointLight('#a0b8d1',1.5,4,2);fill.position.set(.75,.7,-.7);scene.add(fill);
+    const front=new THREE.PointLight('#ffe1b7',.9,3,2);front.position.set(.6,.35,1.5);scene.add(front);
+
+    // Actual shelf dimensions, with its surface at y=0 for this preview.
+    const grain=document.createElement('canvas');grain.width=512;grain.height=128;
+    const ctx=grain.getContext('2d');ctx.fillStyle='#6c5039';ctx.fillRect(0,0,512,128);
+    let seed=718;const rnd=()=>((seed=Math.imul(seed,1664525)+1013904223>>>0)/4294967296);
+    for(let i=0;i<600;i++){ctx.strokeStyle=`rgba(${rnd()<.5?'33,19,10':'179,138,82'},${rnd()*.18})`;ctx.lineWidth=rnd()*1.5;ctx.beginPath();const y=rnd()*128;ctx.moveTo(0,y);ctx.bezierCurveTo(180,y+rnd()*8,390,y-rnd()*8,512,y+2);ctx.stroke();}
+    const map=new THREE.CanvasTexture(grain);map.colorSpace=THREE.SRGBColorSpace;
+    const shelf=new THREE.Mesh(new THREE.BoxGeometry(2.08,.035,.26),new THREE.MeshStandardMaterial({map,color:'#967858',roughness:.78,bumpMap:map,bumpScale:.001}));shelf.position.y=-.0175;shelf.receiveShadow=true;shelf.castShadow=true;scene.add(shelf);
+    const lip=new THREE.Mesh(new THREE.BoxGeometry(2.08,.006,.008),new THREE.MeshStandardMaterial({color:'#3f2c1c',roughness:.68}));lip.position.set(0,-.022,.130);scene.add(lip);
+    const wall=new THREE.Mesh(new THREE.PlaneGeometry(20,10),new THREE.MeshStandardMaterial({color:'#383a34',roughness:1}));wall.position.set(0,1,-.27);wall.receiveShadow=true;scene.add(wall);
+    const floor=new THREE.Mesh(new THREE.PlaneGeometry(20,20),new THREE.MeshStandardMaterial({color:'#242a28',roughness:.95}));floor.rotation.x=-Math.PI/2;floor.position.y=-.42;floor.receiveShadow=true;scene.add(floor);
+
+    // Small dependency-free orbit controls: spherical orbit, wheel dolly,
+    // pointer capture and damping. The preview has no network dependencies.
+    const target=new THREE.Vector3(0,.14,0),spherical=new THREE.Spherical(2.2,1.25,.15);
+    const desired={radius:spherical.radius,phi:spherical.phi,theta:spherical.theta};
+    let dragging=false,moved=false,lastX=0,lastY=0,view='all',forced=null,hovered=-1;
+    const pointer=new THREE.Vector2(4,4),ray=new THREE.Raycaster();
+    function aim(snap=false){const k=snap?1:.14;spherical.radius=mix(spherical.radius,desired.radius,k);spherical.phi=mix(spherical.phi,desired.phi,k);spherical.theta=mix(spherical.theta,desired.theta,k);camera.position.setFromSpherical(spherical).add(target);camera.lookAt(target);camera.updateMatrixWorld();}
+    const mix=THREE.MathUtils.lerp;
+    canvas.addEventListener('pointerdown',e=>{dragging=true;moved=false;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture(e.pointerId);});
+    canvas.addEventListener('pointermove',e=>{
+      const rect=canvas.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);
+      if(!dragging)return;
+      const dx=e.clientX-lastX,dy=e.clientY-lastY;if(Math.abs(dx)+Math.abs(dy)>2)moved=true;
+      desired.theta-=dx*.006;desired.phi=THREE.MathUtils.clamp(desired.phi+dy*.004,.30,1.65);lastX=e.clientX;lastY=e.clientY;
+    });
+    canvas.addEventListener('pointerup',()=>{dragging=false;});canvas.addEventListener('pointercancel',()=>{dragging=false;});
+    canvas.addEventListener('pointerleave',()=>{if(!dragging)pointer.set(4,4);});
+    canvas.addEventListener('wheel',e=>{e.preventDefault();desired.radius=THREE.MathUtils.clamp(desired.radius*Math.exp(e.deltaY*.001),.36,3.7);},{passive:false});
+    const copy={
+      all:['01 — 03 / the collection','Tools for a little alchemy','Five floating inlays. A book of blue light. A small, restless sky under glass.'],
+      figma:['01 / shape & colour','Floating enamel','Five beveled pieces circle a stone plinth. Bring them together with a hover.'],
+      grimoire:['02 / logic & language','The blue grimoire','Worn leather, curved parchment and luminous marks. Hover to lift the writing from the page.'],
+      crystal:['03 / thought & possibility','A sky held in glass','Teal and violet currents gather inside a bronze-mounted crystal. Hover to stir the mist.'],
+    };
+    function focus(name){
+      view=name;const i=['figma','grimoire','crystal'].indexOf(name);target.set(i<0?0:objects[i].group.position.x,i===1?.10:.16,0);
+      desired.radius=i<0?(innerWidth<760?2.5:2.08):.67;desired.phi=i===1?.93:1.20;desired.theta=i<0?.10:.32;
+      document.querySelectorAll('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===name)));
+      ['number','object-title','description'].forEach((id,j)=>document.getElementById(id).textContent=copy[name][j]);
+      aim(true);
+    }
+    document.querySelectorAll('[data-view]').forEach(button=>button.addEventListener('click',()=>focus(button.dataset.view)));
+    document.querySelector('#simulate').addEventListener('click',()=>{forced=forced==='all'?null:'all';document.querySelector('#simulate').setAttribute('aria-pressed',String(forced==='all'));});
+    function hit(){
+      if(dragging)return -1;ray.setFromCamera(pointer,camera);
+      const hits=ray.intersectObjects(objects.map(o=>o.group),true).filter(h=>h.object.isMesh&&h.object.visible);
+      if(!hits.length)return -1;let node=hits[0].object;while(node&&node.userData.toolIndex===undefined)node=node.parent;return node?.userData.toolIndex??-1;
+    }
+    function resize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight,false);}
+    addEventListener('resize',resize);resize();focus('all');
+    let last=0,time=0,frames=0,fpsAt=0,paused=false;const samples=[];
+    function render(now){
+      requestAnimationFrame(render);const dt=last?Math.min((now-last)/1000,.1):1/60;last=now;if(document.hidden)return;
+      aim();hovered=hit();
+      objects.forEach((object,i)=>object.setHover(forced==='all'||forced===i||(forced===null&&hovered===i)));
+      if(!paused){time+=dt;objects.forEach(o=>o.update(time,dt));}
+      renderer.render(scene,camera);
+      document.querySelector('#hover-state').textContent=forced==='all'?'All objects awake':hovered>=0?['Assembling the five inlays','The writing rises','The mist quickens'][hovered]:'';
+      canvas.style.cursor=dragging?'grabbing':hovered>=0?'pointer':'grab';
+      frames++;if(now-fpsAt>=1000){const fps=frames*1000/(now-fpsAt);samples.push(fps);if(samples.length>30)samples.shift();document.querySelector('#fps').textContent=`${fps.toFixed(0)} fps · ${renderer.info.render.triangles.toLocaleString()} triangles`;fpsAt=now;frames=0;}
+    }
+    requestAnimationFrame(render);
+    // Local verification surface, intentionally confined to this preview page.
+    window.toolsPreview={scene,camera,renderer,objects,focus,
+      setHover(i){forced=i;objects.forEach((o,n)=>o.setHover(i==='all'||i===n));},setReduced(value){still.checked=value;},setPaused(value){paused=value;},
+      advance(seconds){for(let t=0;t<seconds;t+=1/60){time+=1/60;objects.forEach(o=>o.update(time,1/60));}renderer.render(scene,camera);},
+      get stats(){return {fps:samples.slice(),drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,hovered,view,reducedMotion:still.checked};},
+      bounds(){return objects.map(o=>{const b=new THREE.Box3().setFromObject(o.group);return {name:o.group.name,min:b.min.toArray(),max:b.max.toArray(),size:b.getSize(new THREE.Vector3()).toArray()};});},
+      point(i){const p=new THREE.Vector3(0,i===1?.11:.23,0);objects[i].group.localToWorld(p);p.project(camera);return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};},
+      orbit(theta,phi){desired.theta=theta;desired.phi=phi;aim(true);},
+    };
+  </script>
+</body>
+</html>

@@ -492,15 +492,15 @@ try {
     'SHELF_APPROACH:walking', 'Choosing the nook walks to the shelf');
   await until(`sceneCamera.navigation === 'SHELF_INSPECTION'`, 15000);
   assert.deepEqual(await evaluate(`({approach: document.querySelector('#deviceTilt').dataset.approach,
-    targets: document.querySelector('#entryTargets').hidden, cloth: document.querySelector('#tableCloth').getAttribute('aria-disabled'),
+    targets: document.querySelector('#entryTargets').hidden, back: !document.querySelector('#leaveShelf').hidden,
+    cloth: document.querySelector('#tableCloth').getAttribute('aria-disabled'),
     behind: document.querySelector('#screen').classList.contains('is-behind'), fov: studyRoom.camera.fov})`),
-    {approach: 'shelf', targets: true, cloth: 'true', behind: true, fov: 72}, 'At the shelf the table is behind the visitor and out of reach');
+    {approach: 'shelf', targets: true, back: true, cloth: 'true', behind: true, fov: 72}, 'At the shelf the table is behind the visitor and out of reach');
   await shot('00s-shelf');
-  await cdp('Input.dispatchKeyEvent', {type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
-  await cdp('Input.dispatchKeyEvent', {type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await click('#leaveShelf');
   await until(`sceneCamera.navigation === 'ENTRY'`, 15000);
-  assert.equal(await evaluate(`document.querySelector('#deviceTilt').dataset.approach + ':' + !document.querySelector('#entryTargets').hidden`),
-    'entry:true', 'Escape walks back to the entry');
+  assert.equal(await evaluate(`document.querySelector('#deviceTilt').dataset.approach + ':' + !document.querySelector('#entryTargets').hidden + ':' + document.querySelector('#leaveShelf').hidden`),
+    'entry:true:true', 'A click at the shelf walks back to the entry');
   console.log('PASS: the walk to the shelf and back');
 
   // Observe the approach inside the page. Software-rendered screenshots can

@@ -624,6 +624,9 @@
   document.body.appendChild(cameraPanel);
 
   function init() {
+    // The visitor now arrives at the room's entry (scene-camera.js); the
+    // editor arranges the seated view.
+    window.sceneCamera?.go('chair', {instant: true});
     document.body.classList.remove('intro-active');
     document.body.classList.add('intro-done', 'portal-unlocked');
     // The real approach flow (runApproach()/cancelApproach() in script.js)

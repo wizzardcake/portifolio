@@ -55,6 +55,7 @@
   const entryTargets = document.getElementById('entryTargets');
   const goChair = document.getElementById('goChair');
   const goShelf = document.getElementById('goShelf');
+  const leaveShelfButton = document.getElementById('leaveShelf');
   const camera = window.sceneCamera;
   let approachAnimation = null; // set while walking (the cloth waits for it)
 
@@ -69,6 +70,7 @@
     deviceTilt.dataset.approach = approach;
     approachAnimation = approach === 'walking' ? {state} : null;
     showEntryTargets(state === 'ENTRY');
+    if (leaveShelfButton) leaveShelfButton.hidden = state !== 'SHELF_INSPECTION';
     if (state === 'SEATED') clothControl.removeAttribute('aria-disabled');
     else { clothControl.setAttribute('aria-disabled', 'true'); clothControl.tabIndex = -1; }
   });
@@ -108,10 +110,12 @@
       if (keyboard) clothControl.focus({preventScroll: true});
     });
   }
-  // The shelf was chosen: walk there and stand looking at it. Escape walks
-  // back to the entry (the final navigation UI is still to be designed).
-  function walkToShelf() {
-    if (camera.navigation === 'ENTRY') camera.go('shelf');
+  // The shelf was chosen: walk there and stand looking at it. A click
+  // anywhere there, or Escape, walks back to the entry (the final navigation
+  // UI is still to be designed). keyboard: the focus moves on to the way back.
+  function walkToShelf(keyboard = false) {
+    if (camera.navigation !== 'ENTRY') return;
+    camera.go('shelf').then(arrived => { if (arrived && keyboard) leaveShelfButton?.focus({preventScroll: true}); });
   }
   function leaveShelf(keyboard = false) {
     if (!['SHELF_INSPECTION', 'SHELF_APPROACH'].includes(camera.navigation)) return;
@@ -160,8 +164,9 @@
     cover(goShelf, nookPoints);
   }
   addEventListener('scene-camera-change', placeEntryTargets);
-  goShelf?.addEventListener('click', walkToShelf);
   // A click from the keyboard (Enter or Space) carries no pointer detail.
+  goShelf?.addEventListener('click', event => walkToShelf(event.detail === 0));
+  leaveShelfButton?.addEventListener('click', event => leaveShelf(event.detail === 0));
   goChair?.addEventListener('click', event => walkToChair(event.detail === 0));
 
   let finishing = false;

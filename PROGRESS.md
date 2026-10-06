@@ -866,3 +866,56 @@ Screenshots are in `verification/stage6/`, all inspected.
 - **The hit areas are rectangles.** At the entry, the nook's area overlaps the
   top left of the chair's, a strip of floor beside the chair's left post. Inside
   the overlap the nook wins.
+
+## Stage 7: Glue pass
+
+**Changed:** `index.html`, `room.css`, `script.js`, `scene-camera.js`,
+`dev/arrange.js` and `tests/portal-check.mjs`. Small integration changes only.
+
+- **A way back from the shelf with the pointer.**
+  - At `SHELF_INSPECTION` an invisible button covers the view: `#leaveShelf`,
+    labelled "Gå tilbake til inngangen", with a `zoom-out` cursor. A click
+    anywhere walks back to the entry.
+  - With the keyboard, arriving at the shelf moves the focus to it, and its
+    focus ring frames the whole view. Enter walks back and the focus returns
+    to the nook's target. Escape still works.
+  - The dev ◀ ▶ stay above it. Objects placed on the shelf later will go above
+    it too.
+- **Overlapping targets.** At the entry the chair's and the nook's rectangles
+  overlap over the cloth's far left corner, the chair's left post and a strip
+  of floor. The chair now takes the click there, because it stands in front.
+- **Instant moves leave the sway behind.**
+  - Before, ▶ from the entry, or any `{instant: true}` jump, carried the
+    entry's sway into the seat. There it faded out over about 3.7 s: up to
+    0.3° and 2 cm, about 3 px. This had been so since stage 1.
+  - A jump now clears the sway, so the seat is exact at once. At the entry or
+    the shelf the sway fades in again.
+- **`sceneCamera.setIdle()` is gone,** because the navigation state now owns the
+  idle life.
+- **The header comment in `scene-camera.js`** now describes legs and control
+  points as they are.
+- **`?arrange`** (the dev layout editor) sits down at once again; since stage 1
+  it had stayed at the entry. Its camera panel predates the room camera, so its
+  reset still uses pitch 46 and the camera overrides its sliders. I left it as it
+  was.
+- **`portal-check`** now leaves the shelf with a click. Escape is still checked
+  in the reduced-motion block.
+
+### Verification
+
+Screenshots are in `verification/stage7/`, all inspected.
+
+- **Hit tests at the entry (1440×900):** the centre of the overlap hits
+  `#goChair`, the nook's centre hits `#goShelf`, and the chair hits `#goChair`.
+- **Keyboard:** Enter on the nook's target walks to the shelf. On arrival the
+  focus is on `#leaveShelf` and matches `:focus-visible`
+  (`shelf-keyboard-focus`): a faint rounded frame inset 12 px from the edges.
+  Enter walks back, and the focus returns to `#goShelf`.
+- **Pointer:** at the shelf the cursor is `zoom-out`, the dev ◀ is still on
+  top, and a click walks back to the entry (`shelf-mouse`).
+- **Instant moves:** ▶ from a swaying, leaning entry seats the camera at once,
+  with yaw exactly 0 and pitch 75, still 0 half a second later. An instant jump
+  to the shelf lands exactly on its point (yaw 35.71°), and its sway is back
+  1.5 s later.
+- **`?arrange`:** seated, pitch 75, yaw 0 (`arrange`).
+- **Tests:** all 14 suites passed in one full run.

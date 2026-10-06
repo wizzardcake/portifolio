@@ -4,9 +4,10 @@
    the viewer, +Z above the table.
    The camera stands at named points, each an eye `position` and the point it
    looks at (`lookAt`): entry, seated and shelf. The camera is always on a
-   leg between two of them ({from, to, progress 0..1}); a leg is straight for
-   now, but may later pass through further points of its own. `approach` is
-   derived from it: how far toward the seat (1 seated, 0 at the entry). */
+   leg from the entry to one of the others ({from, to, progress 0..1}),
+   straight unless it passes a control point (`via`). `approach` is derived
+   from it: how far toward the seat (1 seated, 0 at the entry). Where the
+   visitor is, by name, is the navigation state at the end of this file. */
 (() => {
   const screen = document.getElementById('screen');
   const table = screen.querySelector('.portal-table');
@@ -204,8 +205,6 @@
   });
   state.stop = () => { const stopped = move; move = null; stopped?.resolve(false); };
   Object.defineProperty(state, 'moving', {get: () => !!move});
-  // The idle life at the entry (the driver fades it in and out).
-  state.setIdle = on => { idling = !!on; wake(); };
   addEventListener('pointermove', event => {
     if (event.pointerType === 'touch') return;
     pointer.x = event.clientX / innerWidth * 2 - 1; pointer.y = event.clientY / innerHeight * 2 - 1;
@@ -260,7 +259,12 @@
       if (!steps.length) { announce(arrival[place]); return Promise.resolve(true); }
       const [to, progress] = steps.shift(), from = state.leg.to === to ? state.leg.progress : 0;
       const span = Math.abs(progress - from);
-      if (instant || still.matches || span < 1e-6) { state.setLeg('entry', to, progress); return next(); }
+      if (instant || still.matches || span < 1e-6) {
+        // A jump leaves the old place's sway behind (it fades in anew there).
+        if (span >= 1e-6) { weight = 0; offset.x = offset.y = offset.yaw = 0; }
+        state.setLeg('entry', to, progress);
+        return next();
+      }
       if (state.leg.to !== to) state.setLeg('entry', to, from);
       announce(walking[to]);
       return state.moveTo(progress, state.durations[to] * Math.max(.35, span)).then(arrived => arrived && next());

@@ -17,15 +17,17 @@
   const radians = Math.PI / 180;
   const state = {camera, tableHeight: .46, fov: 72,
     leg: {from: 'entry', to: 'seated', progress: 1},
-    // Entry: standing well back in the room, about twice the seat's distance
-    // from the table, a little right of its axis and turned toward the study
-    // nook in the left wall: the chair and table anchor the middle, the nook
-    // reads on the left, the window and the stair tower beyond. It looks at the
-    // floor between the table and the nook (a little under 16 degrees down).
+    // Entry: standing far back in the room, over two and a half times the
+    // seat's distance from the table, a little right of its axis and turned
+    // toward the study nook in the left wall: the chair and table anchor the
+    // middle, the nook reads on the left, the window and the stair tower
+    // beyond, the beams and walls receding overhead. It looks at the floor
+    // between the table and the nook, a hair over the seat's 15 degrees down,
+    // so the walk in only ever tilts toward the seat's view.
     // Portrait views are narrow, so they stand further back and turn further.
     entry: {
-      wide: {position: [.5, 1.6, 3.4], lookAt: [-1, 0, -2]},
-      portrait: {position: [.6, 1.6, 4.2], lookAt: [-1.44, 0, -1.41]},
+      wide: {position: [.75, 1.7, 4.3], lookAt: [-.95, 0, -1.8]},
+      portrait: {position: [.7, 1.75, 5], lookAt: [-1.3, 0, -1.2]},
     },
     // Final seated POV: the eye of someone sitting in the chair centred in
     // front of the table (seat 0.42 m; the table is knee height), looking

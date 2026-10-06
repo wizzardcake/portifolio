@@ -528,7 +528,7 @@ if (renderer) {
   // other's side and cross as they separate. It lives on the foreground layer
   // with the chair and the cloth, so it costs the room's own canvas nothing;
   // the cloth's pulse below keeps it moving. Table-centred [x, z], metres.
-  const trunk=[[.75,3.6],[.3,2.85]];
+  const trunk=[[1,5.4],[.75,3.6],[.3,2.85]];
   const smoke=createRoomSmoke(THREE,{anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy()),trails:[
     // It ends running along the nook's worktop, where it gathers (below).
     {name:'to the study nook',points:[...trunk,[-.4,2.2],[-1.15,1.45],[-1.7,.55],[-2.02,-.3],[-2.17,-.9],[-2.2,-1.5],[-2.13,-2.05]],

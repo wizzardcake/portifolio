@@ -1073,3 +1073,59 @@ Screenshots are in `verification/refine-stage1/`:
 
   The machine was under load from the open preview.
 - **Tests:** all 14 suites passed.
+
+## Refine 2: The entry camera further back
+
+**Changed:** `scene-camera.js` (the entry point) and `room-scene.js` (the start of
+the smoke's trunk).
+
+- **The new entry points:**
+
+  | Format | Before | Now | Further back |
+  | --- | --- | --- | --- |
+  | Landscape | (0.5, 1.6, 3.4) | (0.75, 1.7, 4.3), looking at (−0.95, 0, −1.8) | 0.9 m |
+  | Portrait | (0.6, 1.6, 4.2) | (0.7, 1.75, 5.0), looking at (−1.3, 0, −1.2) | 0.8 m |
+
+  - **Chosen from contact sheets** with the smoke grown in: K1 and P1 among 9
+    landscape and 5 portrait candidates (scratch `cands2`).
+  - **More of the room reads as a space:** the walls, beams and the long floor
+    recede.
+  - **Sizes:** at 1440×900 the nook keeps about 111×184 px (77 % of before).
+    The chair and table stay readable.
+  - **Further back made the room too small:** from about 4.6 m (K2, K3, K5, K6
+    and K8) the table and the nook shrank and the dark near half took over.
+- **Tilt:** both points look down a hair over the seat's 15° (pitch about
+  74.97). The walk in then only ever tilts toward the seated view, as
+  `portal-check` requires. The heading is unchanged at about 15.6° in landscape
+  and 17.9° in portrait.
+- **The smoke's trunk now starts at (1, 5.4),** behind both new points, so the
+  trail still gathers at the visitor's feet. It now reaches the nook about a
+  second later. A side effect: the split, which used to lie just below the
+  frame, is now in view as two branches that part and twist past each other.
+- **FOV unchanged.** The table keeps its anchor on screen, so the seat is
+  untouched.
+
+### Verification
+
+Screenshots are in `verification/refine-stage2/`: the entry, the walk to the
+shelf and the shelf at three sizes, and the seated views at 1440×900 and
+390×844.
+
+- **Entry:** the chair, table, nook (worktop and shelf), window and stair tower
+  are all readable. The smoke reads from the visitor's feet to both
+  destinations.
+- **Seated:** identical to the refine baseline with the cloth on at 1440×900
+  and 390×844. With the portal open, only animated content differs.
+- **Registration:** CSS and WebGL agree to within 0.12 px at the new entry and
+  mid-walk.
+- **Frame rate:** this round was not usable for absolute numbers.
+  - The laptop was running on battery at 8 % (Balanced power scheme, not
+    charging). In the first round both builds were capped at exactly 30.2 fps,
+    in the second at about 22.
+  - Within each round the two builds matched in every view, so there is no
+    sign of a regression.
+- **Tests:** syntax checks passed, and `portal-check` passed 7/7: the walk in,
+  its tilt, the shelf round trip and reduced motion.
+  - The full suite was **not** run for this stage before committing, because
+    the battery was nearly empty. It runs later, on the following stage's code
+    (logged there).

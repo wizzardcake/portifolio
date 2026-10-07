@@ -5,6 +5,7 @@ import {resolve, extname, sep} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
+import {lampTuning} from '../room-lamps.js';
 
 // The entry waits for the visitor (script.js): choosing the chair starts the
 // walk in. Polled by until(): chooses the chair at the entry, true once seated.
@@ -222,10 +223,15 @@ try {
       await sleep(500);await shot('room-'+width);
       await assertViewport();await assertHeldHand();
       console.log('Room',width,await evaluate(`({camera:{fov:studyRoom.camera.fov,eye:studyRoom.camera.position.toArray(),origin:sceneCamera.originY},calls:studyRoom.renderer.info.render.calls,triangles:studyRoom.renderer.info.render.triangles,cssOrigin:document.querySelector('.portal-origin').getBoundingClientRect().toJSON(),worldOrigin:studyRoom.project(0,sceneCamera.tableHeight,0)})`));
+      // The room's own budget is measured without its lamps, which keep a
+      // budget of their own (room-lamps.js: four draw calls whatever their
+      // number): the frame is drawn once with the lamps hidden, then again.
       const registration=await evaluate(`(() => {
         const s=document.querySelector('#screen'),r=(document.querySelector('.table-aperture')||s).getBoundingClientRect(),t=document.querySelector('.portal-table').getBoundingClientRect(),o=document.querySelector('.portal-origin').getBoundingClientRect(),p=studyRoom.project(0,sceneCamera.tableHeight,0);
+        const R=studyRoom,info=R.renderer.info.render;R.lamps.group.visible=false;R.camera.layers.set(0);R.renderer.render(R.scene,R.camera);
+        const room={calls:info.calls,triangles:info.triangles};R.lamps.group.visible=true;R.renderer.render(R.scene,R.camera);
         return {error:Math.hypot(o.x-p.x,o.y-p.y),table:t.toJSON(),portal:r.toJSON(),
-          calls:studyRoom.renderer.info.render.calls,triangles:studyRoom.renderer.info.render.triangles,pixels:roomCanvas.width*roomCanvas.height,
+          calls:room.calls,triangles:room.triangles,lamps:{calls:info.calls-room.calls,triangles:info.triangles-room.triangles,...R.lamps.stats},pixels:roomCanvas.width*roomCanvas.height,
           opening:studyRoom.scene.getObjectByName('back wall with through opening').geometry.parameters.shapes.holes.length,
           thickness:studyRoom.dimensions.wall,ceiling:studyRoom.project(0,studyRoom.dimensions.height,studyRoom.dimensions.back).y};
       })()`);
@@ -264,10 +270,14 @@ try {
       assert.ok(architecture.bronze&&architecture.valid&&architecture.stats.triangles<2700,'Batched architectural dressings stay bounded');
       assert.ok(architecture.source.position[1]>architecture.source.wellHeight&&architecture.source.target[1]<1,'Green light originates above the landing and falls into the stairwell');
       assert.ok(architecture.angle<.4&&architecture.reach<1.6,'Upper light is a narrow source, not a room-wide wash');
-      assert.deepEqual(architecture.global,{fill:.5,ambient:.06,lamp:11,front:1.2,table:9,tableAwake:.35},'Architecture pass preserves global lighting balance');
+      // The lighting pass moved the nook's lamp into its droplets and the
+      // front fill into the door lantern's glow (room-lamps.js lampTuning);
+      // the rest of the balance is as the architecture pass left it.
+      assert.deepEqual(architecture.global,{fill:.5,ambient:.06,lamp:lampTuning.shelf.light,front:lampTuning.door.glow,table:9,tableAwake:.35},'The room keeps its light balance, the lamps carrying the nook and the door');
       assert.ok(registration.ceiling>0 && registration.ceiling<height*.4,'The ceiling/wall junction is in frame');
       assert.equal(registration.opening,1,'The gothic window cuts through the actual wall geometry');
       assert.ok(registration.thickness>.2 && registration.calls<30 && registration.triangles<10000 && registration.pixels<=2600000,'Architectural depth stays within the room rendering budget');
+      assert.ok(registration.lamps.drawCalls===4 && registration.lamps.calls<=4 && registration.lamps.triangles<9000,'The lamps keep to their own budget: '+JSON.stringify(registration.lamps));
       const frame=await evaluate(`studyRoom.renderer.info.render.frame`);await sleep(250);
       assert.equal(await evaluate(`studyRoom.renderer.info.render.frame`),frame,'A settled room does not render continuously');
       await evaluate(`studyRoom.clay(true)`);await sleep(150);await shot('room-clay-'+width);

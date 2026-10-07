@@ -5,6 +5,8 @@ import {createRoomArchitecture,architectureTuning} from './room-architecture.js'
 import {createNightSky} from './night-sky.js';
 import {createRoomSmoke} from './room-smoke.js';
 import {createRoomLamps,lampTuning} from './room-lamps.js';
+import {createFigmaObject,createGrimoireObject,createCrystalBallObject} from './tools-shelf.js';
+import {createShelfSound} from './tools-sound.js';
 
 // Architecture and physical furniture. Portal, orb and HTML reader stay in their
 // own renderers; scene-camera.js gives both branches the same projection.
@@ -1452,8 +1454,59 @@ if (renderer) {
   }
   // A new place, or a walk setting off: nothing stays lit from before.
   addEventListener('room-navigation',()=>{for(const name in markHover) hoverMark(name,false);});
+  // ---- The shelf's objects (tools-shelf.js, TOOLS_INTEGRATION.md): Figma in
+  // enamel, the grimoire and the crystal ball, standing on the nook's shelf
+  // (its top at 1.4375 m), facing into the room. They answer the pointer and
+  // move on the pulse below at 30 Hz, but only while the eye is near enough
+  // to see them (`shelfNear` m); further off they hold still and the room
+  // stays drawn on demand. Their sound is off until the corner toggle.
+  const shelfRoot=new THREE.Group();shelfRoot.name='physical shelf tools';
+  shelfRoot.position.set(room.left-nook.depth+.13,nook.shelf+.0175,(nook.back+nook.front)/2);
+  shelfRoot.rotation.y=Math.PI/2;shell.add(shelfRoot);
+  const shelfSound=createShelfSound(),toolOptions={camera,reducedMotion:()=>stillMotion.matches,sound:shelfSound};
+  const shelfTools=[createFigmaObject(toolOptions),createGrimoireObject(toolOptions),createCrystalBallObject(toolOptions)];
+  shelfTools.forEach((tool,i)=>{tool.group.position.x=(i-1)*.48;tool.group.userData.shelfToolIndex=i;shelfRoot.add(tool.group);});
+  const shelfPointer=new THREE.Vector2(4,4),shelfRay=new THREE.Raycaster(),shelfCentre=new THREE.Vector3(),shelfNear=4.5;
+  let shelfAt=0,shelfShadowAt=0,shelfAwakeUntil=0,shelfHover=-1;
+  const wakeShelf=()=>{shelfAwakeUntil=performance.now()+1200;};
+  addEventListener('pointermove',event=>{const r=canvas.getBoundingClientRect();
+    shelfPointer.set((event.clientX-r.left)/r.width*2-1,-(event.clientY-r.top)/r.height*2+1);wakeShelf();},{capture:true});
+  addEventListener('blur',()=>{shelfPointer.set(4,4);wakeShelf();});
+  document.documentElement.addEventListener('pointerleave',()=>{shelfPointer.set(4,4);wakeShelf();});
+  addEventListener('scene-camera-change',wakeShelf);stillMotion.addEventListener('change',wakeShelf);
+  function tickShelfTools(now) {
+    if(document.hidden||lost||!host.classList.contains('is-ready')){shelfAt=now;return;}
+    if(now-shelfAt<33) return;
+    const dt=shelfAt?Math.min((now-shelfAt)/1000,.1):1/30;shelfAt=now;
+    shelfRoot.getWorldPosition(shelfCentre);
+    if(camera.position.distanceTo(shelfCentre)>shelfNear&&shelfHover<0) return;
+    shell.updateWorldMatrix(true,true);camera.updateWorldMatrix(true,false);
+    shelfRay.setFromCamera(shelfPointer,camera);
+    const hit=shelfRay.intersectObject(shelfRoot,true).find(hit=>hit.object.isMesh&&hit.object.visible);
+    let node=hit?.object;while(node&&node.userData.shelfToolIndex===undefined) node=node.parent;
+    const index=node?.userData.shelfToolIndex??-1;
+    if(index!==shelfHover){shelfHover=index;shelfTools.forEach((tool,i)=>tool.setHover(i===index));wakeShelf();}
+    if(stillMotion.matches&&now>shelfAwakeUntil) return;
+    shelfTools.forEach(tool=>tool.update(now/1000,dt));
+    // A full room redraw; the shadow maps refreshed at most 8 times a second.
+    const refreshShadows=now-shelfShadowAt>125;if(refreshShadows) shelfShadowAt=now;
+    invalidate(!refreshShadows);
+  }
+  // The sound toggle (index.html, top right): off by default, the choice
+  // remembered; audio starts only from a click, as browsers require.
+  const soundButton=document.getElementById('roomSound');let soundOn=false;
+  try{soundOn=localStorage.getItem('shelf-tools-sound')==='on';}catch{}
+  const showSound=()=>{soundButton.setAttribute('aria-pressed',String(soundOn));
+    soundButton.setAttribute('aria-label',soundOn?'Lyd er på. Slå av lyd':'Lyd er av. Slå på lyd');soundButton.title=soundOn?'Lyd på':'Lyd av';};
+  if(soundButton){
+    soundButton.hidden=false;showSound();
+    soundButton.addEventListener('click',()=>{soundOn=!soundOn;shelfSound.setEnabled(soundOn);showSound();
+      try{localStorage.setItem('shelf-tools-sound',soundOn?'on':'off');}catch{}});
+    if(soundOn) addEventListener('pointerdown',()=>{if(soundOn&&!shelfSound.enabled) shelfSound.setEnabled(true);},{once:true});
+  }
   function pulse(now) {
     requestAnimationFrame(pulse);
+    tickShelfTools(now);
     const smoking=smoke.group.visible;
     if((!cloth.visible&&!smoking)||document.hidden||lost||stillMotion.matches||now-lastPulse<33) return;
     const dt=Math.min(.1,(now-lastPulse)/1000);

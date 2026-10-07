@@ -223,15 +223,19 @@ try {
       await sleep(500);await shot('room-'+width);
       await assertViewport();await assertHeldHand();
       console.log('Room',width,await evaluate(`({camera:{fov:studyRoom.camera.fov,eye:studyRoom.camera.position.toArray(),origin:sceneCamera.originY},calls:studyRoom.renderer.info.render.calls,triangles:studyRoom.renderer.info.render.triangles,cssOrigin:document.querySelector('.portal-origin').getBoundingClientRect().toJSON(),worldOrigin:studyRoom.project(0,sceneCamera.tableHeight,0)})`));
-      // The room's own budget is measured without its lamps, which keep a
-      // budget of their own (room-lamps.js: four draw calls whatever their
-      // number): the frame is drawn once with the lamps hidden, then again.
+      // The room's own budget is measured without its lamps and the shelf's
+      // objects, which keep budgets of their own (room-lamps.js: four draw
+      // calls whatever their number; TOOLS_INTEGRATION.md: 17 calls and about
+      // 7,500 triangles): the frame is drawn with both hidden, then with the
+      // shelf's objects, then with everything.
       const registration=await evaluate(`(() => {
         const s=document.querySelector('#screen'),r=(document.querySelector('.table-aperture')||s).getBoundingClientRect(),t=document.querySelector('.portal-table').getBoundingClientRect(),o=document.querySelector('.portal-origin').getBoundingClientRect(),p=studyRoom.project(0,sceneCamera.tableHeight,0);
-        const R=studyRoom,info=R.renderer.info.render;R.lamps.group.visible=false;R.camera.layers.set(0);R.renderer.render(R.scene,R.camera);
-        const room={calls:info.calls,triangles:info.triangles};R.lamps.group.visible=true;R.renderer.render(R.scene,R.camera);
+        const R=studyRoom,info=R.renderer.info.render,tools=R.shell.getObjectByName('physical shelf tools');
+        R.lamps.group.visible=false;tools.visible=false;R.camera.layers.set(0);R.renderer.render(R.scene,R.camera);
+        const room={calls:info.calls,triangles:info.triangles};tools.visible=true;R.renderer.render(R.scene,R.camera);
+        const shelf={calls:info.calls-room.calls,triangles:info.triangles-room.triangles};R.lamps.group.visible=true;R.renderer.render(R.scene,R.camera);
         return {error:Math.hypot(o.x-p.x,o.y-p.y),table:t.toJSON(),portal:r.toJSON(),
-          calls:room.calls,triangles:room.triangles,lamps:{calls:info.calls-room.calls,triangles:info.triangles-room.triangles,...R.lamps.stats},pixels:roomCanvas.width*roomCanvas.height,
+          calls:room.calls,triangles:room.triangles,shelf,lamps:{calls:info.calls-room.calls-shelf.calls,triangles:info.triangles-room.triangles-shelf.triangles,...R.lamps.stats},pixels:roomCanvas.width*roomCanvas.height,
           opening:studyRoom.scene.getObjectByName('back wall with through opening').geometry.parameters.shapes.holes.length,
           thickness:studyRoom.dimensions.wall,ceiling:studyRoom.project(0,studyRoom.dimensions.height,studyRoom.dimensions.back).y};
       })()`);
@@ -278,6 +282,7 @@ try {
       assert.equal(registration.opening,1,'The gothic window cuts through the actual wall geometry');
       assert.ok(registration.thickness>.2 && registration.calls<30 && registration.triangles<10000 && registration.pixels<=2600000,'Architectural depth stays within the room rendering budget');
       assert.ok(registration.lamps.drawCalls===4 && registration.lamps.calls<=4 && registration.lamps.triangles<9000,'The lamps keep to their own budget: '+JSON.stringify(registration.lamps));
+      assert.ok(registration.shelf.calls<=17 && registration.shelf.triangles<8000,'The shelf\'s objects keep to their own budget: '+JSON.stringify(registration.shelf));
       const frame=await evaluate(`studyRoom.renderer.info.render.frame`);await sleep(250);
       assert.equal(await evaluate(`studyRoom.renderer.info.render.frame`),frame,'A settled room does not render continuously');
       await evaluate(`studyRoom.clay(true)`);await sleep(150);await shot('room-clay-'+width);

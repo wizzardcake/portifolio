@@ -746,6 +746,31 @@ body.intro-active .screen {
 .dev-nav-btn:hover { background: rgba(255, 255, 255, 0.2); }
 .dev-nav-btn:active { transform: scale(0.94); }
 
+/* Sound on/off for the shelf's objects: a clear icon in the top right corner, off by default. */
+.room-sound {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 999;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.room-sound[hidden] { display: none; }
+.room-sound svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.room-sound[aria-pressed="false"] .on, .room-sound[aria-pressed="true"] .off { display: none; }
+.room-sound[aria-pressed="true"] { color: #f6e0b8; border-color: #d1a964; background: rgba(90, 74, 48, 0.6); }
+.room-sound:hover { background: rgba(255, 255, 255, 0.2); }
+.room-sound:active { transform: scale(0.94); }
+
 /* ==========================================================================
    WORKSPACE — table/portal camera stage, with an independent foreground hand.
    ========================================================================== */

@@ -274,22 +274,15 @@ function enamelMaterial(a, color, settings, shared) {
   return material;
 }
 
-function grainTexture(a, type, seed, size = 256) {
+// Walnut grain for the lectern: long faint streaks, light and dark.
+function woodTexture(a, seed, size = 256) {
   const canvas = document.createElement('canvas'); canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d'), rnd = randomSource(seed);
-  ctx.fillStyle = type === 'leather' ? '#786052' : '#b8aea0'; ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = '#b8aea0'; ctx.fillRect(0, 0, size, size);
   for (let i = 0; i < 3800; i++) {
     const value = Math.floor(50 + rnd() * 170);
     ctx.fillStyle = `rgba(${value},${value},${value},${.06 + rnd() * .2})`;
-    const x = rnd() * size, y = rnd() * size;
-    ctx.fillRect(x, y, type === 'wood' ? 22 + rnd() * 90 : 1 + rnd() * 2, 1);
-  }
-  if (type === 'leather') {
-    ctx.strokeStyle = 'rgba(225,202,149,.35)'; ctx.lineWidth = 1.5;
-    for (let i = 0; i < 90; i++) {
-      const x = rnd() * size, y = rnd() < .5 ? rnd() * 24 : size - rnd() * 24;
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + rnd() * 14, y + rnd() * 3); ctx.stroke();
-    }
+    ctx.fillRect(rnd() * size, rnd() * size, 22 + rnd() * 90, 1);
   }
   const map = a.own(new THREE.CanvasTexture(canvas)); map.colorSpace = THREE.SRGBColorSpace;
   return map;
@@ -457,66 +450,316 @@ function mergedIndexed(parts) {
   return r;
 }
 
-// The parchment and its glow (two canvases): aged leaves with illuminated,
-// abstract editor-like marks drawn on both, so only the marks glow.
-function glyphCanvases(seed) {
-  const paper=document.createElement('canvas'),light=document.createElement('canvas');
-  paper.width=light.width=512;paper.height=light.height=512;
-  const p=paper.getContext('2d'),l=light.getContext('2d'),rnd=randomSource(seed);
-  p.fillStyle='#c8b283';p.fillRect(0,0,512,512);l.fillStyle='#000';l.fillRect(0,0,512,512);
-  const shade=p.createLinearGradient(0,0,512,0);shade.addColorStop(0,'#66503a');shade.addColorStop(.12,'#bda572');shade.addColorStop(.55,'#e6d1a3');shade.addColorStop(1,'#b79c70');
-  p.fillStyle=shade;p.fillRect(0,0,512,512);
-  for(let i=0;i<6500;i++) {p.fillStyle=`rgba(75,46,22,${rnd()*.18})`;p.fillRect(rnd()*512,rnd()*512,1+rnd()*3,1);}
-  for(let i=0;i<32;i++) {
-    const x=rnd()*512,y=rnd()*512,r=12+rnd()*47;
-    const stain=p.createRadialGradient(x,y,0,x,y,r);stain.addColorStop(0,'rgba(104,66,27,.10)');stain.addColorStop(1,'rgba(104,66,27,0)');
-    p.fillStyle=stain;p.fillRect(x-r,y-r,r*2,r*2);
+// A broad-nib pen on a 2D canvas. pts is a dense polyline of [x, y, weight];
+// each step sweeps the nib (held at angle) from one point to the next, so
+// strokes run thick across the nib and thin along it, as a quill writes. All
+// sweeps are wound one way and filled as one path: overlaps never darken.
+function nib(ctx, pts, width, angle = .7) {
+  const hx = Math.cos(angle)*width/2, hy = -Math.sin(angle)*width/2;
+  ctx.beginPath();
+  for (let i = 1; i < pts.length; i++) {
+    const [x0,y0,w0] = pts[i-1], [x1,y1,w1] = pts[i];
+    const q = [[x0-hx*w0,y0-hy*w0],[x0+hx*w0,y0+hy*w0],[x1+hx*w1,y1+hy*w1],[x1-hx*w1,y1-hy*w1]];
+    const area = (q[1][0]-q[0][0])*(q[2][1]-q[0][1])-(q[2][0]-q[0][0])*(q[1][1]-q[0][1]);
+    if (area < 0) q.reverse();
+    ctx.moveTo(...q[0]); for (let k = 1; k < 4; k++) ctx.lineTo(...q[k]); ctx.closePath();
   }
-  for(let i=0;i<250;i++) {p.fillStyle='rgba(77,43,18,.22)';const x=rnd()*512,y=rnd()<.5?rnd()*18:512-rnd()*18;p.fillRect(x,y,1+rnd()*3,1+rnd()*4);}
-  p.strokeStyle='#90754b';p.lineWidth=2;p.strokeRect(34,28,450,456);p.strokeRect(40,34,438,444);
-  // Illuminated, abstract editor-like marks: no font or source code involved.
-  function mark(ctx,x,y,w,hue) {
-    ctx.strokeStyle=hue;ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();
-    if(rnd()<.3) {ctx.moveTo(x+6,y-5);ctx.lineTo(x,y);ctx.lineTo(x+6,y+5);ctx.moveTo(x+w-6,y-5);ctx.lineTo(x+w,y);ctx.lineTo(x+w-6,y+5);}
-    else {ctx.moveTo(x,y);ctx.lineTo(x+w*.7,y);ctx.lineTo(x+w*.7,y-4);ctx.moveTo(x+w*.85,y+2);ctx.lineTo(x+w,y+2);}
-    ctx.stroke();
-  }
-  for(let row=0;row<15;row++) {
-    let x=64+(row%5===2?24:0),y=122+row*21;
-    while(x<398) {
-      const width=12+Math.floor(rnd()*5)*6;
-      const state=rnd()<.65?'#007acc':'#587883';
-      // Draw identical marks on both maps using saved PRNG state via path copy.
-      const temp=document.createElement('canvas');temp.width=70;temp.height=18;
-      mark(temp.getContext('2d'),4,9,width,state);
-      p.drawImage(temp,x,y-9);l.drawImage(temp,x,y-9);x+=width+12+rnd()*16;
-      if(rnd()<.08)break;
-    }
-  }
-  for(const ctx of [p,l]) {
-    ctx.strokeStyle='#159cda';ctx.lineWidth=3;ctx.beginPath();
-    ctx.moveTo(172,67);ctx.lineTo(193,83);ctx.lineTo(172,99);ctx.moveTo(226,67);ctx.lineTo(205,83);ctx.lineTo(226,99);ctx.stroke();
-    ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(252,83);ctx.lineTo(431,83);ctx.stroke();
-  }
-  return {paper,light};
+  ctx.fill();
 }
 
-/** Curved parchment leaves, thick leather boards, walnut lectern, blue glyphs. */
+// Catmull-Rom through control points, sampled about every half pixel; the
+// weight swells from the pen's set-down and thins as it lifts.
+function stroke(points, rnd) {
+  const out = [], n = points.length, phase = rnd()*6;
+  const P = i => points[Math.max(0, Math.min(n-1, i))];
+  let travelled = 0, last = null;
+  for (let i = 0; i < n-1; i++) {
+    const [a,b,c,d] = [P(i-1),P(i),P(i+1),P(i+2)];
+    const steps = Math.max(2, Math.ceil(Math.hypot(c[0]-b[0], c[1]-b[1])*2));
+    for (let s = 0; s < steps; s++) {
+      const t = s/steps, t2 = t*t, t3 = t2*t;
+      const f = k => .5*((2*b[k]) + (-a[k]+c[k])*t + (2*a[k]-5*b[k]+4*c[k]-d[k])*t2 + (-a[k]+3*b[k]-3*c[k]+d[k])*t3);
+      const x = f(0), y = f(1);
+      if (last) travelled += Math.hypot(x-last[0], y-last[1]);
+      last = [x,y]; out.push([x, y, travelled]);
+    }
+  }
+  out.push([...points[n-1].slice(0,2), travelled + 1]);
+  const total = travelled + 1;
+  for (const p of out) {
+    const k = p[2]/total;
+    p[2] = Math.min(1, .55 + k*6) * Math.min(1, .5 + (1-k)*4) * (.86 + .14*Math.sin(p[2]*.09 + phase));
+  }
+  return out;
+}
+
+// One invented cursive hand. Letters are control points in x-heights from
+// the letter's origin on the baseline (y up); a word joins them in one pen
+// stroke. Crossbars and dots are lifts of their own.
+const HAND = {
+  n: {w: .92, p: [[.1,1],[.15,0],[.3,.8],[.55,1.02],[.7,.6],[.72,0],[.9,.35]]},
+  u: {w: .86, p: [[.1,1],[.12,.15],[.3,0],[.55,.3],[.62,1],[.65,.1],[.85,.35]]},
+  o: {w: .86, p: [[.55,1],[.2,.8],[.2,.15],[.5,0],[.72,.4],[.55,1],[.86,.9]]},
+  e: {w: .76, p: [[.3,.35],[.7,.62],[.5,1],[.2,.6],[.3,.05],[.76,.25]]},
+  l: {w: .58, p: [[.2,.6],[.56,1.9],[.4,2.02],[.25,1.2],[.3,.1],[.6,.3]]},
+  t: {w: .62, p: [[.32,1.6],[.3,.1],[.58,.25]], extra: [[[.08,1.04],[.62,1]]]},
+  g: {w: .88, p: [[.6,.9],[.3,1],[.15,.5],[.4,.2],[.65,.8],[.6,-.8],[.3,-1],[.15,-.6],[.82,.3]]},
+  i: {w: .46, p: [[.15,1],[.2,.1],[.42,.3]], extra: [[[.22,1.42],[.25,1.46]]]},
+  s: {w: .72, p: [[.2,.4],[.55,1],[.3,.7],[.6,.3],[.4,0],[.1,.2],[.72,.35]]},
+  a: {w: .92, p: [[.6,.85],[.3,1],[.1,.5],[.35,0],[.62,.6],[.62,1],[.65,.1],[.88,.35]]},
+  d: {w: .92, p: [[.6,.85],[.3,1],[.1,.5],[.35,0],[.62,.6],[.66,1.9],[.65,.1],[.88,.35]]},
+  p: {w: .9, p: [[.2,1],[.15,-.9],[.2,.6],[.5,1],[.7,.5],[.4,0],[.15,.2],[.82,.35]]},
+  r: {w: .7, p: [[.12,.9],[.2,0],[.3,.75],[.55,1],[.72,.85]]},
+};
+// Punctuation of code, in the same hand: each is its own lift of the pen.
+const MARKS = {
+  '{': {w: .7, s: [[[.62,1.6],[.36,1.4],[.42,.9],[.14,.62],[.42,.32],[.36,-.18],[.62,-.4]]]},
+  '}': {w: .7, s: [[[.08,1.6],[.34,1.4],[.28,.9],[.56,.62],[.28,.32],[.34,-.18],[.08,-.4]]]},
+  '(': {w: .55, s: [[[.5,1.5],[.22,.6],[.5,-.32]]]},
+  ')': {w: .55, s: [[[.1,1.5],[.38,.6],[.1,-.32]]]},
+  '=': {w: .85, s: [[[.08,.66],[.7,.7]],[[.08,.28],[.7,.32]]]},
+  ';': {w: .4, s: [[[.2,.7],[.24,.74]],[[.24,.1],[.12,-.3]]]},
+  '.': {w: .36, s: [[[.15,.05],[.19,.09]]]},
+  '/': {w: .42, s: [[[.48,1.3],[.04,-.2]]]},
+  '<': {w: .78, s: [[[.66,.95],[.12,.48],[.66,0]]]},
+  '>': {w: .78, s: [[[.12,.95],[.66,.48],[.12,0]]]},
+};
+const LETTERS = 'nnuoeeltgisaadpr';
+
+// Writes one token at (x, baseline) in x-height xh, slanted; returns the
+// strokes (control points in canvas pixels) and the advance.
+function token(rnd, text, x, y, xh, slant) {
+  const strokes = [], jitter = () => (rnd()-.5)*.12;
+  const place = (ox, [px,py]) => { const dx = px+jitter(), dy = py+jitter(); return [x+(ox+dx+dy*slant)*xh, y-dy*xh]; };
+  let ox = 0;
+  if (MARKS[text]) {
+    for (const s of MARKS[text].s) strokes.push(s.map(p => place(0, p)));
+    return {strokes, advance: MARKS[text].w*xh};
+  }
+  const word = [place(0, [-.18,.28])];
+  for (const ch of text) {
+    const letter = HAND[ch];
+    for (const p of letter.p) word.push(place(ox, p));
+    for (const e of letter.extra || []) strokes.push(e.map(p => place(ox, p)));
+    ox += letter.w*(.92 + rnd()*.16);
+  }
+  strokes.unshift(word);
+  return {strokes, advance: ox*xh};
+}
+
+// A leaf of the grimoire, 512 x 512 in the reader's orientation: the head at
+// the top, the gutter on the right of a left-hand page and on the left of a
+// right-hand one. The page is about .14 x .18 m, so the writing is laid out
+// in a 512 x 670 space squeezed into the square, and stands upright on the
+// curved leaf. paper: aged parchment and its ink; light: only the blue ink,
+// with a soft halo, for the emissive map. spots: where words sit, in page
+// (u from the gutter, v from the head), for glyphs to lift from.
+function leafCanvases(seed, gutterRight, initial) {
+  const W = 512, H = 670, rnd = randomSource(seed);
+  const paper = document.createElement('canvas'), light = document.createElement('canvas'), ink = document.createElement('canvas');
+  paper.width = paper.height = light.width = light.height = ink.width = ink.height = 512;
+  const p = paper.getContext('2d'), l = light.getContext('2d'), k = ink.getContext('2d');
+  for (const ctx of [p, l, k]) ctx.setTransform(1, 0, 0, 512/H, 0, 0);
+  const gx = gutterRight ? W : 0, out = gutterRight ? -1 : 1, fx = W - gx;
+  // Parchment: warm in the middle, tanned toward every edge, shaded into the gutter.
+  const body = p.createRadialGradient(W*.5, H*.45, 40, W*.5, H*.5, 430);
+  body.addColorStop(0, '#e2cfa4'); body.addColorStop(.7, '#d2b98a'); body.addColorStop(1, '#a98c5f');
+  p.fillStyle = body; p.fillRect(0, 0, W, H);
+  const gutter = p.createLinearGradient(gx, 0, gx + out*70, 0);
+  gutter.addColorStop(0, 'rgba(70,48,26,.55)'); gutter.addColorStop(1, 'rgba(70,48,26,0)');
+  p.fillStyle = gutter; p.fillRect(0, 0, W, H);
+  // Fibres, then foxing in a few clusters, a tide line, and the lower outer
+  // corner darkened by thumbs that turned the page.
+  for (let i = 0; i < 2600; i++) {
+    p.fillStyle = `rgba(${rnd() < .55 ? '96,68,38' : '246,234,206'},${.05 + rnd()*.12})`;
+    p.fillRect(rnd()*W, rnd()*H, 1 + rnd()*5, .7);
+  }
+  for (let c = 0; c < 4; c++) {
+    const cx = rnd()*W, cy = rnd()*H;
+    for (let i = 0; i < 12; i++) {
+      const x = cx + (rnd()-.5)*60, y = cy + (rnd()-.5)*60, r = .8 + rnd()*2.6;
+      p.fillStyle = `rgba(128,72,30,${.15 + rnd()*.25})`; p.beginPath(); p.arc(x, y, r, 0, TAU); p.fill();
+    }
+  }
+  {
+    const x = W*(.3 + rnd()*.4), y = H*(.55 + rnd()*.3), r = 50 + rnd()*40;
+    p.strokeStyle = 'rgba(112,78,40,.14)'; p.lineWidth = 3;
+    p.beginPath(); p.arc(x, y, r, rnd()*TAU, rnd()*TAU + 4.4); p.stroke();
+    p.fillStyle = 'rgba(150,118,72,.06)'; p.beginPath(); p.arc(x, y, r, 0, TAU); p.fill();
+  }
+  const thumb = p.createRadialGradient(fx, H, 0, fx, H, 95);
+  thumb.addColorStop(0, 'rgba(60,44,30,.38)'); thumb.addColorStop(1, 'rgba(60,44,30,0)');
+  p.fillStyle = thumb; p.fillRect(0, 0, W, H);
+  const edge = (x0, y0, x1, y1) => { const g = p.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, 'rgba(92,60,30,.42)'); g.addColorStop(1, 'rgba(92,60,30,0)'); p.fillStyle = g; p.fillRect(0, 0, W, H); };
+  edge(0, 0, 0, 22); edge(0, H, 0, H - 26); edge(fx, 0, fx - out*20, 0);
+  // Ruled by hand: a faint margin at each side of the text and a guide under
+  // each line, never quite straight.
+  const left = gutterRight ? 40 : 56, right = W - (gutterRight ? 56 : 40), top = 76, lead = 30;
+  p.strokeStyle = 'rgba(120,70,42,.22)'; p.lineWidth = 1;
+  for (const x of [left - 8, right + 4]) {
+    p.beginPath(); p.moveTo(x + (rnd()-.5)*2, 30); p.quadraticCurveTo(x + (rnd()-.5)*4, H/2, x + (rnd()-.5)*3, H - 34); p.stroke();
+  }
+  p.strokeStyle = 'rgba(120,80,48,.07)';
+  for (let y = top; y < H - 60; y += lead) { p.beginPath(); p.moveTo(left - 4, y + 1); p.lineTo(right, y + (rnd()-.5)*2); p.stroke(); }
+
+  // The text: lines of code in the hand, nested by braces, with comments in
+  // sepia between. The blue ink is the luminous one; each dip of the quill
+  // starts dark and thins until the next.
+  const blue = level => `rgba(16,${52 + level*18},${112 + level*36},${.66 + level*.3})`;
+  let indent = 0, dip = 1, line = 0;
+  const spots = [];
+  const write = (strokes, color, luminous, w = 2.9) => {
+    for (const s of strokes) {
+      const pts = stroke(s, rnd);
+      p.fillStyle = color; nib(p, pts, w);
+      if (luminous) { k.fillStyle = '#9fdcff'; nib(k, pts, w*1.1); }
+    }
+  };
+  if (initial) {
+    // An illuminated initial: a brace in blue on a square of worn gold, with
+    // a flourish that runs down the margin.
+    const x = left - 2, y = top - 22, s = 58;
+    p.fillStyle = '#9c7a3c'; p.fillRect(x, y, s, s);
+    for (let i = 0; i < 260; i++) { p.fillStyle = `rgba(${rnd() < .5 ? '232,200,120' : '90,62,26'},${.2 + rnd()*.3})`; p.fillRect(x + rnd()*s, y + rnd()*s, 1 + rnd()*2, 1); }
+    p.strokeStyle = 'rgba(58,36,18,.8)'; p.lineWidth = 1.6; p.strokeRect(x, y, s, s);
+    const {strokes} = token(rnd, '{', x + 14, y + s - 14, 26, .1);
+    p.fillStyle = '#123e72'; for (const st of strokes) nib(p, stroke(st, rnd), 7);
+    k.fillStyle = '#9fdcff'; for (const st of strokes) nib(k, stroke(st, rnd), 7.5);
+    write([[[x + 4, y + s + 4], [x - 6, y + s + 40], [x + 6, y + s + 80], [x - 4, y + s + 120]]], 'rgba(150,40,30,.55)', false, 1.6);
+  }
+  for (; top + line*lead < H - 70; line++) {
+    const y = top + line*lead + 20, xh = 8.4 + rnd()*1.1, slant = .2 + rnd()*.08;
+    let x = left + indent*20 + (initial && line < 2 ? 66 : 0) + (rnd()-.5)*3;
+    const kind = rnd(), words = [];
+    if (kind < .12 && indent > 0) { indent--; x -= 20; words.push('}'); }
+    else if (kind < .26) {
+      // A comment: '//' and a few words, in sepia.
+      for (let n = 0; n < 2; n++) {
+        const slash = token(rnd, '/', x, y, xh, slant);
+        write(slash.strokes, 'rgba(92,60,34,.78)', false, 2.4); x += slash.advance;
+      }
+      x += 6;
+      for (let n = 2 + Math.floor(rnd()*4); n-- && x < right - 50;) {
+        const t = token(rnd, Array.from({length: 2 + Math.floor(rnd()*5)}, () => LETTERS[Math.floor(rnd()*LETTERS.length)]).join(''), x, y, xh*.92, slant);
+        write(t.strokes, 'rgba(92,60,34,.72)', false, 2.4); x += t.advance + 11;
+      }
+      continue;
+    } else {
+      const opens = kind > .82 && indent < 3, n = 2 + Math.floor(rnd()*4);
+      for (let i = 0; i < n; i++) {
+        words.push(Array.from({length: 2 + Math.floor(rnd()*6)}, () => LETTERS[Math.floor(rnd()*LETTERS.length)]).join(''));
+        if (i === 0 && rnd() < .4) words.push('=');
+        else if (i < n - 1 && rnd() < .3) words.push(rnd() < .5 ? '.' : '(');
+      }
+      if (words.includes('(')) words.push(')');
+      words.push(opens ? '{' : ';');
+      if (opens) indent++;
+    }
+    for (const w of words) {
+      if (x > right - 30) break;
+      const t = token(rnd, w, x, y, xh, slant);
+      write(t.strokes, blue(dip), true);
+      if (!MARKS[w] && rnd() < .5) spots.push([Math.abs(x + t.advance/2 - gx)/W, (y - xh)/H]);
+      x += t.advance + (MARKS[w] ? 5 : 11);
+      dip -= t.advance/260; if (dip < .35) dip = 1;
+    }
+  }
+  // The light map: the blue ink alone, a soft halo under it, then the stroke.
+  l.setTransform(1, 0, 0, 1, 0, 0); l.fillStyle = '#000'; l.fillRect(0, 0, 512, 512);
+  l.filter = 'blur(3px)'; l.globalAlpha = .55; l.drawImage(ink, 0, 0);
+  l.filter = 'none'; l.globalAlpha = 1; l.drawImage(ink, 0, 0);
+  return {paper, light, spots};
+}
+
+// Eight words of the hand for the lifted glyphs, pale blue on black (they
+// are drawn additively), four by two cells of 64 px, each word kept inside
+// the cell's middle so it can turn without clipping.
+function liftedWords(seed) {
+  const atlas = document.createElement('canvas'); atlas.width = 256; atlas.height = 128;
+  const ctx = atlas.getContext('2d'), rnd = randomSource(seed), ink = document.createElement('canvas');
+  ink.width = 256; ink.height = 128; const k = ink.getContext('2d');
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 256, 128);
+  const words = ['{', 'nul', '=', 'si', '<', 'tag', '}', 'od'];
+  words.forEach((w, i) => {
+    const cx = (i % 4)*64, cy = Math.floor(i/4)*64, xh = MARKS[w] ? 15 : 10;
+    const t = token(rnd, w, 0, 0, xh, .18), width = t.advance;
+    k.fillStyle = '#d4f1ff';
+    for (const s of t.strokes) nib(k, stroke(s.map(([x,y]) => [cx + 32 - width/2 + x, cy + 38 + y - (MARKS[w] ? 4 : 0)]), rnd), MARKS[w] ? 3.6 : 2.8);
+  });
+  ctx.filter = 'blur(4px)'; ctx.globalAlpha = .9; ctx.drawImage(ink, 0, 0);
+  ctx.filter = 'none'; ctx.globalAlpha = 1; ctx.drawImage(ink, 0, 0);
+  return atlas;
+}
+
+// Worn blue leather for the boards and spine. The left half is a board's
+// face (u out from the binding, v back to front): pebbled grain, a gilt
+// fillet just inside the edge, scuffs, and wear that lightens toward the
+// corners. The right half is the boards' edges, rubbed paler and smoother.
+// color, and rough (roughness in G), as three.js reads them.
+function leatherCanvases(seed) {
+  const color = document.createElement('canvas'), rough = document.createElement('canvas');
+  color.width = rough.width = color.height = rough.height = 512;
+  const c = color.getContext('2d'), r = rough.getContext('2d'), rnd = randomSource(seed);
+  c.fillStyle = '#1d2f45'; c.fillRect(0, 0, 512, 512);
+  r.fillStyle = 'rgb(0,205,0)'; r.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 9000; i++) {
+    const x = rnd()*512, y = rnd()*512, s = .8 + rnd()*1.8;
+    c.fillStyle = `rgba(${rnd() < .5 ? '8,14,22' : '70,96,124'},${.12 + rnd()*.2})`;
+    c.beginPath(); c.arc(x, y, s, 0, TAU); c.fill();
+  }
+  // Wear on the face: paler and smoother toward the outer edge and corners.
+  const worn = (ctx, color) => {
+    const g = ctx.createLinearGradient(256, 0, 200, 0); g.addColorStop(0, color); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 512);
+    for (const y of [0, 512]) {
+      const v = ctx.createRadialGradient(256, y, 0, 256, y, 90); v.addColorStop(0, color); v.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = v; ctx.fillRect(0, 0, 256, 512);
+    }
+  };
+  worn(c, 'rgba(112,128,140,.5)'); worn(r, 'rgba(0,120,0,.7)');
+  for (let i = 0; i < 70; i++) {
+    const x = rnd()*256, y = rnd()*512, a = rnd()*TAU, len = 6 + rnd()*26;
+    c.strokeStyle = `rgba(150,160,166,${.08 + rnd()*.16})`; c.lineWidth = .6 + rnd();
+    c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a)*len, y + Math.sin(a)*len); c.stroke();
+  }
+  // The gilt fillet, a little broken where the gold has worn off.
+  c.strokeStyle = 'rgba(196,158,82,.85)'; c.lineWidth = 2.2; c.setLineDash([60, 3, 24, 2, 90, 4]);
+  c.beginPath(); c.moveTo(0, 14); c.lineTo(242, 14); c.lineTo(242, 498); c.lineTo(0, 498); c.stroke();
+  c.setLineDash([]);
+  r.strokeStyle = 'rgb(0,90,0)'; r.lineWidth = 2.2; r.beginPath(); r.moveTo(0, 14); r.lineTo(242, 14); r.lineTo(242, 498); r.lineTo(0, 498); r.stroke();
+  // The edges: rubbed paler, smoother, with the leather's turn-in showing.
+  c.fillStyle = 'rgba(96,112,124,.45)'; c.fillRect(256, 0, 256, 512);
+  for (let i = 0; i < 3000; i++) { c.fillStyle = `rgba(${rnd() < .5 ? '20,28,36' : '150,160,168'},${.1 + rnd()*.15})`; c.fillRect(256 + rnd()*256, rnd()*512, 1 + rnd()*3, 1); }
+  r.fillStyle = 'rgb(0,140,0)'; r.fillRect(256, 0, 256, 512);
+  return {color, rough};
+}
+
+/** Curved parchment leaves written by hand in a quill's blue ink, worn blue
+ * leather boards, a walnut lectern. On hover the writing wakes line by line
+ * and a few of its words lift from the page. */
 export function createGrimoireObject(options = {}) {
   const a=artifact('VS Code / blue grimoire',options),{group,mesh,material}=a;
-  const leatherMap=grainTexture(a,'leather',193),woodMap=grainTexture(a,'wood',731);
-  const leather=material({color:'#4b2921',map:leatherMap,bumpMap:leatherMap,bumpScale:.0012,roughness:.82});
+  const hide=leatherCanvases(193),woodMap=woodTexture(a,731);
+  const leatherMap=a.own(new THREE.CanvasTexture(hide.color)),leatherRough=a.own(new THREE.CanvasTexture(hide.rough));
+  leatherMap.colorSpace=THREE.SRGBColorSpace;
+  const leather=material({map:leatherMap,bumpMap:leatherMap,bumpScale:.0009,roughnessMap:leatherRough,roughness:1});
   const wood=material({color:'#3b281b',map:woodMap,roughness:.69});
   const gold=material({color:'#a5824c',metalness:.65,roughness:.46});
   // The block's leaves are painted on its edges, not modelled: the right
   // half of this map, which the edge strips sample, is fine layers through
-  // the thickness; the left half (the hidden top) is plain. A dark corner
-  // stands in for the binding thread.
+  // the thickness, grimed toward the top and thumbed; the left half (the
+  // hidden top) is plain. A pale corner patch is the binding thread.
   const edge=document.createElement('canvas');edge.width=512;edge.height=256;
   {const e=edge.getContext('2d'),rnd=randomSource(5113);
     e.fillStyle='#bfa477';e.fillRect(0,0,512,256);
     for(let y=0;y<256;y+=3+Math.floor(rnd()*3)){e.fillStyle=`rgba(${rnd()<.6?'92,70,40':'240,226,190'},${.25+rnd()*.35})`;e.fillRect(256,y,256,1);}
-    e.fillStyle='#4a3a26';e.fillRect(0,240,16,16);}
+    const grime=e.createLinearGradient(0,0,0,90);grime.addColorStop(0,'rgba(74,50,26,.5)');grime.addColorStop(1,'rgba(74,50,26,0)');
+    e.fillStyle=grime;e.fillRect(256,0,256,256);
+    for(let i=0;i<5;i++){const x=290+rnd()*190,g=e.createRadialGradient(x,60,0,x,60,40+rnd()*30);
+      g.addColorStop(0,'rgba(70,52,34,.28)');g.addColorStop(1,'rgba(70,52,34,0)');e.fillStyle=g;e.fillRect(256,0,256,256);}
+    for(let i=0;i<40;i++){e.fillStyle=`rgba(128,74,32,${.2+rnd()*.3})`;e.fillRect(256+rnd()*256,rnd()*256,1+rnd()*2,1+rnd()*2);}
+    e.fillStyle='#d6c49c';e.fillRect(0,240,16,16);}
   const edgeMap=a.own(new THREE.CanvasTexture(edge));edgeMap.colorSpace=THREE.SRGBColorSpace;
   const edges=material({map:edgeMap,roughness:.95});
   const stand=[];
@@ -550,62 +793,107 @@ export function createGrimoireObject(options = {}) {
     if(side>0) {const ix=g.index;for(let i=0;i<ix.count;i+=3){const k=ix.getX(i+1);ix.setX(i+1,ix.getX(i+2));ix.setX(i+2,k);}}
     leafGrids.push(g);
   }
-  // The round spine shares the boards' leather; twelve stitches share the
-  // block's map (its dark corner).
-  mesh(merged([...covers,new THREE.CylinderGeometry(.013,.013,.203,14).rotateX(Math.PI/2).translate(0,.077,0)]),leather);
+  // The spine shares the boards' leather: open, as a book's back is when it
+  // lies open, a half round under the gutter that falls toward the front
+  // with it, in the boards' dark, unworn grain. The sewing thread shows in
+  // the fold as four runs between the stations, linen, sharing the block's
+  // map (its corner patch).
+  const fall=Math.atan(.027/.091);
+  const spine=new THREE.CylinderGeometry(.013,.013,.2,10,1,true,-Math.PI/2,Math.PI).rotateX(Math.PI/2).rotateX(fall)
+    .translate(0,pageHeight(0,0)-.04,0),su=spine.attributes.uv;
+  for(let i=0;i<su.count;i++)su.setXY(i,.05+su.getX(i)*.3,.2+su.getY(i)*.6);
+  mesh(merged([...covers,spine]),leather);
   const stitches=[];
-  for(let i=0;i<12;i++) {
-    const s=new THREE.BoxGeometry(.006,.0007,.0008).translate(0,.111-i*.00015,-.079+i*.014),t=s.attributes.uv;
+  for(const z of [-.06,-.02,.02,.06]) {
+    const s=new THREE.BoxGeometry(.0007,.0006,.03).rotateX(fall).translate(0,pageHeight(0,z/.091)-.0012,z),t=s.attributes.uv;
     for(let k=0;k<t.count;k++)t.setXY(k,.01,.02);
     stitches.push(s);
   }
   mesh(merged([...blocks,...stitches]),edges);
   mesh(merged(corners),gold);
-  // Both leaves in one mesh and one material: their parchment and glyphs
-  // side by side in one atlas.
-  const L=glyphCanvases(125),R=glyphCanvases(256);
-  const atlas=(l,r)=>{const c=document.createElement('canvas');c.width=1024;c.height=512;const x=c.getContext('2d');x.drawImage(l,0,0);x.drawImage(r,512,0);return c;};
+  // Both leaves in one mesh and one material: parchment and ink side by side
+  // in one atlas that runs out from the gutter, so the left leaf, written
+  // with its gutter on the right, goes in mirrored.
+  const L=leafCanvases(125,true,true),R=leafCanvases(256,false,false);
+  const atlas=(l,r)=>{const c=document.createElement('canvas');c.width=1024;c.height=512;const x=c.getContext('2d');
+    x.save();x.translate(512,0);x.scale(-1,1);x.drawImage(l,0,0);x.restore();x.drawImage(r,512,0);return c;};
   const map=a.own(new THREE.CanvasTexture(atlas(L.paper,R.paper))),emissiveMap=a.own(new THREE.CanvasTexture(atlas(L.light,R.light)));
   map.colorSpace=emissiveMap.colorSpace=THREE.SRGBColorSpace;
-  const parchment=material({map,emissiveMap,color:'#fff2d5',emissive:'#72c9ff',emissiveIntensity:1.1,roughness:.88,side:THREE.DoubleSide});
+  const parchment=material({map,emissiveMap,color:'#e3d8c2',emissive:'#3f93ff',emissiveIntensity:1.2,roughness:.86,side:THREE.DoubleSide});
+  // The ink's light: a slow breath running along the lines; on hover it
+  // wakes in reading order, down the left leaf and then the right, a bright
+  // crest at the line being read.
+  const glow={uWake:{value:0},uRead:{value:0},uTime:{value:0}};
+  parchment.onBeforeCompile=shader=>{
+    Object.assign(shader.uniforms,glow);
+    shader.fragmentShader=shader.fragmentShader
+      .replace('#include <common>','#include <common>\nuniform float uWake; uniform float uRead; uniform float uTime;')
+      .replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+        float read=(step(.5,vEmissiveMapUv.x)+1.-vEmissiveMapUv.y)*.5;
+        float woken=1.-smoothstep(uRead-.06,uRead,read),crest=exp(-pow((read-uRead)/.022,2.))*step(uRead,1.);
+        totalEmissiveRadiance*=(1.+.07*sin(uTime*1.2-read*18.))*(.8+uWake*(.5+.7*woken+1.4*crest));`);
+  };
   const leaves=mesh(mergedIndexed(leafGrids),parchment);leaves.name='curved illuminated pages';
   const resting=Float32Array.from(leaves.geometry.attributes.position.array);
   const silk=material({color:'#185f83',roughness:.65,metalness:.12,side:THREE.DoubleSide});
   const ribbon=new THREE.Shape();ribbon.moveTo(-.005,0);ribbon.lineTo(.005,0);ribbon.lineTo(.006,-.055);ribbon.lineTo(0,-.050);ribbon.lineTo(-.005,-.058);ribbon.closePath();
   mesh(new THREE.ShapeGeometry(ribbon).rotateX(.2).translate(.010,.098,.082),silk);
 
-  const symbol=document.createElement('canvas');symbol.width=symbol.height=64;
-  const c=symbol.getContext('2d');c.strokeStyle='#7fdaff';c.lineWidth=4;c.lineCap='round';
-  c.shadowColor='#007acc';c.shadowBlur=8;c.beginPath();c.moveTo(23,19);c.lineTo(12,31);c.lineTo(23,43);c.moveTo(41,19);c.lineTo(52,31);c.lineTo(41,43);c.stroke();
-  const glyphMap=a.own(new THREE.CanvasTexture(symbol));glyphMap.colorSpace=THREE.SRGBColorSpace;
-  // Seven glyphs that rise from the leaves and fade, in one draw call: their
-  // colour carries the fade (additive, so darker is fainter).
-  const lift=a.own(new THREE.BufferGeometry());
-  lift.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(21),3));
-  lift.setAttribute('color',new THREE.Float32BufferAttribute(new Float32Array(21),3));
-  const glyphs=new THREE.Points(lift,a.own(new THREE.PointsMaterial({map:glyphMap,size:.05,vertexColors:true,
-    transparent:true,depthWrite:false,blending:THREE.AdditiveBlending})));
+  // Six words of the hand that lift from the written lines, turn a little
+  // and fade, in one draw call: each picks its word from an atlas (its ink
+  // is the alpha) and its own spin; alpha carries the fade. Blended
+  // normally, they stay blue over the nook's bright wall as over the dark.
+  // size is in metres, at any lens.
+  const words=a.own(new THREE.CanvasTexture(liftedWords(77)));
+  const COUNT=6,lift=a.own(new THREE.BufferGeometry());
+  for(const [name,size] of [['position',3],['color',4],['cell',1],['spin',1],['grow',1]])
+    lift.setAttribute(name,new THREE.Float32BufferAttribute(new Float32Array(COUNT*size),size));
+  const ink=a.own(new THREE.PointsMaterial({map:words,color:'#63b8ff',size:.032,vertexColors:true,transparent:true,depthWrite:false}));
+  ink.onBeforeCompile=shader=>{
+    shader.vertexShader=shader.vertexShader
+      .replace('#include <common>','#include <common>\nattribute float cell; attribute float spin; attribute float grow; varying float vCell; varying float vSpin;')
+      .replace('gl_PointSize = size;','vCell=cell;vSpin=spin;\n\tgl_PointSize=size*grow*projectionMatrix[1][1];');
+    shader.fragmentShader=shader.fragmentShader
+      .replace('#include <common>','#include <common>\nvarying float vCell; varying float vSpin;')
+      .replace('#include <map_particle_fragment>',`vec2 pc=mat2(cos(vSpin),-sin(vSpin),sin(vSpin),cos(vSpin))*(gl_PointCoord-.5)+.5;
+        if(any(lessThan(pc,vec2(0.)))||any(greaterThan(pc,vec2(1.))))discard;
+        float written=texture2D(map,vec2((mod(vCell,4.)+pc.x)/4.,1.-(floor(vCell/4.)+pc.y)/2.)).g;
+        diffuseColor.rgb*=.7+.5*written;diffuseColor.a*=written;`);
+  };
+  const glyphs=new THREE.Points(lift,ink);
   glyphs.name='lifted blue glyphs';glyphs.visible=false;glyphs.frustumCulled=false;group.add(glyphs);
-  const blue=new THREE.Color('#49baff');
+  const spots=[...L.spots.map(([u,v])=>[-1,u,v]),...R.spots.map(([u,v])=>[1,u,v])];
+  const pick=n=>{const x=Math.sin(n)*43758.5453;return x-Math.floor(x);};
+  let read=0;
   function update(time,delta) {
     const s=a.step(time,delta);if(!s)return;
-    const {t,hover:h,reduced}=s;
-    parchment.emissiveIntensity=1.05+h*1.8+(reduced?0:.14*Math.sin(t*1.5));
+    const {t,dt,hover:h,awake,reduced}=s;
+    read=reduced?(awake?1.1:0):clamp(read+(awake?dt/2.4:-dt/1.2),0,1.1);
+    glow.uWake.value=h;glow.uRead.value=read;glow.uTime.value=t;
+    // The leaves stir at their fore-edges; awake, the right one lifts a
+    // little, as if about to turn.
     const p=leaves.geometry.attributes.position;
     for(let i=0;i<p.count;i++) {
       const [u,v,side]=flutter[i];
-      p.setY(i,resting[i*3+1]+(reduced?0:Math.pow(u,3)*.0018*Math.sin(t*1.7+v*4+side)));
+      p.setY(i,resting[i*3+1]+(reduced?0:u*u*u*(.0018*Math.sin(t*1.7+v*4+side)+(side>0?h*.006*(.75+.25*Math.sin(t*1.1)):0))));
     }
     p.needsUpdate=true;
     glyphs.visible=!reduced&&h>.006;
     if(!glyphs.visible)return;
-    const q=lift.attributes.position,tint=lift.attributes.color;
-    for(let i=0;i<7;i++) {
-      const life=(t*.23+i/7)%1,fade=h*Math.sin(life*Math.PI)**2*.78;
-      q.setXYZ(i,Math.sin(i*2.4)*.092+Math.sin(t*.5+i)*.013,.125+life*.16,Math.cos(i*2.7)*.054);
-      tint.setXYZ(i,blue.r*fade,blue.g*fade,blue.b*fade);
+    const q=lift.attributes.position,tint=lift.attributes.color,cell=lift.attributes.cell,spin=lift.attributes.spin,grow=lift.attributes.grow;
+    for(let i=0;i<COUNT;i++) {
+      // Each word rises over about 3.6 s from a written spot, chosen afresh
+      // every time round.
+      const clock=t*.28+i/COUNT,round=Math.floor(clock),life=clock-round;
+      const [side,u,v]=spots[Math.floor(pick(round*12.9898+i*78.233)*spots.length)],z=v*2-1;
+      const fade=h*Math.sin(life*Math.PI)**2;
+      q.setXYZ(i,side*(.003+u*.134)+.008*Math.sin(life*4.5+i),pageHeight(u,z)+.006+Math.pow(life,.75)*.11,z*.091+life*.025);
+      tint.setXYZW(i,1,1,1,fade);
+      cell.setX(i,Math.floor(pick(round*3.7+i*1.91)*8));
+      spin.setX(i,(life-.5)*(pick(round+i*1.3)<.5?-.9:.9));
+      grow.setX(i,.75+.4*life);
     }
-    q.needsUpdate=tint.needsUpdate=true;
+    q.needsUpdate=tint.needsUpdate=cell.needsUpdate=spin.needsUpdate=grow.needsUpdate=true;
   }
   update(0,0);
   group.userData.footprint={width:.30,depth:.20,height:.17};

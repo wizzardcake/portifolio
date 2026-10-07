@@ -295,3 +295,82 @@ The hover volume's 48 triangles are never drawn.
 - In the room the blue reads teal-blue, not Figma's cyan.
 - The glowing dial is an invention: it is there because the room's lamp
   cannot light it.
+
+### Grimoire: written, not printed
+
+**The writing.**
+- A broad-nib pen is simulated on canvas. Each stroke is the nib's sweep at
+  a fixed angle: thick across it, thin along it. It swells where the pen
+  sets down and thins as it lifts. All sweeps are filled as one path, so
+  overlaps never darken.
+- The script is an invented cursive hand of 13 letters joined into words,
+  with code's punctuation (`{ } ( ) = ; . / < >`) in the same hand.
+- Each page is lines of code, nested by braces, with `//` comments in
+  sepia between them and ragged right edges.
+- Each dip of the quill starts dark and thins until the next.
+- The left page opens with an illuminated initial: a blue brace on worn
+  gold, with a red flourish down the margin.
+- **Fixed:** the left page was mirrored before. Its writing read right to
+  left.
+
+**The parchment.**
+- Warm in the middle, tanned toward every edge and shaded into the gutter.
+- Fibres, foxing in clusters, a tide line, and the lower outer corner
+  darkened by thumbs.
+- Ruled by hand, faintly: margins and line guides that are never quite
+  straight.
+- The page block's edges are grimed toward the top and thumbed.
+- The printed double-rule frame is gone.
+
+**The leather.** The covers are worn blue leather:
+- pebbled grain;
+- wear that lightens and smooths toward the corners and outer edge (a
+  roughness map);
+- scuffs, and rubbed edges;
+- a gilt fillet, broken where the gold has worn, just inside the edge.
+
+**The binding.**
+- The spine is open, as a book's back is when it lies open: a half round
+  under the gutter that falls with it. The closed cylinder showed a lit
+  disc toward the lamp.
+- The sewing thread shows in the fold as four linen runs. Before, there
+  were twelve dark dashes floating over the front of the gutter.
+
+**Light and hover.**
+- Idle, the ink breathes faintly along its lines.
+- On hover it wakes in reading order, down the left page and then the
+  right, with a bright crest at the line being read.
+- The right page's fore-edge lifts a few millimetres, as if about to turn.
+- Six words of the same hand lift from written spots, turn a little and
+  fade (about 3.6 s each, one draw call). They are blended normally, so
+  they stay blue over the nook's bright wall. Before, there were seven
+  flat `<>` icons.
+- The ink's glow is a deeper blue (`#3f93ff`). Under the lamp a pale glow
+  had washed the writing out against the paper.
+
+| Grimoire | Before | After |
+| --- | --- | --- |
+| Triangles | 2,439 | 2,307 |
+| Draw calls | 7 | 7 |
+| Owned resources | 20 | 21 (leather roughness map) |
+
+**Verified:**
+- Screenshots in `verification/tools-v2/`:
+  - `grimoire-1` to `grimoire-6`, studio and room light;
+  - `grimoire-4-motion` (the reading sweep and the lifted words, every
+    0.3 s).
+- `node tests/shelf-tools-check.mjs --round=grimoire-written` passes:
+  - hover hits all three;
+  - reduced motion is static, with no glyph points showing;
+  - every resource is disposed once;
+  - no lights, no console errors.
+
+**Not verified:**
+- The sweep and the lifting words in real time. I saw stills, not motion.
+- The pen's look in browsers without canvas `filter`. Without it the
+  ink's halo is simply absent.
+
+**Weak points:**
+- From the room's distance the writing is a blue texture, not text.
+- The lifted words are small there.
+- The parchment turns quite orange under both warm lights.

@@ -427,3 +427,61 @@ is (`portal-orb-material.js`), in its palette:
 **Weak points:**
 - The base is unchanged and still a little busy with wires.
 - At hover the heart can become one broad teal glow.
+
+## Phase 4: Final verification
+
+**Syntax.** `node --check` passes for `tools-shelf.js`, the check script and
+the preview's inline module.
+
+**The branch.** Against `a89ed86` it only adds files:
+- the module;
+- the preview;
+- the check;
+- the three docs.
+
+The room's own checks were not rerun; nothing they test has changed.
+
+**The check.** `node tests/shelf-tools-check.mjs` (into
+`verification/tools/final/`) passes:
+- real mouse hover hits all three;
+- bounds fit the shelf;
+- reduced motion is static, with no lifted words;
+- every owned resource is disposed once;
+- no lights are added;
+- there are no browser errors or warnings.
+
+**Leaks.**
+- After all three are disposed, twice, the renderer drops from 22
+  geometries, 14 textures and 22 programs to 4, 2 and 5.
+- That is exactly what the preview's own shelf, wall and floor need
+  (`verification/tools-v2/dispose/`).
+
+**Frame time.** Milliseconds per frame past the 60 Hz cap: 120 frames with
+`gl.finish()`, median of three runs, 1440 × 1000, Iris Xe.
+
+| Scene | Codex `a82af40` | Budget `4c306c9` | Final |
+| --- | --- | --- | --- |
+| All three, studio, awake | 3.23 | 1.42 | 1.83 |
+| Room view, nook's lamp, awake | 0.79 | 0.55 | 0.31 |
+| Figma close | 1.47 | 0.81 | 1.17 |
+| Grimoire close | 2.66 | 1.29 | 1.46 |
+| Crystal filling the screen | 1.86 | 0.99 | 0.85 |
+
+**Cost, Codex → final:**
+- triangles in the frame, 30,563 → 7,507;
+- draw calls, 36 → 21;
+- owned resources, 63 → 48;
+- the check's frame rate, 56.3 → 60 fps (the display's cap).
+
+**A slip, repaired.**
+- `--round=final` is the check's name for `verification/tools/final/`.
+  My final run overwrote Codex's own final screenshots there; they were
+  local and gitignored.
+- I regenerated them unchanged from `a82af40` (its own code, preview and
+  check) into `verification/tools/codex-a82af40/`, with a note.
+- `final/` now holds the final verification. OneDrive's version history may
+  still have the originals.
+
+**Docs.** `TOOLS_INTEGRATION.md` and `TOOLS_VERIFICATION.md` now match the
+final API, placement, footprints, lighting notes and costs. The placement
+was re-checked against `room-scene.js`.

@@ -3,7 +3,9 @@
    a curve just above the boards. Its fragment shader breaks the mist into
    drifting wisps with a small tiling noise texture of its own; its vertex
    shader lets the strand wander a little, so nothing reads as a rigid tube or
-   a line of particles. Brightest where the eye looks through the middle of an
+   a line of particles. Slow surges travel along each strand, widening,
+   thickening and slowing it a little as they pass, so the trail flows rather
+   than lies painted on. Brightest where the eye looks through the middle of an
    arch (like the room's light shafts), fading at its edges and where it
    meets the floor. It owns no loop: room-scene.js advances it with the
    foreground layer it is drawn on, and leaves it still under reduced motion.
@@ -44,6 +46,10 @@ export function createRoomSmoke(THREE, {trails, marks = [], lights = [], anisotr
       // Live tuning (see `tuning` below): gain into a soft saturation, the
       // extra density far off, how deep the thin stretches go, the veil's share.
       uGain: {value: 2.2}, uFar: {value: .5}, uThin: {value: .5}, uVeil: {value: 1},
+      // How strongly slow surges travel along the trails (0: none): where one
+      // passes the mist widens, thickens and slows a little, and narrows and
+      // quickens behind it, so the trail flows rather than lies painted.
+      uFlow: {value: 1},
       uBrightness: {value: .6}, uCool: {value: new THREE.Color('#86c3bd')}, uWarm: {value: new THREE.Color('#aaa5e6')},
       // Up to four lamps whose light the mist catches: where (scene metres),
       // their colour times strength, and how far it carries (half at reach).
@@ -52,27 +58,30 @@ export function createRoomSmoke(THREE, {trails, marks = [], lights = [], anisotr
       uLampReach: {value: Array.from({length: 4}, (_, i) => lights[i]?.reach ?? 1)},
     },
     vertexShader: `
-      attribute vec3 lateral; attribute vec4 strand; attribute float fade;
-      uniform float uTime; uniform vec3 uLampAt[4]; uniform vec3 uLampTint[4]; uniform float uLampReach[4];
-      varying vec3 vNormal, vView, vLamp; varying vec2 vPath; varying float vAcross, vFade, vDensity, vSeed, vFlat, vSpeed;
+      attribute vec3 lateral; attribute vec4 strand; attribute float fade, spread;
+      uniform float uTime, uFlow; uniform vec3 uLampAt[4]; uniform vec3 uLampTint[4]; uniform float uLampReach[4];
+      varying vec3 vNormal, vView, vLamp; varying vec2 vPath; varying float vAcross, vFade, vDensity, vSeed, vFlat, vSpeed, vSurge;
       void main() {
         float s = uv.x, t = uTime * strand.y + strand.x;
         // A slow wander sideways and a soft rise and fall: never two strands alike.
         float wander = .6 * sin(s * .85 + t * .21) + .4 * sin(s * 2.1 - t * .33 + strand.x * 1.7);
         float swell = .5 + .5 * sin(s * 1.6 + t * .27 + strand.x);
-        vec3 p = position + lateral * wander * .08;
-        p.y *= .8 + .45 * swell;
+        // A surge travelling along the trail, away from where it begins, some
+        // stronger than others: the arch widens and billows a little as it passes.
+        float surge = sin(s * .55 - uTime * .23 * strand.y + strand.x * 2.3) * (.65 + .35 * sin(s * .19 + uTime * .05 + strand.x));
+        vec3 p = position + lateral * (wander * .08 + spread * uFlow * .16 * surge);
+        p.y *= (.8 + .45 * swell) * (1. + uFlow * .12 * surge);
         vec4 mv = modelViewMatrix * vec4(p, 1.);
         vNormal = normalize(normalMatrix * normal); vView = -mv.xyz;
-        vPath = vec2(s, uv.y); vAcross = uv.y; vFade = fade; vDensity = strand.z; vSeed = strand.x; vFlat = strand.w; vSpeed = strand.y;
+        vPath = vec2(s, uv.y); vAcross = uv.y; vFade = fade; vDensity = strand.z; vSeed = strand.x; vFlat = strand.w; vSpeed = strand.y; vSurge = surge;
         // The lamps' light on the mist, falling off with distance.
         vec3 world = (modelMatrix * vec4(p, 1.)).xyz; vLamp = vec3(0.);
         for (int i = 0; i < 4; i++) { vec3 d = world - uLampAt[i]; float r2 = uLampReach[i] * uLampReach[i]; vLamp += uLampTint[i] * r2 / (r2 + dot(d, d)); }
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
-      uniform sampler2D uNoise; uniform float uTime, uReveal, uPresence, uBrightness, uGain, uFar, uThin, uVeil; uniform vec3 uCool, uWarm;
-      varying vec3 vNormal, vView, vLamp; varying vec2 vPath; varying float vAcross, vFade, vDensity, vSeed, vFlat, vSpeed;
+      uniform sampler2D uNoise; uniform float uTime, uReveal, uPresence, uBrightness, uGain, uFar, uThin, uVeil, uFlow; uniform vec3 uCool, uWarm;
+      varying vec3 vNormal, vView, vLamp; varying vec2 vPath; varying float vAcross, vFade, vDensity, vSeed, vFlat, vSpeed, vSurge;
       void main() {
         // An arch is thickest where the eye looks through its middle; a flat
         // veil is thickest seen at a glance, through more of it.
@@ -80,7 +89,12 @@ export function createRoomSmoke(THREE, {trails, marks = [], lights = [], anisotr
         float core = mix(pow(facing, 1.35), uVeil * min(1.2, .32 / max(facing, .27)), vFlat);
         // Wisps flowing along the trail, their pattern curled by a slower field;
         // about as long as the strands are wide, so a narrow trail is no ribbon.
-        vec2 p = vec2(vPath.x * .7 - uTime * .058 * vSpeed, vPath.y * .9 + vSeed * .37);
+        // They flow a quarter slower where a surge widens the trail and as much
+        // faster where it narrows: the clock they flow by leads and lags with
+        // the surge, by a bounded amount, so the pattern never smears.
+        float surgeAt = vPath.x * .55 - uTime * .23 * vSpeed + vSeed * 2.3;
+        float flowTime = uTime - uFlow * 1.09 / max(vSpeed, .3) * cos(surgeAt);
+        vec2 p = vec2(vPath.x * .7 - flowTime * .058 * vSpeed, vPath.y * .9 + vSeed * .37);
         vec2 warp = texture2D(uNoise, p * .45 + vec2(uTime * .009, vSeed)).rg - .5;
         float broad = texture2D(uNoise, p + warp * 1.1).r;
         float fine = texture2D(uNoise, p * 2.6 + warp * 1.7 - vec2(uTime * .02, 0.)).g;
@@ -93,7 +107,7 @@ export function createRoomSmoke(THREE, {trails, marks = [], lights = [], anisotr
         float reveal = smoothstep(uReveal, uReveal - 1.4, vPath.x);
         // Far off it gathers a little, so the trail still reads where it ends.
         float far = clamp(length(vView) / 6., 0., 1.);
-        float raw = core * wisp * edges * stretch * vFade * vDensity * (1. + uFar * far);
+        float raw = core * wisp * edges * stretch * vFade * vDensity * (1. + uFar * far) * (1. + uFlow * .2 * vSurge);
         // A soft saturation: faint mist still reads, thick mist never turns solid.
         float d = (1. - exp(-uGain * raw)) * reveal * uPresence;
         // Under a lamp the mist takes its colour: the cool palette gives way as the lamp's light grows.
@@ -113,7 +127,7 @@ export function createRoomSmoke(THREE, {trails, marks = [], lights = [], anisotr
     fadeIn = 1.6, fadeOut = .9}) {
     const length = curve.getLength(), segments = Math.max(24, Math.round(length * 16)), sides = 8;
     const up = new THREE.Vector3(0, 1, 0), point = new THREE.Vector3(), tangent = new THREE.Vector3(), side = new THREE.Vector3();
-    const position = [], normal = [], uv = [], lateral = [], params = [], fade = [], index = [];
+    const position = [], normal = [], uv = [], lateral = [], spread = [], params = [], fade = [], index = [];
     for (let i = 0; i <= segments; i++) {
       const u = i / segments, s = u * length;
       curve.getPointAt(u, point); curve.getTangentAt(u, tangent);
@@ -130,6 +144,8 @@ export function createRoomSmoke(THREE, {trails, marks = [], lights = [], anisotr
         normal.push(side.x * c, n, side.z * c);
         uv.push(s, j / sides);
         lateral.push(side.x, 0, side.z);
+        // How far this vertex lies across the arch from its middle: what a surge widens.
+        spread.push(w * c);
         params.push(phase, speed, density, height > .005 ? 0 : 1);
         fade.push(ends * ends * (3 - 2 * ends));
       }
@@ -143,6 +159,7 @@ export function createRoomSmoke(THREE, {trails, marks = [], lights = [], anisotr
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normal, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     geometry.setAttribute('lateral', new THREE.Float32BufferAttribute(lateral, 3));
+    geometry.setAttribute('spread', new THREE.Float32BufferAttribute(spread, 1));
     geometry.setAttribute('strand', new THREE.Float32BufferAttribute(params, 4));
     geometry.setAttribute('fade', new THREE.Float32BufferAttribute(fade, 1));
     geometry.setIndex(index);
@@ -224,8 +241,8 @@ export function createRoomSmoke(THREE, {trails, marks = [], lights = [], anisotr
       shared.uTime.value = seconds;
       shared.uReveal.value = reveal;
     },
-    // Live tuning: gain, far, thin, veil, brightness (uniform values).
-    tuning: Object.fromEntries(['Gain', 'Far', 'Thin', 'Veil', 'Brightness'].map(k => [k.toLowerCase(), shared['u' + k]])),
+    // Live tuning: gain, far, thin, veil, brightness, flow (uniform values).
+    tuning: Object.fromEntries(['Gain', 'Far', 'Thin', 'Veil', 'Brightness', 'Flow'].map(k => [k.toLowerCase(), shared['u' + k]])),
     // How present one trail is (0..1), or all of them at once.
     setPresence(name, value) {
       const trail = presences.get(name);

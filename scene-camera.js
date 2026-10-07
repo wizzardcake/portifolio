@@ -51,21 +51,24 @@
     // (room-scene.js) and the camera walks. [x, z], metres.
     // - `trunk`: one trail from inside the doorway behind the entry (seen only
     //   by turning round), past the entry, down the table's left side to where
-    //   the visitor stands at the shelf, and on into the nook.
-    // - `fork`: the trunk point where a branch leaves for the chair, ending
-    //   (`branch`) where the visitor stands beside it.
-    // - `chair`: [x, z, heading in degrees]. It stands pushed back and turned
-    //   to the right, as if someone had sat there, risen with it and walked
-    //   off that way.
-    // Sitting down reverses that: the chair is drawn in, square to the table,
-    // while the eye comes over it through `sit` into the seat.
+    //   the visitor stands at the shelf, and on into the nook. Past the fork
+    //   it runs on almost straight and only then bends, gradually, round the
+    //   table: the main flow.
+    // - `fork`: the trunk point where a branch leaves for the chair. The
+    //   branch peels off to the right in a widening curve, not a Y, and ends
+    //   (`branch`) where the visitor stands beside the chair.
+    // - `chair`: [x, z, heading in degrees]. It stands beside the table, at
+    //   its side toward the door and the right, turned to face it: set for
+    //   someone to sit at the table (the user's layout drawing).
+    // Sitting down draws it round to the middle of the table's front, square
+    // to it, while the eye comes over it through `sit` into the seat.
     paths: {
-      trunk: [[.8, 6.9], [.78, 5.7], [.72, 4.6], [.66, 3.95], [.55, 3.45], [-.25, 2.75], [-1, 1.85], [-1.42, .7],
-        [-1.42, -.35], [-1.1, -1.1], [-.62, -1.48], [-1.15, -1.66], [-1.75, -1.62], [-2.15, -1.55]],
+      trunk: [[.8, 6.9], [.78, 5.7], [.72, 4.6], [.66, 3.95], [.55, 3.45], [.43, 2.9], [.26, 2.32], [-.1, 1.78],
+        [-.66, 1.2], [-1.18, .62], [-1.45, -.3], [-1.1, -1.1], [-.62, -1.48], [-1.15, -1.66], [-1.75, -1.62], [-2.15, -1.55]],
       fork: 4,
-      branch: [[.95, 3.05], [1.15, 2.55]],
-      sit: [.52, 2.28],
-      chair: [.62, 2.12, -34],
+      branch: [[.55, 3.08], [.78, 2.6], [1.05, 2.05], [1.18, 1.5]],
+      sit: [.55, 1.92],
+      chair: [1.14, .64, 56],
     },
     // Walking pace along the ways, and the slower settling into the seat,
     // metres a second; how far ahead along the way the eye looks while

@@ -559,8 +559,8 @@ if (renderer) {
   // - One trail comes in at the doorway behind the entry and passes under
   //   the visitor's feet there. It runs down the table's left side to where
   //   they stand at the shelf, and curls on into the nook.
-  // - The chair's trail shares it as far as the fork. Then it leaves for the
-  //   chair, standing pushed back on the right, and curls in under its seat.
+  // - The chair's trail shares it as far as the fork. Then it peels off to
+  //   the right for the chair beside the table, and curls in under its seat.
   // Strands of each bundle start on the other's side and cross as they
   // separate. It lives on the foreground layer with the chair and the cloth,
   // so it costs the room's own canvas nothing; the cloth's pulse below keeps
@@ -595,7 +595,9 @@ if (renderer) {
         {offset:.04,width:.3,height:0,phase:2.9,speed:.5,density:.32,wobble:.6}]},
     // The chair's share is thinner: it is near and short, and must not outweigh the long trail.
     // It is short, so it gathers sooner and thins away under the seat.
-    {name:'into the chair',fadeIn:1.1,fadeOut:.45,points:[...way.slice(0,fork+1),...branch,[restX+.3,restZ+.12],[restX+.06,restZ]],
+    // From where the visitor stands it runs on up to the chair and in under
+    // the seat from behind it.
+    {name:'into the chair',fadeIn:1.1,fadeOut:.45,points:[...way.slice(0,fork+1),...branch,[restX+.1,restZ+.42],[restX+.02,restZ+.05]],
       strands:[{offset:.02,width:.18,height:0,phase:3.7,speed:.75,density:.4,wobble:.6},
         {offset:.12,offsetEnd:.04,width:.13,height:.05,phase:5.2,speed:1.1,density:.78,wobble:.45},
         {offset:.06,offsetEnd:-.04,width:.09,height:.1,phase:.9,speed:1.3,density:.55,wobble:.45}]},

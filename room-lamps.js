@@ -16,7 +16,9 @@
    All of it costs four draw calls (glass, metal, the lantern's woven shade
    and the halos), whatever the number of lamps. Glass and halos breathe very
    slowly, each lamp at its own pace (glow = level, phase, rate, depth); the
-   door lantern hardly at all, the tower's lamps the most.
+   door lantern hardly at all, the tower's lamps the most. The glass is also
+   on a layer of its own (breathLayer), so the room can redraw just the glass
+   as it breathes; the halos follow the breath whenever the room is drawn.
    Plan coordinates (room-scene.js's shell group), metres, +Y up.
 
    Tuning: positions, hanging lengths, sizes, colours, brightness and breath
@@ -54,9 +56,6 @@ export const lampTuning = {
     // The weak, unpatterned glow below the shade (cd, range m): a downward
     // half-sphere, since the broad shade keeps the light off the ceiling.
     glow: 4, glowReach: 6.5,
-    // The lantern's pool on the floor gives a little back: a faint, warm
-    // upward fill on the beams and the ceiling round the door (cd, range m).
-    bounce: 2.6, bounceReach: 5.5,
     // The gobo: sharp within `sharp` m of the lamp; blur grows with
     // log2(distance / sharp) * spread (mip levels). Beyond flatFrom..flatTo m
     // the pattern evens out toward `mean` by up to `flatten`.
@@ -415,9 +414,6 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
   spot.shadow.mapSize.set(1024, 1024); spot.shadow.bias = -.0008; spot.shadow.normalBias = .02; spot.shadow.camera.near = .12;
   const glow = new THREE.SpotLight(door.glowColor, door.glow, door.glowReach, Math.PI / 2, .35, 2);
   glow.name = 'door lantern glow'; glow.position.copy(lanternCenter); glow.target.position.copy(lanternCenter).y -= 1;
-  const bounce = new THREE.SpotLight(door.color, door.bounce, door.bounceReach, 1.3, 1, 2);
-  bounce.name = 'door lantern floor bounce'; bounce.position.set(dx + .2, .05, dz + .25);
-  bounce.target.position.set(dx - .3, height, dz - 1.4);
 
   // ---- The droplets.
   const shelf = tuning.shelf;
@@ -532,6 +528,8 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
     m.castShadow = false; m.receiveShadow = false; group.add(m);
     return m;
   });
+  const BREATH_LAYER = 2;
+  meshes[0].layers.enable(BREATH_LAYER);
   const haloPoints = new THREE.Points(haloGeometry, haloMaterial);
   haloPoints.name = 'lamp halos'; haloPoints.renderOrder = 6; group.add(haloPoints);
 
@@ -562,10 +560,11 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
     {at: shelfLight.position.toArray(), color: shelf.color, reach: 1.5, strength: .6},
   ];
 
-  const lights = {door: spot, glow, bounce, shelf: shelfLight, stair: stairLight};
+  const lights = {door: spot, glow, shelf: shelfLight, stair: stairLight};
   const triangles = meshes.reduce((n, m) => n + m.geometry.attributes.position.count / 3, 0);
   return {
-    group, lights, targets: [spot.target, glow.target, bounce.target, shelfLight.target], clusters, smokeLights, softGobo,
+    group, lights, targets: [spot.target, glow.target, shelfLight.target], clusters, smokeLights, softGobo,
+    breathLayer: BREATH_LAYER,
     // Advances the breath (seconds); 0 holds every lamp at its rest level.
     update(seconds) { breath.value = seconds; },
     setFocal(focal) { haloMaterial.uniforms.uFocal.value = focal; },

@@ -88,7 +88,7 @@ try{
   const audit=await evaluate(`(()=>{
     const lights=[];studyRoom.scene.traverse(o=>{if(o.isLight)lights.push({name:o.name,type:o.type,at:o.position.toArray(),intensity:o.intensity,shadow:o.castShadow,penumbra:o.penumbra});});
     return {stats:studyRoom.lamps.stats,values:studyRoom.lamps.values,lights,source:studyRoom.architecture.source,render:{...studyRoom.renderer.info.render},memory:{...studyRoom.renderer.info.memory}};})()`);
-  assert.equal(audit.stats.lamps,19);assert.equal(audit.stats.drawCalls,4);assert.equal(audit.stats.lights,5);
+  assert.equal(audit.stats.lamps,19);assert.equal(audit.stats.drawCalls,4);assert.equal(audit.stats.lights,4);
   assert.equal(audit.lights.filter(l=>l.name.startsWith('door lantern')&&l.shadow).length,1);
   // Measure actual rAF cadence in entry and seated modes, retaining all host work.
   const fps={};await motion('no-preference');

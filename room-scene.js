@@ -1359,7 +1359,8 @@ if (renderer) {
     front.toneMapping=THREE.ACESFilmicToneMapping;front.toneMappingExposure=renderer.toneMappingExposure;
     front.setClearColor(0x000000,0);
   } catch {front=null;}
-  scene.traverse(object=>{if(object.isLight)object.layers.enable(1);});
+  // Every light also lights the foreground layer and the lamps' breathing glass.
+  scene.traverse(object=>{if(object.isLight){object.layers.enable(1);object.layers.enable(lamps.breathLayer);}});
   frontCanvas.addEventListener('webglcontextlost',event=>{event.preventDefault();frontLost=true;frontHost.classList.remove('is-ready');});
   frontCanvas.addEventListener('webglcontextrestored',()=>{frontLost=false;invalidate();});
   let pending=false, lost=false, layoutKey='', shadowsStale=true;
@@ -1511,11 +1512,14 @@ if (renderer) {
     renderer.setScissorTest(false);
   }
   requestAnimationFrame(liveOutside);
-  // ---- The lamps breathe: very slow, irregular swells of their glass and
-  // halos, each at its own pace (room-lamps.js). Their light on the room
-  // stays still, so only where the lamps are on screen is redrawn, a cluster
-  // at a time, about 12 times a second over the last full frame, as for the
-  // sky. Still for reduced motion.
+  // ---- The lamps breathe: very slow, irregular swells of their glass, each
+  // at its own pace (room-lamps.js). Their light on the room stays still, so
+  // about 12 times a second only the glass is drawn again, over the kept
+  // frame and tested against its kept depth (the canvas keeps both): one
+  // draw call, no clearing, nothing else redrawn. The halos are additive
+  // and would pile up, so they follow the breath whenever the room is drawn
+  // in full. Nothing is drawn while no lamp is on screen. Still for reduced
+  // motion.
   const lampCorner=new THREE.Vector3(),lampOffsets=[-1,1].flatMap(x=>[-1,1].flatMap(y=>[-1,1].map(z=>[x,y,z])));
   function lampRect({points,pad}) {
     let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
@@ -1533,13 +1537,13 @@ if (renderer) {
   function liveLamps(now) {
     requestAnimationFrame(liveLamps);
     if(document.hidden||lost||pending||!host.classList.contains('is-ready')||stillMotion.matches||now-lampsAt<80) return;
-    lampsAt=now;lamps.update(now/1000);
-    camera.layers.set(0);
-    for(const cluster of lamps.clusters) {
-      const rect=lampRect(cluster);if(!rect) continue;
-      renderer.setScissorTest(true);renderer.setScissor(...rect);renderer.render(scene,camera);
-    }
-    renderer.setScissorTest(false);
+    lampsAt=now;
+    if(!lamps.clusters.some(cluster=>lampRect(cluster))) return;
+    lamps.update(now/1000);
+    // A colour background would clear the canvas even without autoClear.
+    const background=scene.background;scene.background=null;renderer.autoClear=false;
+    camera.layers.set(lamps.breathLayer);renderer.render(scene,camera);
+    camera.layers.set(0);renderer.autoClear=true;scene.background=background;
   }
   requestAnimationFrame(liveLamps);
   function resize() {

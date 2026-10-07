@@ -160,10 +160,14 @@
     if (!entryTargets || entryTargets.hidden) return;
     const table = screenEl.querySelector('.portal-table');
     const halfWidth = table.clientWidth / camera.units / 2 + .05, halfDepth = table.clientHeight / camera.units / 2 + .05;
-    // The armchair stands where room-scene.js puts it, just behind the seated eye.
-    const chair = camera.seated.distance - .06, chairPoints = [], nookPoints = [];
+    // The armchair stands where scene-camera.js says: pushed back and turned
+    // until the visitor sits. Its box turns with it.
+    const {x: chairX, z: chairZ, yaw} = camera.chairPose, cos = Math.cos(yaw), sin = Math.sin(yaw), chairPoints = [], nookPoints = [];
     for (const x of [-halfWidth, halfWidth]) for (const z of [-halfDepth, halfDepth]) chairPoints.push([x, 0, z], [x, camera.tableHeight, z]);
-    for (const x of [-.32, .32]) for (const z of [chair - .28, chair + .36]) chairPoints.push([x, 0, z], [x, 1.05, z]);
+    for (const across of [-.32, .32]) for (const deep of [-.28, .36]) {
+      const x = chairX + across * cos + deep * sin, z = chairZ - across * sin + deep * cos;
+      chairPoints.push([x, 0, z], [x, 1.05, z]);
+    }
     // The nook's opening in the left wall (room-scene.js: z -2.6 to -0.5,
     // its arch 2.12 m high), and the floor in front where the smoke gathers.
     for (const z of [-2.6, -.5]) nookPoints.push([-2.4, 0, z], [-2.4, 2.12, z], [-2.05, 0, z]);

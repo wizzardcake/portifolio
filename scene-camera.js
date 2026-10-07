@@ -4,10 +4,12 @@
    the viewer, +Z above the table.
    The camera stands at named points, each an eye `position` and the point it
    looks at (`lookAt`): entry, seated and shelf. The camera is always on a
-   leg between two of them ({from, to, progress 0..1}; see `durations`),
-   straight unless it passes a control point (`via`). `approach` is derived
-   from it: how far toward the seat (1 seated, 0 at the entry). Where the
-   visitor is, by name, is the navigation state at the end of this file. */
+   leg between two of them ({from, to, progress 0..1}: the share of the
+   leg's walking time; see `durations`), walking the ways the smoke draws on
+   the floor (`paths`). `approach` is derived from it: how far toward the
+   seat (1 seated, 0 at the entry). `chairPose` is where the chair stands.
+   Where the visitor is, by name, is the navigation state at the end of this
+   file. */
 (() => {
   const screen = document.getElementById('screen');
   const table = screen.querySelector('.portal-table');
@@ -45,28 +47,35 @@
       wide: {position: [-.55, 1.8, -1.55], lookAt: [-2.85, 1.1, -1.55]},
       portrait: {position: [1, 1.8, -1.55], lookAt: [-2.85, 1.15, -1.55]},
     },
-    // A leg that must go round something passes a control point: the eye is
-    // drawn toward it on a smooth curve, while its heading blends between the
-    // ends. Entry to shelf goes round the table's right, past the window and
-    // the stair, and ends walking straight up to the nook. Shelf to seat goes
-    // round the table toward the chair (its left in landscape, its right in
-    // portrait, where the seat is behind the chair).
-    via: {
-      wide: {'entry>shelf': [2.7, 1.75, -1.7], 'shelf>seated': [-2.6, 1.5, .2]},
-      portrait: {'entry>shelf': [2.1, 1.78, 1], 'shelf>seated': [2, 1.5, 1.2]},
+    // The ways through the room, which the smoke on the floor draws
+    // (room-scene.js) and the camera walks. [x, z], metres.
+    // - `trunk`: one trail from inside the doorway behind the entry (seen only
+    //   by turning round), past the entry, down the table's left side to where
+    //   the visitor stands at the shelf, and on into the nook.
+    // - `fork`: the trunk point where a branch leaves for the chair, ending
+    //   (`branch`) where the visitor stands beside it.
+    // - `chair`: [x, z, heading in degrees]. It stands pushed back and turned
+    //   to the right, as if someone had sat there, risen with it and walked
+    //   off that way.
+    // Sitting down reverses that: the chair is drawn in, square to the table,
+    // while the eye comes over it through `sit` into the seat.
+    paths: {
+      trunk: [[.8, 6.9], [.78, 5.7], [.72, 4.6], [.66, 3.95], [.55, 3.45], [-.25, 2.75], [-1, 1.85], [-1.42, .7],
+        [-1.42, -.35], [-1.1, -1.1], [-.62, -1.48], [-1.15, -1.66], [-1.75, -1.62], [-2.15, -1.55]],
+      fork: 4,
+      branch: [[.95, 3.05], [1.15, 2.55]],
+      sit: [.52, 2.28],
+      chair: [.62, 2.12, -34],
     },
-    // How a leg turns: its heading and tilt (and a look carried from the
-    // start) follow its progress raised to the power `ease` (evenly along the
-    // way unless set here), and `left` turns it the long way round, to the
-    // left. From the shelf the eye keeps facing the chair as it walks round
-    // the table toward it, then turns on, across the chair, into the seat's
-    // view as it sits down, never faster than about 60 degrees a second: to
-    // the left round the table's left in landscape, to the right round its
-    // right in portrait.
-    turn: {
-      wide: {'shelf>seated': {ease: 1.5, left: true}},
-      portrait: {'shelf>seated': {ease: 1.8}},
-    },
+    // Walking pace along the ways, and the slower settling into the seat,
+    // metres a second; how far ahead along the way the eye looks while
+    // walking, and over how many metres it turns from the view it set off
+    // with (`leave`) and into the view it arrives at (`arrive`); `drawn`:
+    // per leg, from how many metres before the walk's end to how many the eye
+    // turns toward where it is going (from the shelf a little sooner, along
+    // the trunk's way back); `down`: how many degrees further down it
+    // looks at the chair as it reaches it.
+    pace: {walk: 1.1, sit: .6, ahead: 1.1, leave: 1.2, arrive: 2.2, drawn: {'entry>shelf': [3.5, 1], 'entry>seated': [3.5, 1], 'shelf>seated': [6.5, 3.5]}, down: 24},
     // At the shelf the view follows the pointer: a slight look round the
     // nook near the middle, turning progressively further toward either edge,
     // up to `yaw` degrees at the very edge (landscape needs about 75 to bring
@@ -91,13 +100,126 @@
     const run = Math.hypot(tx - x, tz - z);
     return {position: [x, y, z], yaw: round(Math.atan2(x - tx, z - tz) / radians), tilt: round(Math.atan2(y - ty, run) / radians)};
   }
-  // How far a leg's heading has turned at a progress (see `turn`).
-  const heading = (name, progress, format) => {
-    const turn = state.turn[format][name];
-    return turn ? Math.pow(progress, turn.ease) : progress;
-  };
   // A heading in (-180, 180], so the seat's is exactly 0 however it was reached.
   const wrap = degrees => degrees - 360 * Math.round(degrees / 360);
+  const smooth = (from, to, v) => { const t = Math.min(1, Math.max(0, (v - from) / (to - from))); return t * t * (3 - 2 * t); };
+  // From heading a toward b, the short way round, by w.
+  const turnToward = (a, b, w) => a + wrap(b - a) * w;
+
+  // ---- A leg's way: a smooth curve from one point's eye along the trails
+  // (`paths`) to the other's. It takes the trunk's points between them; to
+  // the seat, it takes the trunk to the fork, the branch, and the settle into
+  // the seat. Built once per leg, format and seat distance. at(progress)
+  // gives the eye and its heading and tilt:
+  // - the eye stays at standing height until the settle, then sinks into
+  //   the seat;
+  // - the eye looks `ahead` along the way, turning from the view it set off
+  //   with, and into the one it arrives at, over the pace's distances;
+  // - the chair is drawn in during the settle (`settle` 0..1).
+  const ways = new Map();
+  function way(name, format) {
+    const key = name + ':' + format + ':' + points.seated.position[2].toFixed(4);
+    if (ways.has(key)) return ways.get(key);
+    if (ways.size > 12) ways.clear();
+    const [from, to] = name.split('>'), {trunk, fork, branch, sit} = state.paths, {pace} = state;
+    const start = aim(points[from]), end = aim(points[to]), xz = p => [p.position[0], p.position[2]];
+    // Where a point lies along the trunk: segment index plus fraction.
+    const along = ([x, z]) => {
+      let best = Infinity, at = 0;
+      for (let i = 0; i < trunk.length - 1; i++) {
+        const [ax, az] = trunk[i], dx = trunk[i + 1][0] - ax, dz = trunk[i + 1][1] - az;
+        const f = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)));
+        const d = Math.hypot(x - ax - f * dx, z - az - f * dz);
+        if (d < best) { best = d; at = i + f; }
+      }
+      return at;
+    };
+    // The trunk's points strictly between two places along it, in walking order.
+    const between = (a, b) => {
+      const out = [];
+      if (a < b) for (let i = Math.floor(a) + 1; i < b; i++) out.push(trunk[i]);
+      else for (let i = Math.ceil(a) - 1; i > b; i--) out.push(trunk[i]);
+      return out;
+    };
+    const seat = to === 'seated';
+    // What the walk is drawn to at the end: the chair where it stands, or
+    // what the place looks at.
+    const focus = seat ? state.paths.chair.slice(0, 2) : [points[to].lookAt[0], points[to].lookAt[2]];
+    const marks = seat ? [xz(start), ...between(along(xz(start)), fork), trunk[fork], ...branch, sit, xz(end)]
+      : [xz(start), ...between(along(xz(start)), along(xz(end))), xz(end)];
+    // Centripetal Catmull-Rom through the marks, sampled densely: arc length
+    // to [x, z].
+    const samples = [[0, ...marks[0]]];
+    let length = 0, settleAt = 0;
+    for (let i = 0; i < marks.length - 1; i++) {
+      const p0 = marks[Math.max(0, i - 1)], p1 = marks[i], p2 = marks[i + 1], p3 = marks[Math.min(marks.length - 1, i + 2)];
+      const knot = (a, b) => Math.max(1e-4, Math.sqrt(Math.hypot(b[0] - a[0], b[1] - a[1])));
+      const t1 = knot(p0, p1), t2 = t1 + knot(p1, p2), t3 = t2 + knot(p2, p3);
+      for (let k = 1; k <= 32; k++) {
+        const u = t1 + (t2 - t1) * k / 32;
+        const point = [0, 1].map(j => {
+          const a1 = (t1 - u) / t1 * p0[j] + u / t1 * p1[j], a2 = (t2 - u) / (t2 - t1) * p1[j] + (u - t1) / (t2 - t1) * p2[j];
+          const a3 = (t3 - u) / (t3 - t2) * p2[j] + (u - t2) / (t3 - t2) * p3[j];
+          const b1 = (t2 - u) / t2 * a1 + u / t2 * a2, b2 = (t3 - u) / (t3 - t1) * a2 + (u - t1) / (t3 - t1) * a3;
+          return (t2 - u) / (t2 - t1) * b1 + (u - t1) / (t2 - t1) * b2;
+        });
+        const last = samples[samples.length - 1];
+        length += Math.hypot(point[0] - last[1], point[1] - last[2]);
+        samples.push([length, ...point]);
+      }
+      // The settle begins where the branch ends, beside the chair.
+      if (seat && i + 1 === marks.length - 3) settleAt = length;
+    }
+    const place = s => {
+      let lo = 0, hi = samples.length - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (samples[mid][0] < s) lo = mid; else hi = mid; }
+      const [s0, x0, z0] = samples[lo], [s1, x1, z1] = samples[hi], f = s1 > s0 ? (s - s0) / (s1 - s0) : 0;
+      return [x0 + (x1 - x0) * f, z0 + (z1 - z0) * f];
+    };
+    // Walking time to each sample: the walking pace, easing into the slower
+    // settle round the chair. A leg's progress is its share of that time.
+    const speed = s => seat ? pace.walk + (pace.sit - pace.walk) * smooth(settleAt - .5, settleAt + .3, s) : pace.walk;
+    const times = [0];
+    for (let i = 1; i < samples.length; i++)
+      times.push(times[i - 1] + (samples[i][0] - samples[i - 1][0]) / speed((samples[i][0] + samples[i - 1][0]) / 2));
+    const total = times[times.length - 1];
+    const distanceAt = progress => {
+      const time = Math.max(0, Math.min(1, progress)) * total;
+      let lo = 0, hi = times.length - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (times[mid] < time) lo = mid; else hi = mid; }
+      const f = times[hi] > times[lo] ? (time - times[lo]) / (times[hi] - times[lo]) : 0;
+      return samples[lo][0] + (samples[hi][0] - samples[lo][0]) * f;
+    };
+    const built = {length, settleAt: seat ? settleAt : length, marks,
+      // The leg's whole walking time, ms.
+      duration: total * 1000,
+      at(progress) {
+        const s = distanceAt(progress), [x, z] = place(s);
+        // Ahead along the way; near its end the last heading that still had one.
+        let ahead = place(Math.min(length, s + pace.ahead)), reach = pace.ahead;
+        while (Math.hypot(ahead[0] - x, ahead[1] - z) < .25 && reach > .05) { reach /= 2; ahead = place(Math.max(0, s - reach)); ahead = [2 * x - ahead[0], 2 * z - ahead[1]]; }
+        // Walking, the eye looks along the way, and over its last metres is
+        // drawn to where it is going: the nook's back wall, or the chair
+        // (let go as the visitor settles, and when right over it).
+        const settle = seat ? smooth(settleAt, length, s) : 0, walkEnd = seat ? settleAt : length;
+        const walking = Math.atan2(x - ahead[0], z - ahead[1]) / radians;
+        const near = Math.hypot(x - focus[0], z - focus[1]);
+        const drawn = smooth(walkEnd - pace.drawn[name][0], walkEnd - pace.drawn[name][1], s) * (1 - settle) * smooth(.3, .8, near);
+        const going = turnToward(walking, Math.atan2(x - focus[0], z - focus[1]) / radians, drawn);
+        const leave = 1 - smooth(0, pace.leave, s), arrive = smooth(length - pace.arrive, length, s);
+        const yaw = turnToward(turnToward(going, start.yaw, leave), end.yaw, arrive);
+        // Coming up to the chair the eye looks down at it, and stays on it
+        // while drawing it in; it lifts again as the visitor sits.
+        const down = seat ? pace.down * smooth(settleAt - 1.4, settleAt - .1, s) * (1 - smooth(settleAt + .35 * (length - settleAt), length, s)) : 0;
+        const tilt = start.tilt + (end.tilt - start.tilt) * smooth(0, length, s) + down;
+        const standing = start.position[1] + (end.position[1] - start.position[1]) * smooth(0, length, s);
+        const y = seat ? start.position[1] + (end.position[1] - start.position[1]) * settle * settle * (3 - 2 * settle) : standing;
+        return {position: [x, y, z], yaw, tilt, settle};
+      },
+    };
+    ways.set(key, built);
+    return built;
+  }
   // The standing life (sway, lean, the shelf's look), or what a walk carries
   // of it, applied on top of the path (see the driver). Metres and degrees.
   const offset = {x: 0, y: 0, yaw: 0, pitch: 0};
@@ -119,20 +241,15 @@
     // The seat looks along the table's axis, at the tabletop's height.
     points.seated = {position: [0, seated.eye, seatedDistance],
       lookAt: [0, state.tableHeight, seatedDistance - (seated.eye - state.tableHeight) / Math.tan(seatTilt)]};
-    // A pose: where the eye is and how it is turned (k: how far the heading
-    // has turned; the standing life on top), and the table centre in its
-    // frame: right, up and depth (metres).
-    const pose = (p, q, t, c, k = t) => {
-      const mix = (a, b, w = t) => a + (b - a) * w;
-      // Through a control point: a quadratic curve for the eye's position.
-      const along = c ? i => (1 - t) * (1 - t) * p.position[i] + 2 * (1 - t) * t * c[i] + t * t * q.position[i]
-        : i => mix(p.position[i], q.position[i]);
-      const yawDeg = round(wrap(mix(p.yaw, q.yaw, k) + offset.yaw)), pitchDeg = round(90 - mix(p.tilt, q.tilt, k) + offset.pitch);
+    // A pose: where the eye is and how it is turned (the standing life on
+    // top), and the table centre in its frame: right, up and depth (metres).
+    const pose = ({position, yaw: heading, tilt: down}) => {
+      const yawDeg = round(wrap(heading + offset.yaw)), pitchDeg = round(90 - down + offset.pitch);
       const yaw = yawDeg * radians, tilt = Math.PI / 2 - pitchDeg * Math.PI / 180;
       // The sway moves the eye along its own right and up.
-      const x = along(0) + offset.x * Math.cos(yaw);
-      const eyeHeight = along(1) + offset.y;
-      const distance = along(2) - offset.x * Math.sin(yaw);
+      const x = position[0] + offset.x * Math.cos(yaw);
+      const eyeHeight = position[1] + offset.y;
+      const distance = position[2] - offset.x * Math.sin(yaw);
       const dx = -x, dy = state.tableHeight - eyeHeight, dz = -distance;
       const sinY = Math.sin(yaw), cosY = Math.cos(yaw), sinT = Math.sin(tilt), cosT = Math.cos(tilt);
       return {yawDeg, pitchDeg, tilt, x, eyeHeight, distance,
@@ -141,16 +258,19 @@
     };
     const anchorY = innerHeight * (portrait ? .60 : .54);
     // The lens's vertical shift. At the entry and the seat it keeps the table
-    // centre at one height on screen (the original composition, also all the
-    // way along the walk between them). The shelf, where the table is out of
-    // view, takes no shift; legs to or from it blend the two.
+    // centre at one height on screen (the original composition). The shelf,
+    // where the table is out of view, takes no shift. A walk blends between
+    // its ends' shifts.
     const anchored = p => anchorY - focal * (-p.up * units) / (p.depth * units);
-    const {leg} = state, ends = [aim(points[leg.from]), aim(points[leg.to])], t = leg.progress, name = leg.from + '>' + leg.to;
-    if (state.turn[format][name]?.left && ends[1].yaw < ends[0].yaw) ends[1].yaw += 360;
-    const now = pose(ends[0], ends[1], t, state.via[format][name], heading(name, t, format));
-    const lens = (name, end) => name === 'shelf' ? innerHeight / 2 : anchored(pose(end, end, 0));
-    const originY = leg.from !== 'shelf' && leg.to !== 'shelf' ? anchored(now)
-      : lens(leg.from, ends[0]) + (lens(leg.to, ends[1]) - lens(leg.from, ends[0])) * t;
+    const {leg} = state, t = leg.progress, name = leg.from + '>' + leg.to, route = way(name, format);
+    for (const each of Object.keys(state.durations)) state.durations[each] = way(each, format).duration;
+    const walk = route.at(t), now = pose(walk);
+    const lens = place => place === 'shelf' ? innerHeight / 2 : anchored(pose(aim(points[place])));
+    const originY = lens(leg.from) + (lens(leg.to) - lens(leg.from)) * t;
+    // Where the chair stands: pushed back and turned (see `paths`), drawn in
+    // square to the table as the visitor settles into the seat.
+    const [restX, restZ, restYaw] = state.paths.chair, k = walk.settle * walk.settle * (3 - 2 * walk.settle);
+    state.chairPose = {x: restX * (1 - k), z: restZ + (seated.distance - .06 - restZ) * k, yaw: restYaw * (1 - k) * radians};
     camera.yaw = now.yawDeg; camera.pitch = now.pitchDeg;
     const {tilt, x, eyeHeight, distance, depth} = now;
     const viewX = now.right * units, viewY = -now.up * units, viewDistance = depth * units;
@@ -247,14 +367,14 @@
     };
     if (move) {
       // A walk takes the eye's offset along from where it set off, and lets it
-      // go as the leg's heading turns toward the end's.
+      // go along the way. It sets off and comes to rest over about 0.8 s
+      // each, at an even pace between.
       if (move.start === null) { move.start = now; move.carry = {...offset}; settle(); }
-      const t = Math.min(1, (now - move.start) / move.duration);
-      const {leg} = state, name = leg.from + '>' + leg.to;
-      leg.progress = move.from + (move.to - move.from) * t * t * (3 - 2 * t);
-      const k = progress => heading(name, progress, state.format), k0 = k(move.from), k1 = k(move.to);
-      const share = Math.abs(k0 - k1) > 1e-6 ? (k(leg.progress) - k1) / (k0 - k1) : 1 - t;
-      for (const key in offset) offset[key] = move.carry[key] * share;
+      const t = Math.min(1, (now - move.start) / move.duration), {leg} = state;
+      const a = Math.min(.3, 800 / move.duration), top = 1 / (1 - a);
+      const eased = t < a ? top * t * t / (2 * a) : t > 1 - a ? 1 - top * (1 - t) * (1 - t) / (2 * a) : top * (t - a / 2);
+      leg.progress = move.from + (move.to - move.from) * eased;
+      for (const key in offset) offset[key] = move.carry[key] * (1 - eased);
       update();
       if (t >= 1) { const {resolve} = move; move = null; resolve(true); }
     } else {
@@ -306,10 +426,9 @@
   const pointOf = {entry: 'entry', chair: 'seated', shelf: 'shelf'};
   const approaching = {seated: 'CHAIR_APPROACH', shelf: 'SHELF_APPROACH'};
   // The legs, each walked either way, and their walking times for the whole
-  // leg, ms: the walk in to the table keeps its original, slow pace; the
-  // longer walks to and from the shelf (about 7 and 4 m) go at about a metre
-  // a second.
-  state.durations = {'entry>seated': 5400, 'entry>shelf': 6600, 'shelf>seated': 5200};
+  // leg, ms: measured along each leg's way at the pace (see `way`), kept
+  // here up to date by update().
+  state.durations = {'entry>seated': 5000, 'entry>shelf': 6600, 'shelf>seated': 8000};
   // The leg between two points, as [from, to, the progress that reaches b].
   const between = (a, b) => state.durations[a + '>' + b] ? [a, b, 1] : state.durations[b + '>' + a] ? [b, a, 0] : null;
   let navigation = 'SEATED', journey = 0;

@@ -1430,3 +1430,105 @@ I walked the whole visit as a visitor would, on the virtual clock at
   - full visits: `tour-*`;
   - reduced motion: `final-reduced-shelf-pointer-left`;
   - 1920×1080: `sheet-1920`.
+
+## Paths: the camera walks the smoke
+
+**The request** (from the shelf-tools report's questions):
+- The smoke should follow where the camera goes; before, it did not. On
+  the left the camera follows the smoke path.
+- One continuous path from the door (seen only when turning round) to the
+  shelf, with a branch toward the right.
+- The chair stands to the right, pushed back as if someone had sat in it,
+  risen with the whole chair and walked off. Sitting down is that sequence
+  in reverse: straightening the chair to sit centred at the table, as the
+  portal view is framed.
+- The places one clicks to move to should show where one stands.
+
+**Baseline** (`verification/nav-baseline/`):
+- The walk to the shelf went round the table's right, out past the window
+  and the stair (x up to 1.4); the smoke ran left.
+- The walk to the chair was a straight dolly.
+- Plan: `verification/nav-design/map-v1.png`.
+
+### The ways (`scene-camera.js`, `paths`)
+
+One definition that both the smoke (`room-scene.js`) and the camera use.
+Table-centred [x, z]:
+- **`trunk`:** from inside the doorway (z 6.9), under the entry's feet,
+  down the table's left side (0.5 m clear of it), round to where the visitor
+  stands at the shelf, and curling on into the nook.
+- **`fork`:** the trunk point (0.55, 3.45) where the branch leaves.
+- **`branch`:** right, to where the visitor stands beside the chair
+  (1.15, 2.55).
+- **`chair`:** its pose, (0.62, 2.12), turned 34° to the right: pushed back
+  and turned as someone left it.
+- **`sit`:** the eye's way over the chair into the seat.
+
+### The camera
+
+A leg's way is a centripetal Catmull-Rom curve:
+- through the start point's eye;
+- the trunk's points between the two places (a small planner projects
+  each place onto the trunk);
+- to the seat, the fork, the branch and `sit`;
+- then the end point's eye.
+
+**Pace.** Arc length is tabulated, and walking time is integrated along it:
+1.1 m/s walking, easing into 0.6 m/s for the settle. A leg's progress is its
+share of that time. The walk sets off and comes to rest over about 0.8 s,
+at an even pace between (it used smoothstep over the whole leg).
+
+**Heading.** The eye looks 1.1 m ahead along the way:
+- over its last metres it is drawn toward where it is going: the nook's back
+  wall, or the chair (from the shelf, sooner);
+- it turns from the view it set off with over 1.2 m, and into the one it
+  arrives at over 2.2 m.
+
+**The chair.**
+- **Looking down:** coming up to the chair, the eye looks 24° further down
+  at it, stays on it while drawing it in, and lifts as the visitor sits.
+- **Height:** the eye stays at standing height until the settle, then sinks
+  into the seat.
+- **The pull:** `chairPose` draws the chair in square to the table during
+  the settle. It is the same sequence in reverse if the walk goes back.
+
+The seat is reached at exactly yaw 0 and pitch 75. Durations come from the
+ways: entry → shelf 6.3 s, entry → seat 4.4 s, shelf → seat 9.2 s (back
+along the trunk and out along the branch).
+
+### The smoke
+
+The trails are drawn from `paths`:
+- `to the study nook` is the trunk;
+- `into the chair` shares the trunk to the fork, then takes the branch and
+  curls in under the pushed-back chair.
+
+Their presence now follows the leg, so the trails a walk follows stay to
+lead it:
+- **To the shelf,** the chair's thins and the nook's stays.
+- **To the chair,** the nook's thins and the chair's stays until the visitor
+  sits.
+- **From the shelf,** the chair's gathers again as they set off and the
+  nook's thins once they have left it.
+
+Before, the way back from the shelf showed no smoke at all.
+
+### Tests
+
+`portal-check.mjs` asserted that the walk in "tilts steadily, never back and
+forth". The new sequence looks down at the chair once and then up into the
+seat. The assertion now requires a single dip, then a steady rise, with no
+visible back and forth (0.01°).
+
+**Verified (stages 1–3):**
+- Frames in `verification/nav-1` to `nav-6-from-shelf`: the entry, the
+  walks to the shelf and to the chair, the settle every 0.45 s, and the walk
+  from the shelf.
+- All nine suites pass: portal (with the changed tilt rule), aura, depth,
+  impact, orb, architecture, cloth, table and tools.
+
+**Still weak:**
+- The pushed-back chair stands in the room's dark front right. It is hard to
+  read at the entry.
+- The walk back from the shelf crosses that darkness for about a second.
+- Lighting is for the later lighting pass the user has asked for.

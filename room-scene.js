@@ -543,18 +543,21 @@ if (renderer) {
     const m=new THREE.Mesh(geometry,material);m.name=name;m.layers.set(1);chair.add(m);
   }
 
-  // ---- Smoke on the floor (room-smoke.js): low mist that gathers at the
-  // visitor's feet at the entry and parts into two trails, one into the
-  // chair, one across the floor to the study nook. Both share the trunk's
-  // first points and part gradually (the chair's share curls in under the
-  // seat from its side, where the floor is in view); strands of each bundle start on the
-  // other's side and cross as they separate. It lives on the foreground layer
-  // with the chair and the cloth, so it costs the room's own canvas nothing;
-  // the cloth's pulse below keeps it moving. Table-centred [x, z], metres.
-  const trunk=[[1,5.4],[.75,3.6],[.3,2.85]];
+  // ---- Smoke on the floor (room-smoke.js): low mist along the ways the
+  // camera walks (scene-camera.js, `paths`).
+  // - One trail comes in at the doorway behind the entry and passes under
+  //   the visitor's feet there. It runs down the table's left side to where
+  //   they stand at the shelf, and curls on into the nook.
+  // - The chair's trail shares it as far as the fork. Then it leaves for the
+  //   chair, standing pushed back on the right, and curls in under its seat.
+  // Strands of each bundle start on the other's side and cross as they
+  // separate. It lives on the foreground layer with the chair and the cloth,
+  // so it costs the room's own canvas nothing; the cloth's pulse below keeps
+  // it moving. Table-centred [x, z], metres.
+  const {trunk:way,fork,branch,chair:[restX,restZ]}=view.paths;
   const smoke=createRoomSmoke(THREE,{anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy()),trails:[
-    // It ends running along the nook's worktop, where it gathers (below).
-    {name:'to the study nook',points:[...trunk,[-.4,2.2],[-1.15,1.45],[-1.7,.55],[-2.02,-.3],[-2.17,-.9],[-2.2,-1.5],[-2.13,-2.05]],
+    // It ends running into the nook, where it gathers (below).
+    {name:'to the study nook',points:way,
       // A flat veil on the boards, two low drifts over it and one wisp that rises a little.
       strands:[{offset:0,width:.26,height:0,phase:1.3,speed:.7,density:.34,wobble:.6},
         {offset:-.12,offsetEnd:-.06,width:.17,height:.05,phase:0,speed:1,density:.75,wobble:.45},
@@ -569,7 +572,7 @@ if (renderer) {
         {offset:-.03,width:.28,height:0,phase:3.3,speed:.5,density:.3,wobble:.6}]},
     // The chair's share is thinner: it is near and short, and must not outweigh the long trail.
     // It is short, so it gathers sooner and thins away under the seat.
-    {name:'into the chair',fadeIn:1.1,fadeOut:.45,points:[...trunk,[.4,2.35],[.46,1.86],[.3,1.5],[.02,1.42]],
+    {name:'into the chair',fadeIn:1.1,fadeOut:.45,points:[...way.slice(0,fork+1),...branch,[restX+.3,restZ+.12],[restX+.06,restZ]],
       strands:[{offset:.02,width:.18,height:0,phase:3.7,speed:.75,density:.4,wobble:.6},
         {offset:.12,offsetEnd:.04,width:.13,height:.05,phase:5.2,speed:1.1,density:.78,wobble:.45},
         {offset:.06,offsetEnd:-.04,width:.09,height:.1,phase:.9,speed:1.3,density:.55,wobble:.45}]},
@@ -1358,18 +1361,26 @@ if (renderer) {
     const behind=view.seatedDistance-view.seated.distance>.3;
     const presence=behind?Math.min(1,Math.max(0,(.8-view.approach)/.3)):1;
     chair.visible=presence>0;
+    // Where it stands (scene-camera.js): pushed back and turned, until the
+    // visitor draws it in to sit.
+    const pose=view.chairPose;chair.position.set(pose.x,0,pose.z);chair.rotation.y=pose.yaw;
     for(const m of [chairWood,velvet]) if(m.opacity!==presence) {
       m.transparent=presence<1;m.depthWrite=presence>=1;m.opacity=presence;m.needsUpdate=true;
     }
-    // Walking to the chair, the trail to the nook thins away first; the
-    // chair's own stays to lead them in, and is gone as they sit down. Going
-    // to the shelf, the chair's thins away and the nook's stays, only a little
-    // quieter once they stand there.
+    // The trails a walk follows stay to lead it; the one it turns away from
+    // thins. The chair's thins away as the visitor sits down.
+    // - From the entry to the shelf, the chair's thins at once and the
+    //   nook's stays, only a little quieter once they stand there.
+    // - From the entry to the chair, the nook's thins.
+    // - From the shelf, the chair's gathers again as they set off back along
+    //   the trunk, and the nook's thins once they have left it.
     const eased=(v,from,to)=>{const t=Math.min(1,Math.max(0,(v-from)/(to-from)));return t*t*(3-2*t);};
-    const toShelf=view.leg.to==='shelf'?view.leg.progress:view.leg.from==='shelf'?1-view.leg.progress:0;
-    const nook=(1-eased(view.approach,.05,.4))*(1-.15*eased(toShelf,.6,1));
+    const {from:legFrom,to:legTo,progress:p}=view.leg;
+    const [nook,chairWay]=legTo==='shelf'?[1-.15*eased(p,.6,1),1-eased(p,.05,.4)]
+      :legFrom==='shelf'?[1-eased(p,.55,.75),eased(p,0,.2)*(1-eased(p,.85,.98))]
+      :[1-eased(p,.05,.4),1-eased(p,.75,.95)];
     smoke.setPresence('to the study nook',nook);smoke.setPresence('gathering at the nook',nook);
-    smoke.setPresence('into the chair',(1-eased(view.approach,.45,.85))*(1-eased(toShelf,.05,.4)));
+    smoke.setPresence('into the chair',chairWay);
     if(!smoke.group.visible) smokeShown=false;
     if(stillMotion.matches) smoke.update(0);
     renderFront();

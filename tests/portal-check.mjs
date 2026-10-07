@@ -554,10 +554,13 @@ try {
   assert.ok(initial.top>20 && initial.bottom<980, 'Intro portal must fit vertically');
   assert.ok(farPortal.w < middlePortal.w && middlePortal.w <= initial.w, 'The walk must move progressively closer');
   assert.ok(initial.w / initial.h > 2.4, 'The portal must read as a horizontal landscape surface');
-  // From the entry the camera turns to the table and settles into the seat's
-  // fixed look: its tilt changes steadily, never back and forth.
-  assert.ok(approach.every((frame, i) => !i || frame.pitch >= approach[i - 1].pitch - 1e-9) && approachPitch <= 75,
-    'The tilt eases steadily from the entry to the seat: ' + approach.map(frame => frame.pitch).join());
+  // From the entry the camera walks to the chair, looks down at it as it
+  // draws it in, and settles into the seat's fixed look: its tilt goes down
+  // once and then up once, steadily, never visibly back and forth (within a
+  // hundredth of a degree: the entry's own tilt is 0.03° off the seat's).
+  const lowest = approach.reduce((low, frame, i) => frame.pitch < approach[low].pitch ? i : low, 0);
+  assert.ok(approach.every((frame, i) => !i || (i <= lowest ? frame.pitch <= approach[i - 1].pitch + .01 : frame.pitch >= approach[i - 1].pitch - .01))
+    && approachPitch <= 75, 'The tilt dips once to the chair and eases steadily into the seat: ' + approach.map(frame => frame.pitch).join());
   assert.equal(await evaluate(`sceneCamera.camera.pitch`), 75, 'Seated, the camera keeps the portal\'s 75-degree pitch');
   assert.ok(await evaluate(`sceneCamera.distance`) < farDistance, 'The approach physically moves the camera toward the table');
   assert.equal(await evaluate(`studyRoom.camera.fov`),72,'The approach does not substitute FOV zoom for camera movement');

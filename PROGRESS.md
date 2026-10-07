@@ -1617,3 +1617,315 @@ shader errors.
   asks.
 - **The shelf's mark** is hidden behind the table from the entry. It shows
   once the walk is under way.
+
+# Lighting pass (`feature/lighting-pass`)
+
+Worktree `Portifolio-lighting-pass`. It branches from `feature/entry-navigation`
+at `e9c5f5b`, which is the only branch with the doorway and the smoke paths.
+It is isolated and experimental: **not merged into main, and it waits for the
+user's approval.**
+
+## The relay
+
+1. **Claude, first pass.** Codex preserved the exact stopping state in
+   `201aa95`:
+   - the lamps, the lights, the gobo, the breathing and the smoke at the
+     door;
+   - review renders `baseline`, `pass-1` to `pass-4`, `close-1` to
+     `close-3` and `compare-2` to `compare-4`.
+2. **Codex's audit.** It added `tests/lighting-check.mjs` and
+   `relay-audit/`, and found that the door lamp aimed low and toward one
+   side of the opening. It changed no source. Its door and stair renders,
+   including all three aim variants, were byte-identical to the shelf view:
+   `scene-camera.js` cached each leg's way without its end points, so a
+   review pose set on `sceneCamera.shelf` never moved the camera. It hit its
+   limit while comparing aims.
+3. **Claude, continuing.**
+   - `cc752d7`: fixed the cache and repaired the relay check.
+   - `7fa8866`: redid the door comparison one variable at a time.
+   - `11b0351`: fixed the cost of the lamps' breathing redraw and dropped
+     the floor bounce.
+   - `aae1ea8`: the lantern's pattern placed by direction, which lit the
+     threshold.
+   - `e692ee7`: the portal check's light balance and budget with the
+     lamps.
+   - `ed12dd3`: the gobo softening written into three.js's
+     lights chunk, which cut 1.7 s from loading.
+
+## What the pass does
+
+Every lit area now has a source the visitor can see (`room-lamps.js`):
+
+- **Door lantern.** A woven, mushroom-like shade over a pierced brass onion
+  (hung from the ceiling, plan `[.15, 6.0]`, 1.2 m out from the front
+  wall).
+  - **Patterned spot.** Its piercing is the spot's gobo (`SpotLight.map`,
+    with shadows), aimed at the doorway's middle. The gobo is drawn by
+    direction: rings of rosettes, stars, petals and dots round the
+    lantern's upright, panel seams, and the solid cap's shadow straight
+    below. So the rings circle the lamp's foot on the floor and arc on the
+    walls, whatever the aim.
+  - **Soft with distance.** The spot-map sampling in three.js's lights
+    chunk reads a higher mip level the further the surface is from the
+    lamp, and evens the pattern out toward its mean beyond a few metres. So
+    on every lit surface it is sharp beside the lamp and soft across the
+    room.
+  - **Glow.** A downward half-sphere spot that the shade keeps off the
+    ceiling.
+  - It **replaces `frontFill`**, the unseen warm fill at the front of the
+    room.
+- **Shelf droplets.** Four amber, fluted glass droplets in front of the
+  study nook: asymmetric, at different heights and depths. The largest
+  holds a downward half-sphere spot. It **replaces `warm`**, the unseen
+  nook lamp, and now lights the shelf from above.
+- **Tower lamps.** Fourteen mosaic lamps: eight green or teal, two jade,
+  three muted purple and one amber.
+  - They hang from the upper floor's underside, from the tower ceiling
+    through the stairwell, from the handrail and from the ring beam over the
+    tower's mouth.
+  - One teal light hangs among the lowest. The upper floor's existing green
+    lights (`stairwell light`, `upper floor glow`) now sit inside two of the
+    lamps.
+- **Halos.** A soft additive halo round every lamp, in one draw call.
+- **Breathing.**
+  - **Glass.** Two unrelated, slow sine swells per lamp: the door hardly
+    moves, the shelf is calm and the tower moves the most.
+  - **The redraw.** About 12 times a second, only the glass is drawn again,
+    on a layer of its own over the kept frame, depth-tested against the kept
+    depth: one draw call. A full redraw at the same breath is
+    pixel-identical (`breath-check`; a positive control changes 8,016
+    pixels).
+  - **Halos** follow the breath whenever the room is drawn in full.
+  - Nothing breathes under reduced motion.
+- **Smoke.**
+  - A new `gathering at the door` pools the mist across the threshold and
+    out of the passage, and the trunk starts closer to it.
+  - The mist catches the lamps' light: amber under the lantern, warm under
+    the droplets.
+
+**Kept as they were:** hemisphere and ambient, the moon spot and its window
+bounces, the portal's teal and purple, the table key, the tower's green
+lights and the tug light.
+
+**Not done, as the brief says:**
+- no ceiling lamp over the table;
+- no door leaf or frame (the doorway is still an opening on a dark
+  passage);
+- no entry or exit sequence.
+
+## Door A/B (`verification/lighting/door-ab-*`)
+
+**Method.** Luminance is read back from the room canvas. The asks were:
+- the door recognisable from the shelf;
+- its light explained by the lamp;
+- the door itself not glowing.
+
+All figures are from the shelf, as a multiple of the opening's luminance:
+
+| State | Near jamb | Far jamb | Head | Stone beside the lamp |
+| --- | --- | --- | --- | --- |
+| Inherited (aim low at the near jamb) | 16x | 1.2x | 0.2x | 0.034 |
+| Aim at the doorway's middle (B2) | 17x | 1.2x | 2.2x | 0.022 |
+| B2 and the lamp moved (accepted) | 9x | 2.7x | 2.2x | 0.008 |
+
+**Why:**
+- **Aim** lights the head and keeps the pattern off the stone beside the
+  lamp. This was Codex's finding, now shown.
+- **Position** decides the far jamb. Close beside the door and near the
+  wall, the lamp met the far jamb at a glance from four times the distance.
+- **Cone, penumbra and intensity** were not needed: the far jamb was
+  already well inside the cone.
+
+The gobo change below then moved these to 6.0x, 2.2x and 5.0x.
+
+## The threshold (`verification/lighting/threshold-why`, `gobo-ab-1`)
+
+**Problem.** After the door A/B, the threshold was darker than the open
+doorway: 0.0023 against 0.0070 at the threshold, and 0.0031 against 0.0058
+from the shelf.
+
+**Why** (measured light by light, `threshold-why`):
+- Without the door spot the threshold kept 81% of its light; without the
+  glow, 14%. The patterned spot gave it under a fifth.
+- In clay (one colour for every material) the shares were about the same
+  (83% and 20%), so it was not the darker wood.
+- The threshold sat well inside the cone (cone factor 0.89 to 1), but on the
+  gobo's darkest part (0.04, against a mean of 0.19): the shadow of the
+  lantern's solid cap.
+- The gobo's rings, seams and cap were drawn round a fixed point of the
+  image (338 px), which was straight down for the inherited aim only. The
+  door A/B's aim moved straight down to 478 px and left the cap's shadow on
+  the threshold.
+
+**A/B, same cameras** (from the shelf; jambs and head as a multiple of the
+opening):
+
+| Gobo | Opening | Near jamb | Far jamb | Head | Threshold | At the threshold |
+| --- | --- | --- | --- | --- | --- | --- |
+| A: as after the door A/B | 0.0058 | 8.9x | 2.7x | 2.2x | 0.0031 | 0.0023 |
+| C1: the fixed point follows the aim | 0.0076 | 5.7x | 1.3x | 0.7x | 0.0044 | 0.0034 |
+| C2: motifs placed by direction (accepted, `aae1ea8`) | 0.0062 | 6.0x | 2.2x | 5.0x | 0.0057 | 0.0054 |
+
+**Why C2:**
+- C1 confirms the cause: the threshold brightens as soon as the cap moves.
+  But rings drawn in the image slide across the door with any change of
+  perspective, and the head lost its motif.
+- C2 places each motif by its direction from the bulb (how far from
+  straight down, how far round the upright) and draws it where the spot
+  casts it, at the size it has there.
+  - The rings stay level round the lamp whatever the aim: circles round its
+    foot on the floor, arcs on the walls, the cap's shadow under it.
+  - The motifs spread evenly over the doorway, so no part of it depends on
+    where one motif happens to land. The near jamb is no longer hot against
+    the far one.
+- Entry, chair, shelf and stair views are pixel-identical; 60 fps.
+- The relay check now also asserts that the threshold catches the pattern
+  (over half the opening at the threshold; A was 0.33x).
+- It stays dim in absolute terms: the floor is dark wood.
+
+## Performance
+
+All figures on mains power. Earlier rounds on battery ran four to ten times
+slower on both sides and are not used.
+
+**The breathing redraw.** The first pass redrew the whole room in a scissor
+per lamp cluster on screen: 33 to 40 renders and 122 to 145 ms of CPU a
+second at the entry, which fell to 21 to 25 fps. Only the glass is redrawn
+now (one draw call, no clear). Entry, chair and shelf hold 60 fps on the GPU
+(`tests/lighting-check.mjs --gpu`).
+
+**The floor bounce, dropped.** Switched off in turn from five review
+cameras (`light-contrib`), it changed the room by at most 0.49 of 255 on
+average, and 0.42% of pixels by more than 3 levels. Yet every lit material
+paid for a spot light.
+
+**One full room frame on the GPU** (Iris Xe, gl.finish, median of three
+interleaved rounds against `e9c5f5b`):
+
+| View | Before | After |
+| --- | --- | --- |
+| Entry | 0.57 ms | 0.50 ms |
+| Seated | 0.18 ms | 0.32 ms |
+| Shelf | 0.12 ms | 0.32 ms |
+| Door from the shelf | 0.15 ms | 0.35 ms |
+| Stair | 0.23 ms | 0.37 ms |
+
+The entry varies more than the difference (0.33 to 0.67 ms before).
+
+**Loading** is where the pass costs most: compiling its shaders.
+Measurements are on the GPU (ANGLE on D3D11, as Chrome on Windows); software
+rendering measured the same. Figures are time to the room being ready, the
+longest blocking task, and the room's programs:
+
+| Build | Ready | Longest task | Programs |
+| --- | --- | --- | --- |
+| Before the pass (`e9c5f5b`) | 5.3 s | 2.2 s | 19 |
+| `e692ee7` | 10.0 s | 4.5 s | 26 |
+| Without the gobo softening | 8.2 s | 3.6 s | 22 |
+| Without the door spot's shadow (one clean round) | 9.3 s | 4.2 s | 26 |
+| Without both | 7.7 s | 3.2 s | 22 |
+| Softening in three.js's lights chunk (accepted) | 8.35 s | 3.6 s | 22 |
+
+- **The softening itself cost almost nothing; patching it into eight
+  materials did.** Those materials could no longer share programs with the
+  rest, which meant four more to compile. Written once into three.js's
+  `lights_fragment_begin` chunk instead, every lit surface has it and the
+  programs are shared again: 1.7 s faster to ready, the longest task
+  0.9 s shorter. Every view is unchanged, and the door figures are
+  identical. Only shaders lit by a spot with a map compile it at all.
+- **What is left** (+3 s against `e9c5f5b`): the lamps' own materials
+  (three more programs), the door spot's shadow (about 1 s), and four real
+  lights where there were two, in every lit program.
+
+**Budget.**
+- Lights: four real lights replace two unseen ones:
+  - the door spot, the one new shadow-caster (its shadow map is redrawn
+    only when the room changes);
+  - its glow;
+  - the droplets' spot;
+  - the tower's weak teal point light.
+- Lamps: four draw calls and about 7,900 triangles (19 lamps). The room's
+  own budget, measured without the lamps, is unchanged.
+
+## Tests (mains power, `ed12dd3`)
+
+- **Pass:**
+  - architecture, table and cloth;
+  - `portal` (7/7) and its environment, foundation, cloth and retrieval
+    blocks;
+  - depth, aura, orb and tools;
+  - `tests/lighting-check.mjs --gpu`.
+- **`impact-check`** fails now and then in its WebGL-fallback part
+  (`{completed: false, reason: 'motion-preference'}`): 3 of 7 runs on this
+  branch, 0 of 5 on `e9c5f5b`.
+  - It is a race in the check. The check triggers the impact as soon as
+    `matchMedia(...).matches` reads false. But the media query's `change`
+    event, which cancels running impacts, comes at a later frame, or not
+    at all.
+  - Reproduced in isolation (WebGL off, the same steps), the event landed
+    inside the impact's window in 3 of 8 runs on `e9c5f5b` and 0 of 8 on
+    this branch. So the race is not this branch's doing.
+  - The fix, for whoever owns the check: wait a frame after switching the
+    preference before triggering.
+- **`portal --depth-only`** fails on its lit-mist threshold, which needs
+  1,163 lit pixels. Today it failed 5 of 5 on `e9c5f5b` (1,075 to 1,102)
+  and 4 of 5 on this branch (1,019 to 1,161). The portal's depth canvas is
+  raw WebGL, which this pass does not touch, and earlier stages record the
+  same intermittent failure.
+- **On battery** the suites timed out at startup on both sides. On mains
+  power they do not.
+
+## Tests changed
+
+- **`tests/portal-check.mjs`:**
+  - The light balance comes from `lampTuning` (lamp = the droplets' light,
+    front = the lantern's glow).
+  - The room budget is measured with the lamps hidden.
+  - The lamps have their own budget: 4 calls, under 9,000 triangles.
+- **`tests/lighting-check.mjs`** (the relay check):
+  - views, door readability and the threshold catching the pattern
+    (asserted), the lamp audit (19 lamps, 4 draw calls, 4 lights, one
+    shadow-casting door light), reduced motion, and portrait;
+  - `--gpu` for frame rates.
+
+## Tuning
+
+| What | Where |
+| --- | --- |
+| Lamp positions, heights, hanging lengths, sizes, colours, glass brightness, halos, breath | `room-lamps.js`, `lampTuning` (edit and reload) |
+| The door's spot and glow | `lampTuning.door`: `spot`, `glow`, `angle`, `aim`, `reach`, `glowReach` |
+| The door's pattern sharpness, spread and flattening | `lampTuning.door.pattern` |
+| The lantern's piercing: rings of motifs (degrees from straight down, motif, size) | `rings` in the gobo, `room-lamps.js` |
+| Every light's intensity, distance, angle and penumbra, live | `studyRoom.lamps.configure({door, glow, shelf, stair})` |
+| Global breath amount | `lampTuning.breath` (0 stops all) |
+| The smoke's lamp tint | `smokeLights` in `room-lamps.js` (reach, strength) |
+
+## Unresolved
+
+- **Door:**
+  - No door leaf or frame yet; the exit and the intro are later passes.
+  - From the shelf, the pushed-back chair hides the doorway's lower part,
+    so the threshold is mostly seen up close.
+  - The far jamb has the least margin: 2.2x the opening, where the relay
+    check asks for 2x.
+  - The threshold catches the pattern but stays dim: the floor is dark
+    wood.
+- **Tower lamps:**
+  - Small and subtle from the room's views; they read best from the entry.
+  - Several hang only in the tower, where no camera goes yet.
+- **Shelf:**
+  - In the wide shelf view the nearest, highest droplet (`[-1.96, .31]`)
+    is cut by the top of the frame. The portrait view frames all four.
+  - They change the light the shelf objects (`feature/shelf-tools`) were
+    tuned under. That is for the joint shelf and lighting pass, as agreed.
+- **Halos** breathe only on full redraws: they are additive and would pile
+  up over the kept frame.
+- **Loading** still takes 3 s longer than before the pass (see
+  Performance). Two ways to cut it further were not taken here:
+  - compile without blocking (three.js `compileAsync`), which overlaps
+    `loading-veil`'s first-frame compile;
+  - drop the door spot's shadow (about 1 s), which would let the pattern
+    through walls.
+- **`loading-veil`**: its uncommitted change in `room-scene.js`
+  (first-frame compile and a room-ready event) may conflict with this
+  branch on merge.

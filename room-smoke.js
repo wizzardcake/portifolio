@@ -8,7 +8,7 @@
    meets the floor. It owns no loop: room-scene.js advances it with the
    foreground layer it is drawn on, and leaves it still under reduced motion.
    Coordinates are the room's: metres, the table centre at the origin. */
-export function createRoomSmoke(THREE, {trails, marks = [], anisotropy = 1}) {
+export function createRoomSmoke(THREE, {trails, marks = [], lights = [], anisotropy = 1}) {
   // A tiling value-noise texture: two independent octave sums in R and G.
   // Its own seeded generator: the room's shared one lays out the planks, the
   // sky and the cloth, and must not be advanced.
@@ -45,11 +45,16 @@ export function createRoomSmoke(THREE, {trails, marks = [], anisotropy = 1}) {
       // extra density far off, how deep the thin stretches go, the veil's share.
       uGain: {value: 2.2}, uFar: {value: .5}, uThin: {value: .5}, uVeil: {value: 1},
       uBrightness: {value: .6}, uCool: {value: new THREE.Color('#86c3bd')}, uWarm: {value: new THREE.Color('#aaa5e6')},
+      // Up to four lamps whose light the mist catches: where (scene metres),
+      // their colour times strength, and how far it carries (half at reach).
+      uLampAt: {value: Array.from({length: 4}, (_, i) => new THREE.Vector3(...(lights[i]?.at ?? [0, -99, 0])))},
+      uLampTint: {value: Array.from({length: 4}, (_, i) => lights[i] ? new THREE.Color(lights[i].color).multiplyScalar(lights[i].strength) : new THREE.Color(0, 0, 0))},
+      uLampReach: {value: Array.from({length: 4}, (_, i) => lights[i]?.reach ?? 1)},
     },
     vertexShader: `
       attribute vec3 lateral; attribute vec4 strand; attribute float fade;
-      uniform float uTime;
-      varying vec3 vNormal, vView; varying vec2 vPath; varying float vAcross, vFade, vDensity, vSeed, vFlat, vSpeed;
+      uniform float uTime; uniform vec3 uLampAt[4]; uniform vec3 uLampTint[4]; uniform float uLampReach[4];
+      varying vec3 vNormal, vView, vLamp; varying vec2 vPath; varying float vAcross, vFade, vDensity, vSeed, vFlat, vSpeed;
       void main() {
         float s = uv.x, t = uTime * strand.y + strand.x;
         // A slow wander sideways and a soft rise and fall: never two strands alike.
@@ -60,11 +65,14 @@ export function createRoomSmoke(THREE, {trails, marks = [], anisotropy = 1}) {
         vec4 mv = modelViewMatrix * vec4(p, 1.);
         vNormal = normalize(normalMatrix * normal); vView = -mv.xyz;
         vPath = vec2(s, uv.y); vAcross = uv.y; vFade = fade; vDensity = strand.z; vSeed = strand.x; vFlat = strand.w; vSpeed = strand.y;
+        // The lamps' light on the mist, falling off with distance.
+        vec3 world = (modelMatrix * vec4(p, 1.)).xyz; vLamp = vec3(0.);
+        for (int i = 0; i < 4; i++) { vec3 d = world - uLampAt[i]; float r2 = uLampReach[i] * uLampReach[i]; vLamp += uLampTint[i] * r2 / (r2 + dot(d, d)); }
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
       uniform sampler2D uNoise; uniform float uTime, uReveal, uPresence, uBrightness, uGain, uFar, uThin, uVeil; uniform vec3 uCool, uWarm;
-      varying vec3 vNormal, vView; varying vec2 vPath; varying float vAcross, vFade, vDensity, vSeed, vFlat, vSpeed;
+      varying vec3 vNormal, vView, vLamp; varying vec2 vPath; varying float vAcross, vFade, vDensity, vSeed, vFlat, vSpeed;
       void main() {
         // An arch is thickest where the eye looks through its middle; a flat
         // veil is thickest seen at a glance, through more of it.
@@ -88,7 +96,9 @@ export function createRoomSmoke(THREE, {trails, marks = [], anisotropy = 1}) {
         float raw = core * wisp * edges * stretch * vFade * vDensity * (1. + uFar * far);
         // A soft saturation: faint mist still reads, thick mist never turns solid.
         float d = (1. - exp(-uGain * raw)) * reveal * uPresence;
+        // Under a lamp the mist takes its colour: the cool palette gives way as the lamp's light grows.
         vec3 color = mix(uCool, uWarm, .35 * smoothstep(.45, .85, fine)) * uBrightness;
+        color = color * (1. - .75 * clamp(max(vLamp.r, max(vLamp.g, vLamp.b)) * 1.8, 0., 1.)) + vLamp * 1.3;
         // Premultiplied: mostly light, with a little veil over what lies behind.
         gl_FragColor = vec4(color * d, d * .22);
       }`,

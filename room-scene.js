@@ -4,6 +4,7 @@ import {createRitualCloth} from './ritual-cloth.js';
 import {createRoomArchitecture,architectureTuning} from './room-architecture.js';
 import {createNightSky} from './night-sky.js';
 import {createRoomSmoke} from './room-smoke.js';
+import {createRoomLamps,lampTuning} from './room-lamps.js';
 
 // Architecture and physical furniture. Portal, orb and HTML reader stay in their
 // own renderers; scene-camera.js gives both branches the same projection.
@@ -543,6 +544,17 @@ if (renderer) {
     const m=new THREE.Mesh(geometry,material);m.name=name;m.layers.set(1);chair.add(m);
   }
 
+  // ---- The lamps (room-lamps.js): a mushroom lantern by the door, amber
+  // glass droplets at the study nook and mosaic lamps down the stair tower.
+  // They carry the room's own lights (the lantern's patterned spot and its
+  // glow, the droplets' light, the tower's lamp glow; the upper floor's green
+  // now hangs in two of the tower's lamps), and the room's stone, timber and
+  // floor sample the lantern's pattern softer the further they are from it.
+  const lamps=createRoomLamps(THREE,{tower,stair,height:H,slab:tread(stair.count)-.12,ringBeam:H-.2,
+    anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy())});
+  shell.add(lamps.group,...Object.values(lamps.lights),...lamps.targets);
+  for(const m of [stone,wood,ceilingMaterial,trim,timber,stairStone,stepStone,architecturalMetal]) m.onBeforeCompile=lamps.softGobo;
+
   // ---- Smoke on the floor (room-smoke.js): low mist along the ways the
   // camera walks (scene-camera.js, `paths`).
   // - One trail comes in at the doorway behind the entry and passes under
@@ -556,10 +568,13 @@ if (renderer) {
   // it moving. Table-centred [x, z], metres.
   const {trunk:way,fork,branch,chair:[restX,restZ]}=view.paths;
   // Where the visitor can stand gets a mark of its own (placed with the camera's points, below).
+  // The lamps light it too: amber under the door lantern, warm under the droplets.
   const smoke=createRoomSmoke(THREE,{anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy()),
+    lights:lamps.smokeLights.map(light=>({...light,at:[light.at[0],light.at[1],light.at[2]-placement.forward]})),
     marks:[{name:'entry',at:[0,0]},{name:'shelf',at:[0,0]},{name:'chair',at:branch[branch.length-1]}],trails:[
-    // It ends running into the nook, where it gathers (below).
-    {name:'to the study nook',points:way,
+    // It comes in from the dark passage behind the doorway, where it pools
+    // (below), and ends running into the nook, where it gathers.
+    {name:'to the study nook',points:way,fadeIn:.9,
       // A flat veil on the boards, two low drifts over it and one wisp that rises a little.
       strands:[{offset:0,width:.26,height:0,phase:1.3,speed:.7,density:.34,wobble:.6},
         {offset:-.12,offsetEnd:-.06,width:.17,height:.05,phase:0,speed:1,density:.75,wobble:.45},
@@ -572,6 +587,13 @@ if (renderer) {
       strands:[{offset:0,width:.21,height:.22,phase:2.6,speed:.6,density:.62,wobble:.5},
         {offset:.04,width:.13,height:.36,phase:5.1,speed:.8,density:.45,wobble:.55},
         {offset:-.03,width:.28,height:0,phase:3.3,speed:.5,density:.3,wobble:.6}]},
+    // At the doorway the mist pools across the threshold and spills out of
+    // the passage, rising a little under the lantern: where it begins, and
+    // where it will lead back to.
+    {name:'gathering at the door',fadeIn:.35,fadeOut:.5,points:[[.36,6.3],[.66,6.02],[.98,5.86],[1.28,5.58]],
+      strands:[{offset:0,width:.24,height:.2,phase:1.7,speed:.55,density:.55,wobble:.5},
+        {offset:-.05,width:.14,height:.32,phase:4.6,speed:.75,density:.4,wobble:.55},
+        {offset:.04,width:.3,height:0,phase:2.9,speed:.5,density:.32,wobble:.6}]},
     // The chair's share is thinner: it is near and short, and must not outweigh the long trail.
     // It is short, so it gathers sooner and thins away under the seat.
     {name:'into the chair',fadeIn:1.1,fadeOut:.45,points:[...way.slice(0,fork+1),...branch,[restX+.3,restZ+.12],[restX+.06,restZ]],
@@ -586,14 +608,16 @@ if (renderer) {
   // and further off at the window and the tower, the ceiling left to fall
   // into shadow. Intensities in three.js physical units; live-tunable with
   // studyRoom.lighting.configure({...}).
-  const lighting={fill:.5,ambient:.06,lamp:11,front:1.2,table:9,tableAwake:.35};
+  //   lamp   the light in the largest of the study nook's droplets
+  //   front  the door lantern's unpatterned glow round itself
+  const lighting={fill:.5,ambient:.06,lamp:lampTuning.shelf.light,front:lampTuning.door.glow,table:9,tableAwake:.35};
   // A dim night sky from above and the warm floor's bounce from below.
   const hemisphere=new THREE.HemisphereLight('#8390c4','#4c3a2c',lighting.fill);scene.add(hemisphere);
   const ambient=new THREE.AmbientLight('#d8bc99',lighting.ambient);scene.add(ambient);
-  // The study nook's lamp, hung inside the nook's mouth: the nook glows as a
-  // warm pocket in the middle distance, and the wall nearest the viewer only
-  // catches its light at a glance instead of being the brightest thing in view.
-  const warm=new THREE.PointLight('#ffb468',lighting.lamp,7.5,2);warm.position.set(-2.1,1.5,-.1);shell.add(warm);
+  // The study nook's light hangs in its droplet lamps (room-lamps.js): the
+  // nook glows as a warm pocket in the middle distance, now lit from above
+  // its shelf instead of from an unseen point level with it.
+  const warm=lamps.lights.shelf;
   // Moonlight still enters through the pointed window, now at the alcove's end.
   const moon=new THREE.SpotLight('#a0bcf4',28,9,.54,.75,1.7);
   moon.position.set(aperture.x,1.75,alcove.back-T/2);moon.target.position.set(-1.7,0,-1.4);
@@ -604,11 +628,11 @@ if (renderer) {
   // The same cool window light inside the tower, so its lancets read at night.
   const towerBounce=new THREE.PointLight('#91acd7',2.2,3,2),[bounceX,bounceZ]=radialAt(lancets[1].at,.75);
   towerBounce.position.set(bounceX,lancets[1].sill+.3,bounceZ);shell.add(towerBounce);
-  // A dim warm fill from the viewer's end of the room. Hemisphere and ambient
-  // light are too weak alone there, which left the nearest beams pure black.
-  // Hung well below the beams, so they fall off into shadow instead of
-  // glowing orange at the top of the frame, and the chair's back still reads.
-  const frontFill=new THREE.PointLight('#ffc58e',lighting.front,6,2);frontFill.position.set(0,1.55,4.3);shell.add(frontFill);
+  // The viewer's end of the room takes its light from the lantern by the
+  // door (room-lamps.js): its patterned spot on the doorway, the wall and the
+  // floor round it, and a weak glow that keeps the nearest beams and the
+  // chair's back from going pure black. It replaces an unseen warm fill.
+  const frontFill=lamps.lights.glow;
   // The portal's own light gathers round the table and the floor beside it;
   // it reaches no further than the floor's middle, so the side walls stay in
   // the room's shadow and the open portal remains the brightest thing in view.
@@ -1382,6 +1406,8 @@ if (renderer) {
       :legFrom==='shelf'?[1-eased(p,.55,.75),eased(p,0,.2)*(1-eased(p,.85,.98))]
       :[1-eased(p,.05,.4),1-eased(p,.75,.95)];
     smoke.setPresence('to the study nook',nook);smoke.setPresence('gathering at the nook',nook);
+    // At the door the mist stays while either trail leaves from it.
+    smoke.setPresence('gathering at the door',Math.max(nook,chairWay));
     smoke.setPresence('into the chair',chairWay);
     // The places to stand: the entry's and the shelf's eyes, and beside the
     // chair at the branch's end. Each mark is hidden underfoot and as the
@@ -1485,6 +1511,37 @@ if (renderer) {
     renderer.setScissorTest(false);
   }
   requestAnimationFrame(liveOutside);
+  // ---- The lamps breathe: very slow, irregular swells of their glass and
+  // halos, each at its own pace (room-lamps.js). Their light on the room
+  // stays still, so only where the lamps are on screen is redrawn, a cluster
+  // at a time, about 12 times a second over the last full frame, as for the
+  // sky. Still for reduced motion.
+  const lampCorner=new THREE.Vector3(),lampOffsets=[-1,1].flatMap(x=>[-1,1].flatMap(y=>[-1,1].map(z=>[x,y,z])));
+  function lampRect({points,pad}) {
+    let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+    for(const point of points) for(const [ox,oy,oz] of lampOffsets) {
+      lampCorner.set(point.x+ox*pad,point.y+oy*pad,point.z+oz*pad);shell.localToWorld(lampCorner).project(camera);
+      if(lampCorner.z<-1||lampCorner.z>1) continue;
+      const x=(lampCorner.x+1)*innerWidth/2,y=(1-lampCorner.y)*innerHeight/2;
+      x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y);
+    }
+    x0=Math.max(0,Math.floor(x0)-4);y0=Math.max(0,Math.floor(y0)-4);
+    x1=Math.min(innerWidth,Math.ceil(x1)+4);y1=Math.min(innerHeight,Math.ceil(y1)+4);
+    return x1>x0&&y1>y0?[x0,innerHeight-y1,x1-x0,y1-y0]:null;
+  }
+  let lampsAt=0;
+  function liveLamps(now) {
+    requestAnimationFrame(liveLamps);
+    if(document.hidden||lost||pending||!host.classList.contains('is-ready')||stillMotion.matches||now-lampsAt<80) return;
+    lampsAt=now;lamps.update(now/1000);
+    camera.layers.set(0);
+    for(const cluster of lamps.clusters) {
+      const rect=lampRect(cluster);if(!rect) continue;
+      renderer.setScissorTest(true);renderer.setScissor(...rect);renderer.render(scene,camera);
+    }
+    renderer.setScissorTest(false);
+  }
+  requestAnimationFrame(liveLamps);
   function resize() {
     layoutKey=sizeKey();
     const ratio=Math.min(devicePixelRatio,1.5,Math.sqrt(2600000/(innerWidth*innerHeight)));
@@ -1492,6 +1549,7 @@ if (renderer) {
     if(front){front.setPixelRatio(ratio);front.setSize(innerWidth,innerHeight,false);}
     // Dust mote size in device pixels per metre at unit distance.
     dustMaterial.uniforms.uFocal.value=innerHeight*ratio/2/Math.tan(view.fov*Math.PI/360);night.setFocal(dustMaterial.uniforms.uFocal.value);
+    lamps.setFocal(dustMaterial.uniforms.uFocal.value);
     refreshTable();invalidate();
   }
   // A dolly frame only changes the projection; geometry and canvas allocation
@@ -1529,6 +1587,18 @@ if (renderer) {
         tint.needsUpdate=true;
       }
       invalidate();return {...windowLight};}},
+    // The lamps (room-lamps.js): their lights, live-tunable with
+    // studyRoom.lamps.configure({door:{intensity,distance,angle}, glow:{...},
+    // shelf:{...}, stair:{...}}); shapes, places and colours are in lampTuning.
+    lamps:{group:lamps.group,stats:lamps.stats,lights:lamps.lights,
+      get values(){return Object.fromEntries(Object.entries(lamps.lights).map(([name,light])=>[name,
+        {intensity:light.intensity,distance:light.distance,...(light.isSpotLight?{angle:light.angle,penumbra:light.penumbra}:{})}]));},
+      configure(values={}) {
+        for(const [name,settings] of Object.entries(values)) {
+          const light=lamps.lights[name];if(!light) continue;
+          for(const key of ['intensity','distance','angle','penumbra']) if(key in light&&Number.isFinite(settings[key])) light[key]=Math.max(0,settings[key]);
+        }
+        lighting.lamp=warm.intensity;lighting.front=frontFill.intensity;invalidate();return this.values;}},
     invalidate};
   resize();
 }

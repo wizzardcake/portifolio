@@ -7,7 +7,7 @@
    (emissive) and carry a soft halo in the air; only a few real lights light
    the room:
    - the door lantern's patterned spot, its perforations cast as a gobo that
-     is sharp close to the lamp and softens with distance (softGobo), and a
+     is sharp close to the lamp and softens with distance, and a
      weak warm glow round it;
    - one light inside the largest droplet;
    - one teal light among the tower's lowest lamps.
@@ -556,9 +556,13 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
   const haloPoints = new THREE.Points(haloGeometry, haloMaterial);
   haloPoints.name = 'lamp halos'; haloPoints.renderOrder = 6; group.add(haloPoints);
 
-  // ---- The gobo's softening, for the room's materials: the spot's pattern
-  // is sampled blurrier (a higher mip level) the further the lit surface is
-  // from the lamp, and evens out toward its mean beyond a few metres.
+  // ---- The gobo's softening: the spot's pattern is sampled blurrier (a
+  // higher mip level) the further the lit surface is from the lamp, and
+  // evens out toward its mean beyond a few metres. It is written into
+  // three.js's own lights chunk, so every lit surface has it and materials
+  // keep sharing programs. Patched one by one, eight of the room's materials
+  // took four more programs to compile and 1.7 s longer to load
+  // (PROGRESS.md). Only shaders lit by a spot with a map compile it at all.
   const pattern = door.pattern;
   const sampled = 'spotColor = texture2D( spotLightMap[ SPOT_LIGHT_MAP_INDEX ], spotLightCoord.xy );';
   const soft = `float goboFar = length( spotLight.position - geometryPosition );
@@ -567,9 +571,8 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
       spotColor.rgb = mix( spotColor.rgb, vec3( ${pattern.mean.toFixed(3)} ),
         smoothstep( ${pattern.flatFrom.toFixed(3)}, ${pattern.flatTo.toFixed(3)}, goboFar ) * ${pattern.flatten.toFixed(3)} );`;
   const chunk = THREE.ShaderChunk.lights_fragment_begin;
-  if (!chunk.includes(sampled)) console.warn('room-lamps: spot map sampling not found; the door pattern stays sharp');
-  const softChunk = chunk.replace(sampled, soft);
-  const softGobo = shader => { shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_begin>', softChunk); };
+  if (chunk.includes(sampled)) THREE.ShaderChunk.lights_fragment_begin = chunk.replace(sampled, soft);
+  else if (!chunk.includes('float goboFar')) console.warn('room-lamps: spot map sampling not found; the door pattern stays sharp');
 
   // Screen regions for the breathing redraw: each cluster's lamps and halos.
   const clusters = [
@@ -586,7 +589,7 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
   const lights = {door: spot, glow, shelf: shelfLight, stair: stairLight};
   const triangles = meshes.reduce((n, m) => n + m.geometry.attributes.position.count / 3, 0);
   return {
-    group, lights, targets: [spot.target, glow.target, shelfLight.target], clusters, smokeLights, softGobo,
+    group, lights, targets: [spot.target, glow.target, shelfLight.target], clusters, smokeLights,
     breathLayer: BREATH_LAYER,
     // Advances the breath (seconds); 0 holds every lamp at its rest level.
     update(seconds) { breath.value = seconds; },

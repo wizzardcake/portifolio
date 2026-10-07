@@ -548,12 +548,11 @@ if (renderer) {
   // glass droplets at the study nook and mosaic lamps down the stair tower.
   // They carry the room's own lights (the lantern's patterned spot and its
   // glow, the droplets' light, the tower's lamp glow; the upper floor's green
-  // now hangs in two of the tower's lamps), and the room's stone, timber and
-  // floor sample the lantern's pattern softer the further they are from it.
+  // now hangs in two of the tower's lamps). Every lit surface samples the
+  // lantern's pattern softer the further it is from it.
   const lamps=createRoomLamps(THREE,{tower,stair,height:H,slab:tread(stair.count)-.12,ringBeam:H-.2,
     anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy())});
   shell.add(lamps.group,...Object.values(lamps.lights),...lamps.targets);
-  for(const m of [stone,wood,ceilingMaterial,trim,timber,stairStone,stepStone,architecturalMetal]) m.onBeforeCompile=lamps.softGobo;
 
   // ---- Smoke on the floor (room-smoke.js): low mist along the ways the
   // camera walks (scene-camera.js, `paths`).

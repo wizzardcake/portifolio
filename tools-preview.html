@@ -29,6 +29,7 @@
     <button data-view="grimoire" aria-pressed="false">Grimoire</button>
     <button data-view="crystal" aria-pressed="false">Crystal</button>
     <button id="simulate" aria-pressed="false">Hover all</button>
+    <button id="room-light" aria-pressed="false" title="The nook's own light, and its frontal shelf view">Room light</button>
     <label><input id="still" type="checkbox"> Reduce motion</label>
   </aside>
   <footer>
@@ -56,6 +57,11 @@
     const key=new THREE.PointLight('#ffbf82',4.2,4,2);key.position.set(-.4,.90,.8);key.castShadow=true;key.shadow.mapSize.set(1024,1024);key.shadow.bias=-.00025;key.shadow.normalBias=.002;key.shadow.camera.near=.05;key.shadow.radius=3;scene.add(key);
     const fill=new THREE.PointLight('#a0b8d1',1.5,4,2);fill.position.set(.75,.7,-.7);scene.add(fill);
     const front=new THREE.PointLight('#ffe1b7',.9,3,2);front.position.set(.6,.35,1.5);scene.add(front);
+    // The room's light on its shelf (room-scene.js): the study nook's lamp,
+    // #ffb468 at 11 cd, 7.5 m, hung in the nook's mouth about .62 m in front of
+    // the shelf, 6 cm above it and .15 m toward Figma's end; it casts no
+    // shadow there. Hemisphere and ambient are the room's own (above).
+    const lamp=new THREE.PointLight('#ffb468',11,7.5,2);lamp.position.set(-.15,.0625,.62);lamp.visible=false;scene.add(lamp);
 
     // Actual shelf dimensions, with its surface at y=0 for this preview.
     const grain=document.createElement('canvas');grain.width=512;grain.height=128;
@@ -66,6 +72,13 @@
     const shelf=new THREE.Mesh(new THREE.BoxGeometry(2.08,.035,.26),new THREE.MeshStandardMaterial({map,color:'#967858',roughness:.78,bumpMap:map,bumpScale:.001}));shelf.position.y=-.0175;shelf.receiveShadow=true;shelf.castShadow=true;scene.add(shelf);
     const lip=new THREE.Mesh(new THREE.BoxGeometry(2.08,.006,.008),new THREE.MeshStandardMaterial({color:'#3f2c1c',roughness:.68}));lip.position.set(0,-.022,.130);scene.add(lip);
     const wall=new THREE.Mesh(new THREE.PlaneGeometry(20,10),new THREE.MeshStandardMaterial({color:'#383a34',roughness:1}));wall.position.set(0,1,-.27);wall.receiveShadow=true;scene.add(wall);
+    // Room light: the nook's lamp alone, and the nook's pale stone back wall
+    // right behind the shelf, as in the room.
+    function setLighting(mode){
+      const room=mode==='room';lamp.visible=room;key.visible=fill.visible=front.visible=!room;
+      wall.material.color.set(room?'#a39d94':'#383a34');wall.position.z=room?-.131:-.27;
+      document.querySelector('#room-light').setAttribute('aria-pressed',String(room));
+    }
     const floor=new THREE.Mesh(new THREE.PlaneGeometry(20,20),new THREE.MeshStandardMaterial({color:'#242a28',roughness:.95}));floor.rotation.x=-Math.PI/2;floor.position.y=-.42;floor.receiveShadow=true;scene.add(floor);
 
     // Small dependency-free orbit controls: spherical orbit, wheel dolly,
@@ -93,13 +106,17 @@
       crystal:['03 / thought & possibility','A sky held in glass','Teal and violet currents gather inside a bronze-mounted crystal. Hover to stir the mist.'],
     };
     function focus(name){
-      view=name;const i=['figma','grimoire','crystal'].indexOf(name);target.set(i<0?0:objects[i].group.position.x,i===1?.10:.16,0);
+      camera.fov=38;camera.updateProjectionMatrix();view=name;const i=['figma','grimoire','crystal'].indexOf(name);target.set(i<0?0:objects[i].group.position.x,i===1?.10:.16,0);
       desired.radius=i<0?(innerWidth<760?2.5:2.08):.67;desired.phi=i===1?.93:1.20;desired.theta=i<0?.10:.32;
       document.querySelectorAll('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===name)));
       ['number','object-title','description'].forEach((id,j)=>document.getElementById(id).textContent=copy[name][j]);
       aim(true);
     }
+    // The room's frontal shelf view (scene-camera.js): the eye 2.17 m in front
+    // of the shelf and .36 m above it, looking at the nook's back wall, 72° FOV.
+    function roomView(){view='room';target.set(0,-.34,-.13);desired.radius=2.40;desired.phi=1.27;desired.theta=0;camera.fov=72;camera.updateProjectionMatrix();aim(true);}
     document.querySelectorAll('[data-view]').forEach(button=>button.addEventListener('click',()=>focus(button.dataset.view)));
+    document.querySelector('#room-light').addEventListener('click',()=>{const room=document.querySelector('#room-light').getAttribute('aria-pressed')!=='true';setLighting(room?'room':'studio');if(room)roomView();else focus('all');});
     document.querySelector('#simulate').addEventListener('click',()=>{forced=forced==='all'?null:'all';document.querySelector('#simulate').setAttribute('aria-pressed',String(forced==='all'));});
     function hit(){
       if(dragging)return -1;ray.setFromCamera(pointer,camera);
@@ -128,6 +145,7 @@
       bounds(){return objects.map(o=>{const b=new THREE.Box3().setFromObject(o.group);return {name:o.group.name,min:b.min.toArray(),max:b.max.toArray(),size:b.getSize(new THREE.Vector3()).toArray()};});},
       point(i){const p=new THREE.Vector3(0,i===1?.11:.23,0);objects[i].group.localToWorld(p);p.project(camera);return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};},
       orbit(theta,phi){desired.theta=theta;desired.phi=phi;aim(true);},
+      setLighting,roomView,
     };
   </script>
 </body>

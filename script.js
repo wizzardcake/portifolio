@@ -171,10 +171,20 @@
     // The nook's opening in the left wall (room-scene.js: z -2.6 to -0.5,
     // its arch 2.12 m high), and the floor in front where the smoke gathers.
     for (const z of [-2.6, -.5]) nookPoints.push([-2.4, 0, z], [-2.4, 2.12, z], [-2.05, 0, z]);
-    cover(goChair, chairPoints);
-    if (camera.navigation === 'ENTRY') cover(goShelf, nookPoints);
+    // Each place's mark on the floor takes the click too: a ring round where
+    // the visitor would stand.
+    const ring = ([x, z]) => Array.from({length: 8}, (_, i) => [x + .36 * Math.cos(i * Math.PI / 4), 0, z + .36 * Math.sin(i * Math.PI / 4)]);
+    const {branch} = camera.paths, shelfEye = camera.points.shelf.position;
+    cover(goChair, [...chairPoints, ...ring(branch[branch.length - 1])]);
+    if (camera.navigation === 'ENTRY') cover(goShelf, [...nookPoints, ...ring([shelfEye[0], shelfEye[2]])]);
   }
   addEventListener('scene-camera-change', placeEntryTargets);
+  // Pointing at a place, or focusing it, lights its mark on the floor.
+  for (const [button, mark] of [[goChair, 'chair'], [goShelf, 'shelf'], [leaveShelfButton, 'entry']]) {
+    const light = on => () => window.studyRoom?.hoverMark?.(mark, on);
+    for (const [type, on] of [['pointerenter', true], ['pointerleave', false], ['focus', true], ['blur', false]])
+      button?.addEventListener(type, light(on));
+  }
   // A click from the keyboard (Enter or Space) carries no pointer detail.
   goShelf?.addEventListener('click', event => walkToShelf(event.detail === 0));
   leaveShelfButton?.addEventListener('click', event => leaveShelf(event.detail === 0));

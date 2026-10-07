@@ -8,7 +8,7 @@
    meets the floor. It owns no loop: room-scene.js advances it with the
    foreground layer it is drawn on, and leaves it still under reduced motion.
    Coordinates are the room's: metres, the table centre at the origin. */
-export function createRoomSmoke(THREE, {trails, anisotropy = 1}) {
+export function createRoomSmoke(THREE, {trails, marks = [], anisotropy = 1}) {
   // A tiling value-noise texture: two independent octave sums in R and G.
   // Its own seeded generator: the room's shared one lays out the planks, the
   // sky and the cloth, and must not be advanced.
@@ -163,7 +163,50 @@ export function createRoomSmoke(THREE, {trails, anisotropy = 1}) {
     }
     presences.set(trail.name, {uniform: own.uniforms.uPresence, meshes});
   }
-  const refresh = () => { group.visible = [...presences.values()].some(p => p.uniform.value > .001); };
+  // ---- Where the visitor can stand: a slow ring of the same mist on the
+  // floor at each place, `marks` [{name, at: [x, z]}]. Its wisps are drawn
+  // round the circle (the noise sampled along a circle, so it has no seam)
+  // and drift round it; a faint veil lies inside. Hovered, it brightens,
+  // draws in a little and turns faster. It shares the trails' clock, noise
+  // and colours.
+  const markMaterial = new THREE.ShaderMaterial({
+    uniforms: {uNoise: shared.uNoise, uTime: shared.uTime, uBrightness: shared.uBrightness, uCool: shared.uCool, uWarm: shared.uWarm,
+      uPresence: {value: 1}, uHover: {value: 0}},
+    vertexShader: `
+      varying vec2 vAt;
+      void main() { vAt = position.xz / .5; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`,
+    fragmentShader: `
+      uniform sampler2D uNoise; uniform float uTime, uBrightness, uPresence, uHover; uniform vec3 uCool, uWarm;
+      varying vec2 vAt;
+      void main() {
+        // The mist as it lies on the floor, turned slowly about the mark's
+        // centre (two layers at different speeds): seamless, and it swirls.
+        float r = length(vAt), spin = uTime * (.11 + .2 * uHover);
+        vec2 slow = mat2(cos(spin), -sin(spin), sin(spin), cos(spin)) * vAt;
+        vec2 quick = mat2(cos(spin * 1.7), sin(spin * 1.7), -sin(spin * 1.7), cos(spin * 1.7)) * vAt;
+        float wisp = texture2D(uNoise, slow * .42 + vec2(.17, .29)).r;
+        float fine = texture2D(uNoise, quick * 1.05 + vec2(.53, .11)).g;
+        float radius = .64 - .07 * uHover;
+        float ring = exp(-pow((r - radius - (wisp - .5) * .14) / (.1 + .05 * fine), 2.));
+        float veil = (1. - smoothstep(0., radius, r)) * .22 * wisp;
+        float raw = (ring * smoothstep(.25, .75, wisp * .75 + fine * .35) + veil) * (1. + 1.3 * uHover);
+        float d = (1. - exp(-1.8 * raw)) * uPresence * smoothstep(1., .9, r);
+        vec3 color = mix(uCool, uWarm, .35 * smoothstep(.45, .85, fine)) * uBrightness;
+        gl_FragColor = vec4(color * d, d * .22);
+      }`,
+    transparent: true, depthWrite: false, premultipliedAlpha: true,
+  });
+  const standing = new Map(), disc = new THREE.CircleGeometry(.5, 48).rotateX(-Math.PI / 2);
+  for (const {name, at: [x, z]} of marks) {
+    const own = markMaterial.clone();
+    own.uniforms = {...markMaterial.uniforms, uPresence: {value: 0}, uHover: {value: 0}};
+    const mesh = new THREE.Mesh(disc, own);
+    mesh.name = name + ' standing mark'; mesh.position.set(x, .014, z); mesh.renderOrder = 4; mesh.visible = false;
+    group.add(mesh); standing.set(name, {mesh, own});
+    triangles += disc.index ? disc.index.count / 3 : disc.attributes.position.count / 3;
+  }
+  const refresh = () => { group.visible = [...presences.values()].some(p => p.uniform.value > .001)
+    || [...standing.values()].some(m => m.mesh.visible); };
   return {
     group, material,
     // seconds: the animation clock; reveal: metres of trail grown in so far.
@@ -183,6 +226,15 @@ export function createRoomSmoke(THREE, {trails, anisotropy = 1}) {
     set presence(value) { for (const name of presences.keys()) this.setPresence(name, value); },
     get presence() { return Math.max(...[...presences.values()].map(p => p.uniform.value)); },
     presenceOf: name => presences.get(name).uniform.value,
-    stats: {strands: group.children.length, triangles, longest, trails: [...presences.keys()]},
+    // One standing mark: where ([x, z]), how present (0..1) and how hovered (0..1).
+    setMark(name, {at, presence, hover}) {
+      const mark = standing.get(name);
+      if (at) mark.mesh.position.set(at[0], .014, at[1]);
+      if (presence !== undefined) { mark.own.uniforms.uPresence.value = presence; mark.mesh.visible = presence > .001; }
+      if (hover !== undefined) mark.own.uniforms.uHover.value = hover;
+      refresh();
+    },
+    markOf: name => ({presence: standing.get(name).own.uniforms.uPresence.value, hover: standing.get(name).own.uniforms.uHover.value}),
+    stats: {strands: group.children.length - standing.size, triangles, longest, trails: [...presences.keys()], marks: [...standing.keys()]},
   };
 }

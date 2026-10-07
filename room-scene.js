@@ -555,7 +555,9 @@ if (renderer) {
   // so it costs the room's own canvas nothing; the cloth's pulse below keeps
   // it moving. Table-centred [x, z], metres.
   const {trunk:way,fork,branch,chair:[restX,restZ]}=view.paths;
-  const smoke=createRoomSmoke(THREE,{anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy()),trails:[
+  // Where the visitor can stand gets a mark of its own (placed with the camera's points, below).
+  const smoke=createRoomSmoke(THREE,{anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy()),
+    marks:[{name:'entry',at:[0,0]},{name:'shelf',at:[0,0]},{name:'chair',at:branch[branch.length-1]}],trails:[
     // It ends running into the nook, where it gathers (below).
     {name:'to the study nook',points:way,
       // A flat veil on the boards, two low drifts over it and one wisp that rises a little.
@@ -1381,6 +1383,13 @@ if (renderer) {
       :[1-eased(p,.05,.4),1-eased(p,.75,.95)];
     smoke.setPresence('to the study nook',nook);smoke.setPresence('gathering at the nook',nook);
     smoke.setPresence('into the chair',chairWay);
+    // The places to stand: the entry's and the shelf's eyes, and beside the
+    // chair at the branch's end. Each mark is hidden underfoot and as the
+    // visitor sits down, and clear where they can go.
+    const eye=[view.x,view.distance],sitting=1-eased(view.approach,.5,.85);
+    for(const [name,at] of [['entry',[view.points.entry.position[0],view.points.entry.position[2]]],
+      ['shelf',[view.points.shelf.position[0],view.points.shelf.position[2]]],['chair',branch[branch.length-1]]])
+      smoke.setMark(name,{at,presence:eased(Math.hypot(eye[0]-at[0],eye[1]-at[1]),.5,1.4)*sitting});
     if(!smoke.group.visible) smokeShown=false;
     if(stillMotion.matches) smoke.update(0);
     renderFront();
@@ -1405,11 +1414,27 @@ if (renderer) {
     if(!smokeShown){smokeShown=true;smokeSince=now;}
     return Math.max(0,(now-smokeSince-600)/1000*1.6);
   }
+  // A mark lights up while its place is pointed at or focused (script.js),
+  // easing in over about a quarter of a second; at once for reduced motion.
+  const markHover={entry:{now:0,want:0},shelf:{now:0,want:0},chair:{now:0,want:0}};
+  function hoverMark(name,on){
+    const mark=markHover[name];if(!mark)return;
+    mark.want=on?1:0;
+    if(stillMotion.matches){mark.now=mark.want;smoke.setMark(name,{hover:mark.now});invalidate(true);}
+  }
+  // A new place, or a walk setting off: nothing stays lit from before.
+  addEventListener('room-navigation',()=>{for(const name in markHover) hoverMark(name,false);});
   function pulse(now) {
     requestAnimationFrame(pulse);
     const smoking=smoke.group.visible;
     if((!cloth.visible&&!smoking)||document.hidden||lost||stillMotion.matches||now-lastPulse<33) return;
+    const dt=Math.min(.1,(now-lastPulse)/1000);
     lastPulse=now;
+    for(const [name,mark] of Object.entries(markHover)) if(mark.now!==mark.want) {
+      mark.now+=(mark.want-mark.now)*(1-Math.exp(-dt/.08));
+      if(Math.abs(mark.want-mark.now)<.002) mark.now=mark.want;
+      smoke.setMark(name,{hover:mark.now});
+    }
     if(cloth.visible){inscription.uTime.value=now/1000;if(!airborne&&!clothMotion) stirHem(now);}
     if(smoking) smoke.update(now/1000,smokeReveal(now));
     if(cloth.layers.isEnabled(1)||smoking) renderFront();
@@ -1478,7 +1503,7 @@ if (renderer) {
   canvas.addEventListener('webglcontextrestored',()=>{lost=false;resize();});
   // Used by the local geometry/registration check and dev inspection.
   // hem: the cloth hem wave's parameters, live-tunable from the console.
-  window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,table:artifact,smoke,
+  window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,table:artifact,smoke,hoverMark,
     // Room extents in scene (table-relative) coordinates; the plan objects
     // after it (window, tower, alcove, corner) are in plan coordinates.
     dimensions:{...room,back:room.back-placement.forward,front:room.front-placement.forward},

@@ -1532,3 +1532,39 @@ visible back and forth (0.01°).
   read at the entry.
 - The walk back from the shelf crosses that darkness for about a second.
 - Lighting is for the later lighting pass the user has asked for.
+
+### Stage 4: where the visitor can stand
+
+Each place to stand has a mark on the floor: a slow ring of the same mist
+as the trails (`room-smoke.js`, `marks`, `setMark`). It sits at three
+places:
+- the entry's eye;
+- the shelf's eye;
+- beside the chair, at the branch's end.
+
+**Look.** The mist lies on the floor and is turned slowly about the mark's
+centre, in two layers at different speeds, so it swirls without a seam. A
+veil lies inside the ring. It shares the trails' clock, noise and colours,
+and is one disc of 48 triangles per mark.
+- The first version drew its wisps by angle: spokes in the ring and a
+  pinwheel at its centre.
+
+**When it shows.**
+- It is hidden underfoot (within 0.5 to 1.4 m of the eye) and as the
+  visitor sits down.
+- It is clear where they can go:
+  - at the entry, the chair's and the shelf's; the shelf's lies behind the
+    table from there, and the cloth hides it as it should;
+  - at the shelf, turned round, the chair's and the entry's.
+- Pointing at or focusing a place's target lights its mark (brighter,
+  drawn in a little, turning faster) over about 0.25 s, at once under
+  reduced motion. A new navigation state clears it.
+
+**Click.** Each target now also takes the click on its mark's ring.
+
+**Verified:**
+- `verification/nav-7-marks` to `nav-9-marks`:
+  - the entry, with the chair's and the nook's targets pointed at;
+  - the shelf turned toward the room;
+  - the logged presences and hovers.
+- All nine suites pass.

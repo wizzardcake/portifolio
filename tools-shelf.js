@@ -223,8 +223,10 @@ float enSurface(vec2 p){
   return bowl+rise+meniscus+(swell+peel)*smoothstep(LIP,LIP+.0006,inset);
 }`;
 function enamelMaterial(a, color, settings, shared) {
-  // Deepened, as fired glass is; the full colour glows a very little.
-  const material = a.own(new THREE.MeshPhysicalMaterial({color: new THREE.Color(color).multiplyScalar(.24), emissive: color, emissiveIntensity: .09,
+  // Deepened, as fired glass is, so it keeps its colour under the nook's
+  // bright lamp; a fifth of the full colour glows from within, which holds
+  // the hue there and lifts it under dimmer light.
+  const material = a.own(new THREE.MeshPhysicalMaterial({color: new THREE.Color(color).multiplyScalar(.3), emissive: color, emissiveIntensity: .2,
     roughness: .2, metalness: 0, clearcoat: 1, clearcoatRoughness: .06}));
   material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, {uKind: {value: settings.kind}, uSeed: {value: settings.seed},
@@ -335,11 +337,10 @@ export function createFigmaObject(options = {}) {
   const kinds = {circle: 0, left: 1, right: 2, lower: 3};
   // [shape, colour, slot x, slot y, landing order, depth apart]: they land
   // row by row from the top, the blue eye last. Apart, each column's pieces
-  // keep to alternate depths and never meet. Figma's colours, but the purple (#a259ff) and the blue
-  // (#1abcfe) lean bluer, or the nook's warm lamp turns them pink and teal.
+  // keep to alternate depths and never meet. Figma's own five colours.
   const specs = [
     ['left','#f24e1e',-.5,1,0,.02], ['right','#ff7262',.5,1,1,-.01],
-    ['left','#8a4dff',-.5,0,2,-.022], ['circle','#1a8cff',.5,0,4,.014], ['lower','#0acf83',-.5,-1,3,.022],
+    ['left','#a259ff',-.5,0,2,-.022], ['circle','#1abcfe',.5,0,4,.014], ['lower','#0acf83',-.5,-1,3,.022],
   ];
   const pieces = specs.map(([kind,color,x,y,order,depth],i) => {
     const slot = new THREE.Vector2(x*unit, y*unit);

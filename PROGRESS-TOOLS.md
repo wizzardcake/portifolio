@@ -485,3 +485,18 @@ The room's own checks were not rerun; nothing they test has changed.
 **Docs.** `TOOLS_INTEGRATION.md` and `TOOLS_VERIFICATION.md` now match the
 final API, placement, footprints, lighting notes and costs. The placement
 was re-checked against `room-scene.js`.
+
+## After the report: Figma's own colours
+
+The user asked for Figma's colours to come closer to the official ones.
+- The pieces now use Figma's own five hexes (`#f24e1e`, `#ff7262`,
+  `#a259ff`, `#1abcfe`, `#0acf83`).
+- They are deepened to ×0.30. Before it was ×0.24, with the purple and blue
+  shifted bluer.
+- A fifth of each colour now glows from within (it was 9 %). That carries
+  the hue under the warm lamp and lifts it under the studio lights.
+- Two sweeps (`verification/tools-v2/figma-official/`, `figma-official-2/`)
+  compared ×0.32 to ×0.55 and the glow mixes. ×0.42 and above wash out to
+  pastel under the lamp.
+- Result: `verification/tools-v2/figma-6-official/`.
+- `node tests/shelf-tools-check.mjs --round=figma-official` passes.

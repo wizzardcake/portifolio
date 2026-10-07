@@ -9,8 +9,8 @@ All visual work and checks use the isolated `feature/shelf-tools` worktree.
 ## What was built
 
 **Figma: champlevé enamel.**
-- Five brass blanks hold fired glass in Figma's colours, deepened for the
-  nook's lamp.
+- Five brass blanks hold fired glass in Figma's own five colours, deepened
+  for the nook's lamp, with a little of each colour glowing from within.
 - The shader works from each face's own (x, y): a brass lip, the meniscus,
   a shallow cabochon, thin pale glass by the lip, swell, orange peel,
   mottling and specks, all under one clear coat.
@@ -135,8 +135,8 @@ not a whole-room or mobile benchmark.
   ambient, not the room itself. The objects have not been seen in the
   actual room.
 - **Motion** was judged from frame strips, not watched in real time.
-- **Studio light.** Figma's colours are tuned for the lamp, so under the
-  studio lights the purple and blue are dark.
+- **Room light.** Under the warm lamp Figma's purple reads pink-violet and
+  its blue a pale cyan; the hues are Figma's own, the light is warm.
 - **Room distance.**
   - The book's writing reads as a blue texture, not text.
   - Its lifted words are small.

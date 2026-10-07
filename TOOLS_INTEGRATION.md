@@ -174,8 +174,9 @@ shelfRoot.removeFromParent();
 lamp: `#ffb468`, 11 cd, 7.5 m, hung about 0.62 m in front of the shelf and
 6 cm above it. The lamp is strong at that distance, and it never lights a
 top face.
-- Figma's enamel colours are deepened to hold their saturation there. Its
-  purple and blue lean bluer, or the warm light turns them pink and teal.
+- Figma's enamel uses Figma's own five colours. They are deepened to hold
+  their saturation under the lamp, and a fifth of each colour glows from
+  within, which holds the hue there and lifts it under dimmer light.
 - Its pedestal's dial glows from within, since the lamp cannot reach it.
 
 **Figma's enamel** is a `MeshPhysicalMaterial` with a clear coat, extended

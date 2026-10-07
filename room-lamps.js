@@ -36,14 +36,21 @@ const palettes = {
 export const lampTuning = {
   // How much every lamp breathes (multiplies each lamp's own depth).
   breath: 1,
-  // The lantern by the door: hung from the last cross beam (its underside
-  // 2.28 m up, 0.75 m in front of the front wall), to the right of the
-  // doorway as seen from inside the room. Its light is the room's most stable.
+  // The lantern by the door: hung from the ceiling (2.45 m) 1.2 m in front
+  // of the front wall, just to the right of the doorway as seen from inside
+  // the room, out of the way in. Its light is the room's most stable.
+  // Where it hangs decides how the doorway reads (door A/B, PROGRESS.md):
+  // close beside the door and near the wall, its light met the far jamb at a
+  // glance from four times the distance, so only the near side lit up and
+  // most of the pattern fell on the stone beside it. A little out from the
+  // wall and nearer the door's middle, both jambs and the head are lit.
   door: {
-    at: [-.3, 6.45], hang: 2.28, rod: .1, shade: .31,
+    at: [.15, 6.0], hang: 2.45, rod: .27, shade: .31,
     color: '#ffb35e', glowColor: '#ffbe78',
-    // The patterned spot: cd, range m, cone half-angle rad, where it aims.
-    spot: 19, reach: 7, angle: 1.12, aim: [.35, .45, 7.2],
+    // The patterned spot: cd, range m, cone half-angle rad, where it aims:
+    // at the doorway's middle, a little above half its height, so the head
+    // catches it too.
+    spot: 19, reach: 7, angle: 1.12, aim: [.8, 1.25, 7.2],
     // The weak, unpatterned glow below the shade (cd, range m): a downward
     // half-sphere, since the broad shade keeps the light off the ceiling.
     glow: 4, glowReach: 6.5,

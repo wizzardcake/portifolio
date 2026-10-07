@@ -37,7 +37,8 @@ function artifact(name, options) {
       if (!reduced) elapsed += dt;
       hover += (target - hover) * (1 - Math.exp(-dt * (reduced ? 14 : 6)));
       if (Math.abs(target - hover) < .0001) hover = target;
-      return {t: elapsed, dt, hover, reduced};
+      // awake: the hover as asked for, before easing (Figma times its own).
+      return {t: elapsed, dt, hover, awake: target === 1, reduced};
     },
     setHover(value) { if (!dead) target = value ? 1 : 0; },
     dispose() {
@@ -97,8 +98,10 @@ function bevel(shape, depth, amount = .003, bevelSegments = 3, curveSegments = 1
 // 'speckle' (stone), 'turned' (fine lathe lines in metal) or none, and only
 // grained finishes take bump, so flat ones stay clean where the lathe fans
 // in to its centre. ticks: {segment, count, finish} adds short radial marks
-// across that segment. The lathe's v runs by point index, so the texture is
-// laid out per segment.
+// across that segment. A finish with glow (a colour) lights from within:
+// from the glow the segment before ended on (or none) to that colour at its
+// end, so glowing segments run on as one gradient.
+// The lathe's v runs by point index, so the texture is laid out per segment.
 function turned(a, profile, radial, paint, ticks) {
   const n = profile.length - 1, width = 512, row = 8, height = n * row;
   const color = document.createElement('canvas'), orm = document.createElement('canvas');
@@ -107,8 +110,19 @@ function turned(a, profile, radial, paint, ticks) {
   const fill = (ctx, style, x, y, w, h) => { ctx.fillStyle = style; ctx.fillRect(x, y, w, h); };
   // Canvas rows run top-down; texture v runs bottom-up (flipY).
   const rowOf = k => height - (k + 1) * row;
+  let glow = null, lit = '#000';
   for (let k = 0; k < n; k++) {
     const f = paint(k), y = rowOf(k);
+    if (f.glow) {
+      if (!glow) {
+        glow = document.createElement('canvas'); glow.width = 4; glow.height = height;
+        fill(glow.getContext('2d'), '#000', 0, 0, 4, height);
+      }
+      const g = glow.getContext('2d'), rise = g.createLinearGradient(0, y + row, 0, y);
+      rise.addColorStop(0, lit); rise.addColorStop(1, f.glow);
+      fill(g, rise, 0, y, 4, row);
+    }
+    lit = f.glow || '#000';
     fill(c, f.color, 0, y, width, row);
     // roughness in G, metalness in B, as three.js reads them
     fill(o, `rgb(0,${Math.round(f.rough * 255)},${Math.round(f.metal * 255)})`, 0, y, width, row);
@@ -127,14 +141,19 @@ function turned(a, profile, radial, paint, ticks) {
   }
   const map = a.own(new THREE.CanvasTexture(color)), ormMap = a.own(new THREE.CanvasTexture(orm));
   map.colorSpace = THREE.SRGBColorSpace;
+  const emissiveMap = glow && a.own(new THREE.CanvasTexture(glow));
+  if (emissiveMap) emissiveMap.colorSpace = THREE.SRGBColorSpace;
   const material = a.material({map, roughnessMap: ormMap, metalnessMap: ormMap, bumpMap: map, bumpScale: .0008,
-    roughness: 1, metalness: 1});
+    roughness: 1, metalness: 1, ...(emissiveMap ? {emissiveMap, emissive: '#ffffff'} : {})});
   return a.mesh(new THREE.LatheGeometry(profile.map(p => new THREE.Vector2(...p)), radial), material);
 }
 
-// Gently convex enamel faces, with welded smooth normals around the bevel.
-// Subdivide only cap triangles; side-wall poly counts stay unchanged.
-function enamelGeometry(shape) {
+// One inlay's slab: flat faces and a rounded bevel. Normals are smoothed
+// round the bevel and the curves but stay crisp at sharp corners, and the
+// bevel's first ring keeps the face's own normal, so there is no seam.
+// The attribute cap marks face triangles (1) apart from bevel and sides (0).
+// A face's own (x, y) is its shape coordinate; the enamel shader works there.
+function enamelGeometry(shape, depth = .012, edge = .004) {
   // Full arcs can end a few floating-point ulps from their first point.
   // Remove that microscopic edge before extrusion, or the bevel spikes at
   // the seam (especially visible on the blue disk in an oblique view).
@@ -142,42 +161,117 @@ function enamelGeometry(shape) {
   for(const point of shape.getPoints(8))if(!contour.length||point.distanceToSquared(contour[contour.length-1])>1e-14)contour.push(point);
   if(contour[0].distanceToSquared(contour[contour.length-1])<1e-14)contour.pop();
   shape=new THREE.Shape(contour);shape.closePath();
-  const source=bevel(shape,.028,.004,2),p=source.attributes.position,uv=source.attributes.uv;
-  const boundary=shape.getPoints(40),positions=[],texcoords=[],capNormals=[];
-  function emit(a,b,c) {
-    for(const v of [a,b,c]) {
-      let distance=Infinity,dxNear=0,dyNear=0;
-      for(let i=0;i<boundary.length-1;i++) {
-        const A=boundary[i],B=boundary[i+1],dx=B.x-A.x,dy=B.y-A.y;
-        const t=clamp(((v[0]-A.x)*dx+(v[1]-A.y)*dy)/(dx*dx+dy*dy||1),0,1);
-        const ex=v[0]-A.x-t*dx,ey=v[1]-A.y-t*dy,d=Math.hypot(ex,ey);
-        if(d<distance){distance=d;dxNear=ex;dyNear=ey;}
-      }
-      const cap=Math.abs(v[2])>.0179,d=clamp(distance/.031,0,1);
-      const crown=cap?.003*Math.sin(d*Math.PI/2)**2:0;
-      const slope=.003*Math.PI/(2*.031)*Math.sin(d*Math.PI);
-      capNormals.push(cap?new THREE.Vector3(-dxNear/(distance||1)*slope,-dyNear/(distance||1)*slope,Math.sign(v[2])).normalize():null);
-      positions.push(v[0],v[1],v[2]+Math.sign(v[2])*crown);texcoords.push(v[3],v[4]);
-    }
+  const g=bevel(shape,depth,edge,2),p=g.attributes.position,face=depth/2+edge-1e-6;
+  g.deleteAttribute('uv');
+  const cap=new Float32Array(p.count);
+  for(let i=0;i<p.count;i+=3)
+    if(Math.abs(p.getZ(i))>face&&p.getZ(i)===p.getZ(i+1)&&p.getZ(i)===p.getZ(i+2))cap[i]=cap[i+1]=cap[i+2]=1;
+  g.setAttribute('cap',new THREE.BufferAttribute(cap,1));
+  // Non-indexed, so this gives every vertex its own face's normal. Then
+  // average across faces that meet at a vertex within 60 degrees.
+  g.computeVertexNormals();
+  const n=g.attributes.normal,faces=Array.from({length:p.count},(_,i)=>new THREE.Vector3(n.getX(i),n.getY(i),n.getZ(i)));
+  const shared=new Map(),key=i=>[p.getX(i),p.getY(i),p.getZ(i)].map(v=>Math.round(v*1e6)).join(',');
+  for(let i=0;i<p.count;i++){const k=key(i);if(!shared.has(k))shared.set(k,[]);shared.get(k).push(i);}
+  const sum=new THREE.Vector3();
+  for(let i=0;i<p.count;i++){
+    if(Math.abs(p.getZ(i))>face)sum.set(0,0,Math.sign(p.getZ(i)));
+    else{sum.set(0,0,0);for(const j of shared.get(key(i)))if(faces[i].dot(faces[j])>.5)sum.add(faces[j]);sum.normalize();}
+    n.setXYZ(i,sum.x,sum.y,sum.z);
   }
-  const read=i=>[p.getX(i),p.getY(i),p.getZ(i),uv.getX(i),uv.getY(i)];
-  const mid=(a,b)=>a.map((v,i)=>(v+b[i])/2);
-  for(let i=0;i<p.count;i+=3) {
-    const a=read(i),b=read(i+1),c=read(i+2);
-    if(Math.abs(a[2]-b[2])<1e-7&&Math.abs(a[2]-c[2])<1e-7) {
-      const ab=mid(a,b),bc=mid(b,c),ca=mid(c,a);
-      emit(a,ab,ca);emit(ab,b,bc);emit(ca,bc,c);emit(ab,bc,ca);
-    }else emit(a,b,c);
-  }
-  source.dispose();
-  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(texcoords,2));g.computeVertexNormals();
-  const sums=new Map(),keys=[],n=g.attributes.normal;
-  for(let i=0;i<positions.length;i+=3) {
-    const key=positions.slice(i,i+3).map(v=>Math.round(v*1e6)).join(',');keys.push(key);
-    const sum=sums.get(key)||new THREE.Vector3();sum.add(new THREE.Vector3(n.getX(i/3),n.getY(i/3),n.getZ(i/3)));sums.set(key,sum);
-  }
-  sums.forEach(v=>v.normalize());keys.forEach((key,i)=>{const v=capNormals[i]||sums.get(key);n.setXYZ(i,v.x,v.y,v.z);});
   return g;
+}
+
+// Champlevé: a bronze blank whose face holds a cell of fired glass, worked
+// out in the shader from the face's own (x, y). The distance to the outline
+// gives the bronze lip, the meniscus where the glass meets it, a slight
+// dome, and the colour's depth (thin glass by the lip is paler). Noise gives
+// orange peel, a little mottling and the odd fired-in speck. settings: kind
+// (0 circle, 1 left, 2 right, 3 lower), seed, slot (where the piece sits in
+// the logo); shared: gleam (-1 off, 0..1 a light crossing the logo), bronze.
+const ENAMEL = `#define LIP .0013
+uniform float uKind; uniform float uSeed; uniform vec2 uSlot; uniform float uGleam; uniform vec3 uBronze;
+varying float vCap; varying vec2 vFace; varying vec3 vAxisX; varying vec3 vAxisY;
+float enHash(vec2 p){p=fract(p*vec2(.1031,.1030));p+=dot(p,p.yx+33.33);return fract((p.x+p.y)*p.x);}
+float enNoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+  return mix(mix(enHash(i),enHash(i+vec2(1,0)),f.x),mix(enHash(i+vec2(0,1)),enHash(i+vec2(1,1)),f.x),f.y);}
+// Inside, a soft maximum rounds the cell's inner corners, as an etched cell's
+// are, and keeps a crease off the diagonals.
+float enBox(vec2 p,vec2 c,vec2 h){vec2 d=abs(p-c)-h;
+  return length(max(d,0.))+min(.0018*log(exp(d.x/.0018)+exp(d.y/.0018)),0.);}
+// Signed distance to the piece's outline, metres: a disc, unioned with the
+// square that makes it a D (flat side right or left) or the lower piece.
+float enOutline(vec2 p){
+  float r=.031,disc=length(p)-r;
+  if(uKind<.5)return disc;
+  if(uKind<1.5)return min(disc,enBox(p,vec2(r*.5,0.),vec2(r*.5,r)));
+  if(uKind<2.5)return min(disc,enBox(p,vec2(-r*.5,0.),vec2(r*.5,r)));
+  return min(disc,enBox(p,vec2(0.,r*.5),vec2(r,r*.5)));
+}
+// The glass's height over the lip, metres: it rounds up from the lip, then
+// rises in a shallow cabochon about the disc's centre (one smooth bowl, where
+// a dome from the outline would crease along the shape's inner ridges), so
+// a lamp shows as a highlight, not a whole bright face. A slow swell and
+// fine orange peel break the highlights up.
+float enSurface(vec2 p){
+  float inset=-enOutline(p),bowl=-2.*dot(p,p);
+  if(inset<LIP)return bowl;
+  float rise=.0011*smoothstep(LIP,LIP+.006,inset);
+  float meniscus=-.00022*exp(-pow((inset-LIP-.0006)/.0005,2.));
+  float swell=.0002*(enNoise(p*60.+uSeed)-.5);
+  float peel=.00002*(enNoise(p*1400.+uSeed)-.5)+.000016*(enNoise(p*520.-uSeed)-.5);
+  return bowl+rise+meniscus+(swell+peel)*smoothstep(LIP,LIP+.0006,inset);
+}`;
+function enamelMaterial(a, color, settings, shared) {
+  // Deepened, as fired glass is; the full colour glows a very little.
+  const material = a.own(new THREE.MeshPhysicalMaterial({color: new THREE.Color(color).multiplyScalar(.24), emissive: color, emissiveIntensity: .09,
+    roughness: .2, metalness: 0, clearcoat: 1, clearcoatRoughness: .06}));
+  material.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms, {uKind: {value: settings.kind}, uSeed: {value: settings.seed},
+      uSlot: {value: settings.slot}, uGleam: shared.gleam, uBronze: shared.bronze});
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+        attribute float cap; varying float vCap; varying vec2 vFace; varying vec3 vAxisX; varying vec3 vAxisY;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vCap=cap; vFace=position.xy;
+        vAxisX=normalize(normalMatrix*vec3(1.,0.,0.)); vAxisY=normalize(normalMatrix*vec3(0.,1.,0.));`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        ${ENAMEL}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float inset=-enOutline(vFace),blur=max(fwidth(inset),1e-5);
+        float bronze=vCap>.5?1.-smoothstep(LIP-blur,LIP+blur,inset):1.;
+        float body=smoothstep(LIP,.02,inset),mottle=enNoise(vFace*170.+uSeed);
+        vec3 glass=diffuseColor.rgb*mix(1.3,.88,body)*(.92+.16*mottle);
+        // A speck fades out before it is smaller than a couple of pixels.
+        float cells=fwidth(vFace.x)*1700.;
+        float speck=step(.993,enHash(floor(vFace*1700.)+uSeed))*smoothstep(.42,.15,length(fract(vFace*1700.)-.5));
+        glass*=1.-.45*speck*(1.-smoothstep(.35,.7,cells))*step(LIP+.001,inset);
+        diffuseColor.rgb=mix(glass,uBronze,bronze);`)
+      .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+        metalnessFactor=bronze*.85;
+        roughnessFactor=mix(.16+.1*mottle,.3,bronze);`)
+      .replace('#include <clearcoat_normal_fragment_maps>', `#include <clearcoat_normal_fragment_maps>
+        if(vCap>.5){
+          vec2 e=vec2(.00015,0.);
+          float hx=(enSurface(vFace+e.xy)-enSurface(vFace-e.xy))/(2.*e.x);
+          float hy=(enSurface(vFace+e.yx)-enSurface(vFace-e.yx))/(2.*e.x);
+          normal=normalize(normal-hx*vAxisX-hy*vAxisY);clearcoatNormal=normal;
+        }`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        // The gleam: a narrow band of light running down the logo's
+        // diagonal, caught mostly by the brass, faintly by the glass.
+        float sweep=dot(vFace+uSlot,vec2(.8,-.6))/.12;
+        float gleam=uGleam<0.?0.:exp(-pow((sweep-mix(-1.4,1.4,uGleam))/.075,2.))*sin(3.14159*uGleam);
+        totalEmissiveRadiance=totalEmissiveRadiance*(1.-bronze)+gleam*mix(vec3(.09,.08,.065),vec3(1.1,.78,.4),bronze);`)
+      .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+        // The glass's one gloss is its fired surface (the clear coat); the
+        // coloured body under it is matte, or a lamp blooms across the face.
+        material.specularColor*=bronze;material.specularF90*=bronze;
+        material.clearcoat*=1.-bronze;
+        material.clearcoatRoughness=min(.055+.05*mottle+geometryRoughness,1.);`);
+  };
+  return material;
 }
 
 function grainTexture(a, type, seed, size = 256) {
@@ -201,24 +295,37 @@ function grainTexture(a, type, seed, size = 256) {
   return map;
 }
 
-/** Five independent enamel inlays over a turned stone pedestal.
+/** Five champlevé enamel pieces floating over a turned stone pedestal.
  * options: { reducedMotion?: boolean|()=>boolean, camera?: THREE.Camera }
  * Pass the host camera to face the assembled logo toward it in local yaw.
  */
 export function createFigmaObject(options = {}) {
   const a = artifact('Figma / floating enamel', options), {group, mesh} = a;
-  // The turned stone pedestal with two bronze bands and a dark dial ring of
-  // twenty bronze ticks: one lathe, its finishes painted along the profile.
+  // The turned stone pedestal with two bronze bands, a dark dial ring of
+  // twenty bronze ticks and, at its heart, pale stone lit from within that
+  // the pieces float over: one lathe, its finishes painted along the profile.
+  // The light reaches out across the dial, as the nook's lamp, hung level
+  // with the shelf, never lights the top.
   const stone = {color: '#696a61', rough: .82, metal: 0, grain: 'speckle'};
-  const bronze = {color: '#9d7849', rough: .38, metal: .72, grain: 'turned'}, dark = {color: '#272a28', rough: .85, metal: 0};
-  turned(a, [[.086,0],[.102,.006],[.108,.016],[.108,.025],[.097,.0305],[.094,.0335],[.086,.047],[.096,.051],
+  const bronze = {color: '#9d7849', rough: .38, metal: .72, grain: 'turned'};
+  const dark = {color: '#3a3b37', rough: .8, metal: 0, glow: '#17130d'}, dial = {...dark, glow: '#3b3123'};
+  const heart = {color: '#4a4740', rough: .6, metal: 0, glow: '#85704f'};
+  const base = turned(a, [[.086,0],[.102,.006],[.108,.016],[.108,.025],[.097,.0305],[.094,.0335],[.086,.047],[.096,.051],
     [.098,.0555],[.098,.0585],[.091,.066],[.075,.066],[.073,.0685],[.062,.0685],[.056,.0685],[0,.0685]], 24,
-    k => k === 4 || k === 8 ? bronze : k >= 11 ? dark : stone, {segment: 13, count: 20, finish: bronze});
-  const cloud = new THREE.Group(); cloud.position.y = .228; group.add(cloud);
-  const r = .031, unit = .066;
+    k => k === 4 || k === 8 ? bronze : k === 14 ? heart : k === 13 ? dial : k === 12 ? dark : k === 11 ? {...dark, glow: null} : stone,
+    {segment: 13, count: 20, finish: bronze});
+  const cloud = new THREE.Group(); group.add(cloud);
+  // An unseen volume round the floating pieces catches the pointer between
+  // them, so hover holds while they drift. Its material is not drawn (no
+  // draw call, no shadow), but a raycast still meets the mesh.
+  const reach = new THREE.Mesh(a.own(new THREE.CylinderGeometry(.112,.112,.29,12)),
+    a.own(new THREE.MeshBasicMaterial({visible: false})));
+  reach.position.y = .075 + .145; reach.name = 'Figma hover volume'; group.add(reach);
+  const r = .031, unit = .071, lift = .232;
   function logoShape(kind) {
     const s = new THREE.Shape();
-    if (kind === 'circle') { s.absarc(0,0,r,0,TAU,false); }
+    // Two half arcs, so the disc is sampled as finely as the D's curve.
+    if (kind === 'circle') { s.absarc(0,0,r,0,Math.PI,false); s.absarc(0,0,r,Math.PI,TAU,false); }
     else if (kind === 'lower') {
       s.moveTo(-r,r); s.lineTo(r,r); s.lineTo(r,0); s.absarc(0,0,r,0,-Math.PI,true); s.lineTo(-r,r);
     } else {
@@ -231,22 +338,29 @@ export function createFigmaObject(options = {}) {
     }
     s.closePath(); return s;
   }
+  const shared = {gleam: {value: -1}, bronze: {value: new THREE.Color('#a99060')}};
+  const kinds = {circle: 0, left: 1, right: 2, lower: 3};
+  // [shape, colour, slot x, slot y, landing order, depth apart]: they land
+  // row by row from the top, the blue eye last. Apart, each column's pieces
+  // keep to alternate depths and never meet. Figma's colours, but the purple (#a259ff) and the blue
+  // (#1abcfe) lean bluer, or the nook's warm lamp turns them pink and teal.
   const specs = [
-    ['left','#f24e1e',-.5,1], ['right','#ff7262',.5,1],
-    ['left','#a259ff',-.5,0], ['circle','#1abcfe',.5,0], ['lower','#0acf83',-.5,-1],
+    ['left','#f24e1e',-.5,1,0,.02], ['right','#ff7262',.5,1,1,-.01],
+    ['left','#8a4dff',-.5,0,2,-.022], ['circle','#1a8cff',.5,0,4,.014], ['lower','#0acf83',-.5,-1,3,.022],
   ];
-  const pieces = specs.map(([kind,color,x,y],i) => {
-    const finish = a.own(new THREE.MeshPhysicalMaterial({color, metalness: .42, roughness: .34,
-      clearcoat: .38, clearcoatRoughness: .28, emissive: color, emissiveIntensity: .05}));
+  const pieces = specs.map(([kind,color,x,y,order,depth],i) => {
+    const slot = new THREE.Vector2(x*unit, y*unit);
+    const finish = enamelMaterial(a, color, {kind: kinds[kind], seed: 3.7 + i*17.31, slot}, shared);
     const piece = mesh(enamelGeometry(logoShape(kind)), finish, cloud);
     piece.name = `Figma inlay ${i + 1}`;
-    return {piece, x:x*unit, y:y*unit, phase:i*1.61};
+    return {piece, slot, order, depth, phase: i*1.61, s: 0, v: 0};
   });
   const cameraPosition = new THREE.Vector3();
-  let facing = 0;
+  let facing = 0, since = 0, wasAwake = false, gleam = -1;
   function update(time, delta) {
     const s = a.step(time,delta); if (!s) return;
-    const {t,dt,hover:h,reduced} = s;
+    const {t,dt,hover:h,awake,reduced} = s;
+    if (awake !== wasAwake) { wasAwake = awake; since = 0; } else since += dt;
     if (options.camera) {
       options.camera.getWorldPosition(cameraPosition);
       group.updateWorldMatrix(true,false); group.worldToLocal(cameraPosition);
@@ -255,19 +369,46 @@ export function createFigmaObject(options = {}) {
       if(reduced||Math.abs(shortest)<.0001)facing=desired;
       else facing += shortest * (1-Math.exp(-dt*5));
     }
-    cloud.rotation.y = facing + (reduced ? 0 : .16*Math.sin(t*.36))*(1-h);
-    cloud.rotation.z = reduced ? 0 : .035*Math.sin(t*.43)*(1-h);
-    for (const {piece,x,y,phase} of pieces) {
-      const spread = reduced ? 0 : 1-h;
-      piece.position.set(x*(1+spread*.62)+spread*.008*Math.sin(t*.54+phase),
-        y*(1+spread*.24)+spread*.009*Math.sin(t*.75+phase),
-        spread*(.014*Math.cos(t*.46+phase)));
-      piece.rotation.set(spread*.18*Math.sin(t*.43+phase), spread*.34*Math.sin(t*.39+phase+1),
-        spread*.15*Math.sin(t*.47+phase));
+    const drift = reduced ? 0 : 1;
+    cloud.rotation.y = facing + drift*.16*Math.sin(t*.36)*(1-h);
+    cloud.rotation.z = drift*.035*Math.sin(t*.43)*(1-h);
+    cloud.position.y = lift + drift*(.0045-.0025*h)*Math.sin(t*.9);
+    let home = true;
+    for (const p of pieces) {
+      // Each piece is a damped spring toward its slot, a little under
+      // critical so it overshoots once and settles: the snap. On hover they
+      // start one after another; let go, they leave almost together.
+      const goal = awake ? +(since >= p.order*.085) : +(since < (4-p.order)*.03);
+      if (reduced) { p.s = 1; p.v = 0; }
+      else for (let left = dt; left > 1e-6; left -= 1/120) {
+        const step = Math.min(left, 1/120);
+        p.v += (110*(goal-p.s) - 14*p.v)*step; p.s += p.v*step;
+      }
+      const q = clamp(p.s,0,1), apart = 1-q, loose = apart*apart, seat = p.s-q, {x,y} = p.slot, k = p.phase;
+      // Apart, each drifts on two slow, unrelated swells per axis, a little
+      // below its place. Coming in, it rises into its slot and squares up
+      // well before it arrives (loose falls faster than apart), so it never
+      // grazes a neighbour already home; the overshoot past the slot tips it
+      // back a little as it seats.
+      p.piece.position.set(
+        x*(1+apart*.62) + loose*(.008*Math.sin(t*.54+k) + .003*Math.sin(t*1.27+k*2)),
+        y*(1+apart*.32) - apart*.012 + loose*(.0045*Math.sin(t*.75+k) + .0015*Math.sin(t*1.61+k)),
+        apart*p.depth + loose*.004*Math.cos(t*.46+k) + seat*.05);
+      p.piece.rotation.set(loose*.14*Math.sin(t*.43+k) - seat*1.6, loose*.3*Math.sin(t*.39+k+1),
+        loose*.12*Math.sin(t*.47+k));
+      if (p.s < .985 || Math.abs(p.v) > .3) home = false;
     }
+    // The click: once the last piece is home, a gleam crosses the logo.
+    if (!awake || reduced) gleam = -1;
+    else if (gleam < 0 && home) gleam = 0;
+    else if (gleam >= 0 && gleam < 1) gleam = Math.min(1, gleam + dt/.75);
+    shared.gleam.value = gleam >= 0 && gleam < 1 ? gleam : -1;
+    base.material.emissiveIntensity = 1 + .6*h;
   }
   update(0,0);
-  group.userData.footprint = {width:.24,depth:.22,height:.35};
+  // Measured over 90 s of float and 120 random hovers: the pieces reach
+  // .363 m and .108 m to either side; the pedestal is .216 m across.
+  group.userData.footprint = {width:.24,depth:.22,height:.37};
   return {group,update,setHover:a.setHover,dispose:a.dispose};
 }
 

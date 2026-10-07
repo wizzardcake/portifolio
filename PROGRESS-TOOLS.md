@@ -194,3 +194,104 @@ grain.
   before and after shots taken at different moments differ in hue.
 - **The glyph points** are sized from half the canvas height, not the camera
   lens. Their size in the room was not checked; Phase 3 redesigns them.
+
+## Phase 3: Elevate, one object at a time
+
+### Testing under the room's light
+
+The preview got a **Room light** mode (`setLighting('room')`, `roomView()`):
+- the nook's lamp exactly as `room-scene.js` hangs it: `#ffb468`, 11 cd,
+  7.5 m, no shadow, about 0.62 m in front of the shelf and 6 cm above it;
+- the room's own hemisphere and ambient;
+- the nook's pale back wall close behind the shelf;
+- the room's frontal shelf camera (72°).
+
+What it showed (`verification/tools-v2/room-baseline/`):
+- The lamp is strong at that distance. Saturated colours wash out to
+  pastel.
+- It hangs level with the shelf, so it never lights a top face. The
+  Figma pedestal's dial went pitch black.
+
+### Figma: champlevé enamel
+
+**Enamel.** Each piece is now a brass blank whose face holds a cell of fired
+glass. All of it is worked out in the shader from the face's own (x, y), so
+it does not depend on tessellation:
+- the distance to the outline gives a 1.3 mm brass lip and a meniscus
+  groove where the glass meets it;
+- the glass rises from the lip into a shallow cabochon (one smooth bowl,
+  with no creases from the shape's inner ridges);
+- thin glass by the lip is paler and the middle deeper;
+- noise adds a slow swell, fine orange peel, light mottling and the odd
+  fired-in speck;
+- the glass's only gloss is its clear coat. A rough body gloss bloomed into
+  a white face under the lamp.
+
+**Colour.** Figma's colours are deepened (×0.24) to hold their saturation
+under the lamp. Purple and blue lean bluer (`#8a4dff`, `#1a8cff`), or the
+warm light turns them pink and teal. In studio light they read as deep jewel
+tones.
+
+**Geometry.**
+- Slabs are thinner: 2.0 cm instead of 3.6 cm.
+- Faces are flat. The cap is no longer subdivided; the shader gives the
+  relief.
+- The disc is sampled as finely as the D curves.
+- Normals are smoothed round the bevel and the curves but stay crisp at
+  sharp corners.
+- The bevel's first ring keeps the face's normal, so there is no seam.
+
+**Assembly.**
+- Each piece is a damped spring, a little under critical (one 6 %
+  overshoot). The overshoot tips the piece back a hair as it seats.
+- On hover the pieces land row by row from the top, 85 ms apart, with the
+  blue eye last.
+- When the last is home, a narrow gleam runs down the logo's diagonal,
+  mostly on the brass.
+- Let go, they leave almost together.
+
+**Float.**
+- Apart, each piece drifts on two unrelated swells per axis, at its own
+  depth, a little below its slot.
+- Coming in, it squares up before it arrives and rises into place.
+- A numeric test in the preview checks for interpenetration: 90 s idle, 6
+  hover cycles and 120 random hover toggles, 4,311 samples, **0 contacts**.
+  The first version grazed 2 mm, then 0.7 mm.
+
+**Pedestal.** The nook's lamp cannot reach the top, so the dial lights from
+within: a warm glow rising toward the centre, brighter on hover.
+
+**Hover volume.** An unseen cylinder round the pieces (material not drawn:
+no draw call, no shadow) catches the pointer between them. Before, pointing
+at the cloud's middle missed, and the check's real-mouse test failed on it.
+
+| Figma | Before | After |
+| --- | --- | --- |
+| Triangles drawn | 3,016 | 2,476 |
+| Draw calls | 6 | 6 |
+| Owned resources | 14 | 17 (glow map, hover volume) |
+
+The hover volume's 48 triangles are never drawn.
+
+**Verified:**
+- Screenshots in `verification/tools-v2/`, all in both lights:
+  - `figma-1` to `figma-5`;
+  - `figma-sweep` and `figma-palette-1` (colour depth);
+  - `figma-3-motion` and `figma-4-motion-studio` (assembly frames every
+    0.15 s, gleam, release).
+- The collision test passes.
+- `node tests/shelf-tools-check.mjs --round=figma-enamel` passes:
+  - hover hits all three;
+  - reduced motion is static (the logo assembled, no gleam);
+  - every resource is disposed once;
+  - no lights, no console errors.
+
+**Not verified:**
+- How the motion feels in real time. I saw stills, not motion.
+- How it looks in the actual room (only the preview's copy of its light).
+
+**Weak points:**
+- In studio light the purple and blue are dark.
+- In the room the blue reads teal-blue, not Figma's cyan.
+- The glowing dial is an invention: it is there because the room's lamp
+  cannot light it.

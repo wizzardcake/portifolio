@@ -900,7 +900,7 @@ export function createGrimoireObject(options = {}) {
   return {group,update,setHover:a.setHover,dispose:a.dispose};
 }
 
-/** Bronze-mounted glass with one small analytic mist shader, no raymarch. */
+/** Bronze-mounted glass holding a turning mist, marched as the room's orb is. */
 export function createCrystalBallObject(options = {}) {
   const a=artifact('AI / nebula crystal',options),{group,mesh,material}=a;
   const bronze=material({color:'#80613e',metalness:.76,roughness:.36});
@@ -925,64 +925,106 @@ export function createCrystalBallObject(options = {}) {
   }
   mesh(merged(ornament),bronze);mesh(merged(gems),inlay);
 
-  // One sphere is both the glass and the mist inside it: the shell's veil,
-  // rim and glint, and a sparse scatter of pinpricks, are part of the same
-  // shader rather than a transparent second sphere and 27 tiny ones.
+  // One sphere is the glass and the mist inside it, marched as the room's
+  // orb is (portal-orb-material.js), in its palette: refracted in, the eye
+  // crosses a mist sphere 10% smaller than the ball in ten steps. Layers
+  // turn about the vertical at different rates; the mist absorbs, its veins,
+  // pockets and teal heart glow, so what is near hides what is far and the
+  // depth moves as the eye does. The glints and the rim's wrap of light come
+  // from the scene's own lights, so the nook's lamp shows in the glass;
+  // where the eye passes through glass alone, the ball turns clear.
   const mist=a.own(new THREE.ShaderMaterial({
-    uniforms:{uTime:{value:0},uHover:{value:0},uSpark:{value:0}},
-    vertexShader:`varying vec3 vLocal; varying vec3 vWorld; varying vec3 vNormal; varying vec3 vEye;
-      void main(){vLocal=position/.105; vec4 w=modelMatrix*vec4(position,1.);vWorld=w.xyz;
-      vec3 eye=cameraPosition-w.xyz;vEye=vec3(dot(eye,modelMatrix[0].xyz),dot(eye,modelMatrix[1].xyz),dot(eye,modelMatrix[2].xyz));
-      vNormal=normalize(mat3(modelMatrix)*normal);gl_Position=projectionMatrix*viewMatrix*w;}`,
-    fragmentShader:`precision highp float;
-      uniform float uTime; uniform float uHover; uniform float uSpark; varying vec3 vLocal; varying vec3 vWorld; varying vec3 vNormal; varying vec3 vEye;
+    uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,{uTime:{value:0},uSwirl:{value:0},uHover:{value:0}}]),
+    lights:true,transparent:true,
+    vertexShader:`varying vec3 vLocal; varying vec3 vEye; varying vec3 vViewPosition; varying vec3 vViewNormal;
+      void main(){
+        vLocal=position/.105; vec4 w=modelMatrix*vec4(position,1.);
+        vec3 eye=cameraPosition-w.xyz;
+        vEye=vec3(dot(eye,modelMatrix[0].xyz),dot(eye,modelMatrix[1].xyz),dot(eye,modelMatrix[2].xyz));
+        vec4 mv=viewMatrix*w; vViewPosition=-mv.xyz; vViewNormal=normalize(normalMatrix*normal);
+        gl_Position=projectionMatrix*mv;
+      }`,
+    fragmentShader:`#include <common>
+      #include <lights_pars_begin>
+      uniform float uTime; uniform float uSwirl; uniform float uHover;
+      varying vec3 vLocal; varying vec3 vEye; varying vec3 vViewPosition; varying vec3 vViewNormal;
       float hash(vec3 p){p=fract(p*vec3(.1031,.103,.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}
       float noise3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
         return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
         mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);}
-      mat2 turn(float a){return mat2(cos(a),-sin(a),sin(a),cos(a));}
+      vec3 spin(vec3 p,float a){float c=cos(a),s=sin(a);return vec3(c*p.x+s*p.z,p.y,-s*p.x+c*p.z);}
       void main(){
-        vec3 N=normalize(vNormal),V=normalize(cameraPosition-vWorld);
-        float ndv=clamp(dot(N,V),0.,1.),rim=pow(1.-ndv,3.7);
-        vec3 p=vLocal-normalize(vEye)*ndv*.68; p.xz=turn(uTime*.16+p.y*.8)*p.xz;
-        // Three warped noise fields sampled once each, projected through a
-        // curved lens. This is an impression of depth, not a volume marcher.
-        float broad=noise3(p*2.7+vec3(0.,uTime*.07,0.));
-        vec3 q=p*4.4+vec3(broad*1.8,-uTime*.12,broad);
-        float fine=noise3(q);
-        float distant=noise3(p*5.7+vec3(2.,uTime*.035,1.));
-        float cloud=smoothstep(.28,.79,broad*.62+fine*.38);
-        float filament=pow(1.-abs(fine*2.-1.),10.)*smoothstep(.32,.75,broad);
-        float core=pow(ndv,4.)*.24;
-        vec3 teal=vec3(.018,.28,.24),violet=vec3(.16,.035,.30);
-        vec3 hue=mix(teal,violet,smoothstep(-.5,.6,p.x+p.y*.45+broad*.4));
-        vec3 color=vec3(.004,.012,.017)+hue*(cloud*.58+filament*.16+core+distant*.11)*smoothstep(0.,.6,ndv)*(1.+uHover*.38);
-        color+=vec3(.08,.39,.31)*core+mix(teal,violet,.55)*rim*.31;
-        // The glass over it holds back a little of the mist and adds a faint
-        // pale veil. The mist fills a sphere 6% smaller than the glass, so
-        // near the outline the eye sees through glass alone: there the ball
-        // turns clear (cos 0.33 = the inner sphere grazed), the thickness of the shell.
-        float filled=smoothstep(.28,.38,ndv);
-        color=mix(vec3(.05,.08,.08)+rim*vec3(.30,.40,.38),color*.82+vec3(.72,.84,.81)*.008,filled);
-        float glint=pow(max(dot(reflect(-V,N),normalize(vec3(-.5,.8,1.))),0.),190.);
-        color+=vec3(1.,.82,.61)*glint*.6;
-        // Pinpricks on the inner glass, twinkling a little.
-        vec3 cell=floor(vLocal*9.),f=fract(vLocal*9.)-.5;float h=hash(cell+7.);
-        color+=vec3(.55,.86,.81)*step(.93,h)*smoothstep(.16,0.,length(f))*(.75+.25*sin(uSpark+h*40.));
-        gl_FragColor=vec4(color,mix(.24,1.,filled));
+        vec3 P=vLocal,N=normalize(P),V=normalize(vEye);
+        float ndv=clamp(dot(N,V),0.,1.),edge=1.-ndv,fresnel=.04+.96*pow(edge,5.);
+        vec3 rd=refract(-V,N,.72); if(dot(rd,rd)<.01) rd=-V;
+        float b=dot(P,rd),disc=b*b-(dot(P,P)-.81);
+        vec3 hueA=vec3(.04,.34,.31),hueB=vec3(.24,.12,.50),heartColor=vec3(.14,.82,.64);
+        vec3 inner=vec3(0.); float T=1.;
+        if(disc>0.){
+          float root=sqrt(disc),s0=-b-root,dt=root*.2;
+          for(int i=0;i<10;i++){
+            vec3 q=(P+rd*(s0+(float(i)+.5)*dt))/.9;
+            float r=length(q);
+            vec3 a=spin(q,uSwirl*(1.35-r*.6)+r*1.6),w=spin(q,-uSwirl*.55+2.1);
+            float cloud=noise3(a*2.2+vec3(0.,0.,uTime*.05))*.65+noise3(w*4.1-vec3(uTime*.04,0.,0.))*.35;
+            float dens=smoothstep(.35,.75,cloud);
+            // Currents run only where a slow, larger field lets them.
+            float current=smoothstep(.4,.75,noise3(w*.9+vec3(-uTime*.02,.6,uTime*.015)));
+            float vein=pow(1.-abs(noise3(a*2.4+vec3(1.7,-uTime*.035,.4))*2.-1.),12.)*current;
+            float pocket=smoothstep(.62,.9,noise3(w*1.25+vec3(uTime*.03,1.1,-uTime*.02)));
+            float heart=exp(-r*r*7.);
+            vec3 hue=mix(hueA,hueB,smoothstep(-.55,.55,a.x+.35*a.y));
+            vec3 glow=hue*(dens*.02+vein*(.55+.3*uHover)+pocket*.16)+heartColor*heart*(.5+.5*uHover);
+            inner+=T*glow*dt*2.2;
+            T*=exp(-(.5+dens*3.)*dt);
+          }
+        }
+        // Past the mist, the far side of the glass: dark, a little warm below.
+        inner+=T*mix(vec3(.006,.008,.009),vec3(.016,.012,.008),smoothstep(.3,-.6,rd.y));
+        float filled=smoothstep(0.,.04,disc);
+        // The skin, in view space.
+        vec3 Nv=normalize(vViewNormal),Vv=normalize(vViewPosition),R=reflect(-Vv,Nv);
+        vec3 glints=vec3(0.),wrap=vec3(0.),sky=vec3(.006,.007,.009);
+        #if NUM_POINT_LIGHTS > 0
+        PointLight lamp;
+        // three.js unrolls this loop by copying its body; the inner block
+        // keeps each copy's locals to itself.
+        #pragma unroll_loop_start
+        for(int i=0;i<NUM_POINT_LIGHTS;i++){{
+          lamp=pointLights[ i ];
+          vec3 toLight=lamp.position+vViewPosition;float d=length(toLight);vec3 L=toLight/d;
+          vec3 C=lamp.color*getDistanceAttenuation(d,lamp.distance,lamp.decay);
+          float nh=max(dot(Nv,normalize(L+Vv)),0.);
+          glints+=mix(C,vec3(dot(C,vec3(.333))),.55)*(pow(nh,1200.)*2.2+pow(nh,90.)*.12+pow(nh,16.)*.003);
+          wrap+=C*pow(edge,4.5)*smoothstep(-.1,.6,dot(Nv,L))*max(0.,.5-.5*dot(L,Vv));
+        }}
+        #pragma unroll_loop_end
+        #endif
+        #if NUM_HEMI_LIGHTS > 0
+        #pragma unroll_loop_start
+        for(int i=0;i<NUM_HEMI_LIGHTS;i++){
+          sky+=mix(hemisphereLights[ i ].groundColor,hemisphereLights[ i ].skyColor,dot(R,hemisphereLights[ i ].direction)*.5+.5)*.25;
+        }
+        #pragma unroll_loop_end
+        #endif
+        vec3 skin=glints*.06+sky*fresnel+wrap*.02;
+        // The heart's light gathers along the inner edge: teal one side, violet the other.
+        skin+=mix(vec3(.006,.05,.042),vec3(.035,.016,.075),smoothstep(-.6,.6,N.x))*pow(edge,4.)*(2.2+1.4*uHover);
+        vec3 color=mix(vec3(.055,.085,.082)*.35,inner,filled)*(1.-fresnel)+skin;
+        gl_FragColor=vec4(color,mix(.42,1.,filled));
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
-    transparent:true,
   }));
   const center=.211;
   const globe=mesh(new THREE.SphereGeometry(.105,32,18),mist);globe.position.y=center;globe.name='glass and mist';
-  let swirl=0;
+  // The mist turns slowly about the vertical, three times as fast awake;
+  // its drift runs on its own clock.
+  let swirl=0,drift=0;
   function update(time,delta) {
     const s=a.step(time,delta);if(!s)return;
-    if(!s.reduced)swirl+=s.dt*(1+s.hover*2.1);
-    mist.uniforms.uTime.value=swirl;mist.uniforms.uHover.value=s.hover;
-    mist.uniforms.uSpark.value=s.reduced?0:s.t*1.2;
+    if(!s.reduced){swirl+=s.dt*(.16+.34*s.hover);drift+=s.dt*(1+s.hover*2.1);}
+    mist.uniforms.uSwirl.value=swirl;mist.uniforms.uTime.value=drift;mist.uniforms.uHover.value=s.hover;
   }
   update(0,0);
   group.userData.footprint={width:.23,depth:.23,height:.316};

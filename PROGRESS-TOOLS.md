@@ -374,3 +374,56 @@ The hover volume's 48 triangles are never drawn.
 - From the room's distance the writing is a blue texture, not text.
 - The lifted words are small there.
 - The parchment turns quite orange under both warm lights.
+
+### Crystal: mist inside glass
+
+**The mist.** The single sphere's shader is now marched as the room's orb
+is (`portal-orb-material.js`), in its palette:
+- teal `(.04,.34,.31)` and violet `(.24,.12,.50)` mist, with a teal-green
+  heart `(.14,.82,.64)`;
+- a teal↔violet glow gathered along the inner edge;
+- dark teal glass.
+
+**How it is marched.**
+- The view refracts into the glass and crosses a mist sphere 10 %
+  smaller than the ball, in ten steps.
+- The mist's layers turn about the vertical at different rates. The mist
+  absorbs light, while its veins (currents, only where a larger field lets
+  them run), pockets and heart glow.
+- What is near hides what is far, and the depth shifts with the eye: two
+  views of the same instant from nearby angles differ inside, not only on
+  the surface (`studio-closeup-a/-b`).
+- Where the eye passes through glass alone, near the outline, the ball
+  turns clear.
+- The old shader was a surface pattern of three noise samples: a marble.
+
+**Light.**
+- The glints and the rim's wrap of light come from the scene's own lights
+  (`lights: true`; point lights and hemisphere). The nook's lamp shows as a
+  warm glint low on the lamp's side; the studio's key shows high on its
+  side. The old glint was a fixed white blob.
+- The interior is self-lit, so it looks the same under both lights.
+  Checked at one instant in both (`crystal-ab`).
+- Hover turns the mist three times as fast; the veins and the heart
+  brighten.
+- The unrolled light loop's body has a block of its own. three.js copies
+  the body per light, and the first build failed on redefined locals.
+
+**Cost.**
+- Geometry is unchanged: 2,696 triangles, 4 draw calls.
+- The fragment work is higher: ten steps of five noise lookups, only over
+  the ball's pixels.
+- The preview stays at 60 fps (see Phase 4).
+
+**Verified:**
+- Screenshots in `verification/tools-v2/`: `crystal-1`, `crystal-2` and
+  `crystal-ab`, studio and room light, close-ups and the room's view.
+- `node tests/shelf-tools-check.mjs --round=crystal-marched` passes.
+
+**Not verified:**
+- The swirl in real time. I saw stills.
+- The full room's frame rate with the march.
+
+**Weak points:**
+- The base is unchanged and still a little busy with wires.
+- At hover the heart can become one broad teal glow.

@@ -48,6 +48,7 @@ Add this import to `room-scene.js` when integrating:
 
 ```js
 import {createFigmaObject, createGrimoireObject, createCrystalBallObject} from './tools-shelf.js';
+import {createShelfSound} from './tools-sound.js';
 ```
 
 Inside `if (renderer)`, **after the existing `stillMotion` declaration and before
@@ -59,7 +60,8 @@ shelfRoot.name = 'physical shelf tools';
 shelfRoot.position.set(-2.72, 1.4375, -.25);
 shelfRoot.rotation.y = Math.PI / 2; // local +Z faces into the room (+X)
 shell.add(shelfRoot);             // do not subtract placement.forward again
-const toolOptions = {camera, reducedMotion: () => stillMotion.matches};
+const shelfSound = createShelfSound(); // silent until the corner toggle turns it on
+const toolOptions = {camera, reducedMotion: () => stillMotion.matches, sound: shelfSound};
 const shelfTools = [createFigmaObject(toolOptions),
   createGrimoireObject(toolOptions), createCrystalBallObject(toolOptions)];
 shelfTools.forEach((tool, i) => {
@@ -160,6 +162,7 @@ On host teardown:
 ```js
 shelfEvents.abort();
 shelfTools.forEach(t => t.dispose());
+shelfSound.dispose();
 shelfRoot.removeFromParent();
 ```
 
@@ -167,6 +170,37 @@ shelfRoot.removeFromParent();
   lights, or Three.js's shared sprite quad.
 - After disposing all three, the renderer's geometry, texture and program
   counts fall back to the host's own (checked in the preview).
+
+## Sound
+
+`tools-sound.js` makes every sound with Web Audio alone: no files.
+
+**What sounds, and when:**
+- **Figma:** each piece rings a small glass tink as it lands, a rising
+  pentatonic with the blue eye highest. A soft chord sounds with the gleam,
+  and a breath of air when the pieces part.
+- **The book:** a page stirs as it wakes and settles when it is let go;
+  each stir is a little different.
+- **The crystal:** a low hum swells and fades with hover.
+
+Under reduced motion, nothing that moves makes a sound. The crystal's hum
+still follows hover.
+
+**The user's condition: a clear on/off icon in the top right corner.**
+Sound may only be added with it. Mount one in the room's top right, as
+`tools-preview.html` does (`#sound`):
+- off by default;
+- `aria-pressed`, with an `aria-label` that says the state and the action;
+- the visitor's choice remembered in `localStorage`, inside `try`.
+
+**Start audio only from a click.** Call `shelfSound.setEnabled(true)` from
+the toggle's click: browsers refuse to start audio before a user gesture,
+and an early `AudioContext` logs a console warning. If the remembered
+choice is on, wait for the first `pointerdown` before enabling. Turning it
+off suspends the context, so it costs nothing.
+
+**For checks:** `counts` records every cue and `levels` the last level
+held, whether sound is on or not.
 
 ## Lighting and materials
 
@@ -223,7 +257,8 @@ URL.
   - **Hover all**;
   - **Room light**: the nook's lamp, the room's hemisphere and ambient, and
     the frontal shelf view at 72°;
-  - **Reduce motion**.
+  - **Reduce motion**;
+  - the round sound icon in the top right corner, off by default.
 - No downloads are needed.
 
 **Running the checks.** `node tests/shelf-tools-check.mjs` runs the

@@ -500,3 +500,55 @@ The user asked for Figma's colours to come closer to the official ones.
   pastel under the lamp.
 - Result: `verification/tools-v2/figma-6-official/`.
 - `node tests/shelf-tools-check.mjs --round=figma-official` passes.
+
+## After the report: sound, with a corner toggle
+
+The user said yes to sound, on one condition: a clear on/off icon in the
+top right.
+
+**The module.** `tools-sound.js` builds every sound with Web Audio; there
+are no files. The factories take it as `options.sound`:
+
+| Object | Sounds |
+| --- | --- |
+| Figma | Each piece rings a small glass tink as it lands: a rising pentatonic, G6 to E7, with the blue eye highest. A soft chord with the gleam. A breath of air when the pieces part. |
+| Grimoire | A page stirs as it wakes and settles when it is let go: crinkled noise with crackles, each stir a little different. |
+| Crystal | A low hum (a root, its fifth and a slightly sharp octave, on a slow tremolo, with moving air) swells and fades with hover. |
+
+Under reduced motion, nothing that moves sounds.
+
+**The toggle.** The preview has a round speaker icon in the top right
+corner:
+- off by default;
+- `aria-pressed` and a state-and-action label;
+- the choice remembered.
+
+Audio starts only from a click. A remembered "on" waits for the first one.
+
+**Verification.** I cannot hear, so:
+1. **Offline.** Each sound and each real event sequence was rendered
+   offline, from fresh copies of the objects with a recording stand-in for
+   the engine, so the times are their own: tinks at 0.50, 0.60, 0.68, 0.75
+   and 0.83 s, the gleam at 0.92 s.
+2. **Levels.** Peaks run from −16 to −34 dBFS, with nothing clipped.
+3. **The first rustle was too regular.** It was evenly spaced grains, a
+   zipper rather than paper; it was rebuilt as crinkled noise. The two
+   quietest cues (−40 and −52 dB) were lifted to about −31 and −34 dB.
+4. **Live.** A real click on the icon gives a running context. Hovering
+   gives 5 tinks, the chord, a part, a wake and a settle. A second click
+   suspends the context.
+5. **Clean.** The icon does not collide with anything at 390 px. There are
+   no console errors or warnings. `node tests/shelf-tools-check.mjs
+   --round=sound` passes.
+
+**The evidence:**
+- WAV files to listen to in `verification/tools-v2/sound-2/`, with
+  `sound-strips.png` (waveform over spectrogram);
+- the icon in `verification/tools-v2/sound-toggle/`.
+
+**NOT audibly verified.** How the sounds actually sound, and how loud they
+feel, is for the user's ears.
+
+**On battery.** The laptop was on battery for this check: 49.5 fps, and
+frame times roughly doubled in every scene, sound off. It is a power cap,
+not the change; all scenes stay under 4 ms.

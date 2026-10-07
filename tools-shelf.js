@@ -291,7 +291,8 @@ function woodTexture(a, seed, size = 256) {
 }
 
 /** Five champlevé enamel pieces floating over a turned stone pedestal.
- * options: { reducedMotion?: boolean|()=>boolean, camera?: THREE.Camera }
+ * options: { reducedMotion?: boolean|()=>boolean, camera?: THREE.Camera,
+ *   sound?: createShelfSound() from tools-sound.js }
  * Pass the host camera to face the assembled logo toward it in local yaw.
  */
 export function createFigmaObject(options = {}) {
@@ -347,14 +348,18 @@ export function createFigmaObject(options = {}) {
     const finish = enamelMaterial(a, color, {kind: kinds[kind], seed: 3.7 + i*17.31, slot}, shared);
     const piece = mesh(enamelGeometry(logoShape(kind)), finish, cloud);
     piece.name = `Figma inlay ${i + 1}`;
-    return {piece, slot, order, depth, phase: i*1.61, s: 0, v: 0};
+    return {piece, slot, order, depth, phase: i*1.61, s: 0, v: 0, rang: false};
   });
   const cameraPosition = new THREE.Vector3();
   let facing = 0, since = 0, wasAwake = false, gleam = -1;
   function update(time, delta) {
     const s = a.step(time,delta); if (!s) return;
     const {t,dt,hover:h,awake,reduced} = s;
-    if (awake !== wasAwake) { wasAwake = awake; since = 0; } else since += dt;
+    if (awake !== wasAwake) {
+      // Let go, the pieces part with a breath of air.
+      if (!awake && !reduced && pieces.some(p => p.s > .5)) options.sound?.cue('enamel-part');
+      wasAwake = awake; since = 0;
+    } else since += dt;
     if (options.camera) {
       options.camera.getWorldPosition(cameraPosition);
       group.updateWorldMatrix(true,false); group.worldToLocal(cameraPosition);
@@ -391,10 +396,14 @@ export function createFigmaObject(options = {}) {
       p.piece.rotation.set(loose*.14*Math.sin(t*.43+k) - seat*1.6, loose*.3*Math.sin(t*.39+k+1),
         loose*.12*Math.sin(t*.47+k));
       if (p.s < .985 || Math.abs(p.v) > .3) home = false;
+      // Each landing rings once per hover, its own note; held still, the
+      // pieces never land, so they ring nothing.
+      if (!awake || reduced) p.rang = awake;
+      else if (!p.rang && p.s >= .985) { p.rang = true; options.sound?.cue('enamel-seat', {index: p.order}); }
     }
     // The click: once the last piece is home, a gleam crosses the logo.
     if (!awake || reduced) gleam = -1;
-    else if (gleam < 0 && home) gleam = 0;
+    else if (gleam < 0 && home) { gleam = 0; options.sound?.cue('enamel-gleam'); }
     else if (gleam >= 0 && gleam < 1) gleam = Math.min(1, gleam + dt/.75);
     shared.gleam.value = gleam >= 0 && gleam < 1 ? gleam : -1;
     base.material.emissiveIntensity = 1 + .6*h;
@@ -865,10 +874,13 @@ export function createGrimoireObject(options = {}) {
   glyphs.name='lifted blue glyphs';glyphs.visible=false;glyphs.frustumCulled=false;group.add(glyphs);
   const spots=[...L.spots.map(([u,v])=>[-1,u,v]),...R.spots.map(([u,v])=>[1,u,v])];
   const pick=n=>{const x=Math.sin(n)*43758.5453;return x-Math.floor(x);};
-  let read=0;
+  let read=0,wasAwake=false,turns=0;
   function update(time,delta) {
     const s=a.step(time,delta);if(!s)return;
     const {t,dt,hover:h,awake,reduced}=s;
+    // A page stirs as the book wakes, and settles when it is let go; each
+    // stir a little different.
+    if(awake!==wasAwake){wasAwake=awake;if(!reduced)options.sound?.cue(awake?'page-wake':'page-settle',{seed:++turns});}
     read=reduced?(awake?1.1:0):clamp(read+(awake?dt/2.4:-dt/1.2),0,1.1);
     glow.uWake.value=h;glow.uRead.value=read;glow.uTime.value=t;
     // The leaves stir at their fore-edges; awake, the right one lifts a
@@ -1026,8 +1038,10 @@ export function createCrystalBallObject(options = {}) {
     const s=a.step(time,delta);if(!s)return;
     if(!s.reduced){swirl+=s.dt*(.16+.34*s.hover);drift+=s.dt*(1+s.hover*2.1);}
     mist.uniforms.uSwirl.value=swirl;mist.uniforms.uTime.value=drift;mist.uniforms.uHover.value=s.hover;
+    // The glass hums as the mist wakes.
+    options.sound?.hold('crystal-hum',s.hover);
   }
   update(0,0);
   group.userData.footprint={width:.23,depth:.23,height:.316};
-  return {group,update,setHover:a.setHover,dispose:a.dispose};
+  return {group,update,setHover:a.setHover,dispose(){options.sound?.hold('crystal-hum',0);a.dispose();}};
 }

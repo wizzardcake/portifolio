@@ -129,6 +129,24 @@ Triangles and draw calls in that frame:
 Run-to-run noise is about ±0.3 ms. These are local preview measurements,
 not a whole-room or mobile benchmark.
 
+## Sound
+
+All sounds are Web Audio, built when they play; there are no files. The
+icon in the top right corner turns them on and off; they start off.
+
+**Offline.** Each sound, and each object's real event sequence, rendered
+offline:
+- WAV files and `sound-strips.png` (waveform over spectrogram) are in
+  `verification/tools-v2/sound-2/`;
+- peaks run from −16 to −34 dBFS;
+- nothing clips.
+
+**Live.** A real click turns the audio context on. Hovering all three
+counts the expected cues, and a second click suspends the context. The
+icon in both states is in `verification/tools-v2/sound-toggle/`.
+
+**NOT audibly verified:** I cannot hear them.
+
 ## Limits
 
 - **Room light.** The preview copies the nook's lamp, hemisphere and

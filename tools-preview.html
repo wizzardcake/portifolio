@@ -10,19 +10,27 @@
     *{box-sizing:border-box}body{margin:0;overflow:hidden}canvas{display:block;width:100vw;height:100vh;touch-action:none}
     header{position:absolute;top:36px;left:42px;pointer-events:none}small,.eyebrow{font:10px/1.5 system-ui,sans-serif;text-transform:uppercase;letter-spacing:3px;color:#ac8d61}
     h1{font-size:30px;font-weight:normal;letter-spacing:-.6px;margin:9px 0}header p{font:12px/1.6 system-ui,sans-serif;color:#a39b8e;margin:0;max-width:370px}
-    aside{position:absolute;top:37px;right:40px;display:flex;gap:7px;align-items:center;font:11px system-ui,sans-serif}
+    aside{position:absolute;top:37px;right:96px;display:flex;gap:7px;align-items:center;font:11px system-ui,sans-serif}
+    /* Sound: a clear on/off icon in the top right corner. */
+    #sound{position:absolute;top:31px;right:36px;width:46px;height:46px;padding:0;border-radius:50%;display:grid;place-items:center;border-width:1.5px}
+    #sound svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+    #sound[aria-pressed=false] .on,#sound[aria-pressed=true] .off{display:none}
+    #sound[aria-pressed=true]{color:#f6e0b8;border-color:#d1a964;background:#5a4a3080}
     button{font:inherit;color:#cabcaa;border:1px solid #67564266;background:#1b2020bd;padding:9px 13px;border-radius:3px;cursor:pointer}button:hover,button[aria-pressed=true]{color:#f0d9b4;border-color:#ae8d59;background:#48403180}
     button:focus-visible{outline:2px solid #68b9c4;outline-offset:3px}label{margin-left:12px;color:#a69d8e;display:flex;align-items:center;gap:5px}
     footer{position:absolute;bottom:31px;left:42px;right:42px;display:flex;justify-content:space-between;align-items:flex-end;pointer-events:none}
     #caption{max-width:380px}#caption h2{font-size:22px;font-weight:normal;margin:5px 0 8px}#caption p{font:12px/1.65 system-ui,sans-serif;color:#b0a391;margin:0}
     #instructions{font:11px/1.7 system-ui,sans-serif;text-align:right;color:#9b9285}#fps{color:#b89b72}
     #hover-state{display:block;margin-top:8px;color:#69bcbd;font:10px system-ui,sans-serif;letter-spacing:2px;text-transform:uppercase;min-height:12px}
-    @media(max-width:760px){header{top:23px;left:22px}h1{font-size:23px}header p{max-width:270px}aside{top:132px;left:22px;right:auto;flex-wrap:wrap}footer{left:22px;right:22px;bottom:22px}#instructions{max-width:110px}#caption{max-width:230px}#caption p{font-size:11px}label{margin-left:0}}
+    @media(max-width:760px){#sound{top:18px;right:18px}header{top:23px;left:22px}h1{font-size:23px}header p{max-width:270px}aside{top:132px;left:22px;right:auto;flex-wrap:wrap}footer{left:22px;right:22px;bottom:22px}#instructions{max-width:110px}#caption{max-width:230px}#caption p{font-size:11px}label{margin-left:0}}
   </style>
 </head>
 <body>
   <canvas id="preview" aria-label="Interactive three dimensional shelf. Drag to orbit and hover over an object."></canvas>
   <header><span class="eyebrow">The study / objects of the craft</span><h1>Three tools. Made tangible.</h1><p>Stone, parchment and glass, kept on a quiet shelf.</p></header>
+  <button id="sound" aria-pressed="false" aria-label="Sound is off. Turn sound on" title="Sound off">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path class="on" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"/><path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
+  </button>
   <aside aria-label="Preview controls">
     <button data-view="all" aria-pressed="true">Together</button>
     <button data-view="figma" aria-pressed="false">Figma</button>
@@ -39,6 +47,7 @@
   <script type="module">
     import * as THREE from './vendor/three/three.module.js';
     import {createFigmaObject,createGrimoireObject,createCrystalBallObject} from './tools-shelf.js';
+    import {createShelfSound} from './tools-sound.js';
 
     const canvas=document.querySelector('#preview');
     const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
@@ -49,7 +58,16 @@
     const camera=new THREE.PerspectiveCamera(38,innerWidth/innerHeight,.015,15);
     const media=matchMedia('(prefers-reduced-motion: reduce)'),still=document.querySelector('#still');still.checked=media.matches;
     media.addEventListener('change',()=>{still.checked=media.matches;});
-    const options={camera,reducedMotion:()=>still.checked};
+    // Sound is the visitor's choice: off until the corner button turns it on,
+    // and remembered. The browser only starts audio after a click, so a
+    // remembered 'on' waits for the first one.
+    const sound=createShelfSound(),soundButton=document.querySelector('#sound');
+    let soundOn=false;try{soundOn=localStorage.getItem('shelf-tools-sound')==='on';}catch{}
+    function showSound(){soundButton.setAttribute('aria-pressed',String(soundOn));soundButton.setAttribute('aria-label',soundOn?'Sound is on. Turn sound off':'Sound is off. Turn sound on');soundButton.title=soundOn?'Sound on':'Sound off';}
+    function setSound(on){soundOn=on;sound.setEnabled(on);showSound();try{localStorage.setItem('shelf-tools-sound',on?'on':'off');}catch{}}
+    soundButton.addEventListener('click',()=>setSound(!soundOn));
+    showSound();if(soundOn)addEventListener('pointerdown',()=>{if(soundOn&&!sound.enabled)sound.setEnabled(true);},{once:true});
+    const options={camera,reducedMotion:()=>still.checked,sound};
     const objects=[createFigmaObject(options),createGrimoireObject(options),createCrystalBallObject(options)];
     objects.forEach((object,i)=>{object.group.position.x=(i-1)*.48;scene.add(object.group);object.group.userData.toolIndex=i;});
 
@@ -145,7 +163,7 @@
       bounds(){return objects.map(o=>{const b=new THREE.Box3().setFromObject(o.group);return {name:o.group.name,min:b.min.toArray(),max:b.max.toArray(),size:b.getSize(new THREE.Vector3()).toArray()};});},
       point(i){const p=new THREE.Vector3(0,i===1?.11:.23,0);objects[i].group.localToWorld(p);p.project(camera);return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};},
       orbit(theta,phi){desired.theta=theta;desired.phi=phi;aim(true);},
-      setLighting,roomView,
+      setLighting,roomView,sound,setSound,
     };
   </script>
 </body>

@@ -1568,3 +1568,52 @@ and is one disc of 48 triangles per mark.
   - the shelf turned toward the room;
   - the logged presences and hovers.
 - All nine suites pass.
+
+### Stage 5: holistic pass
+
+**Phone portrait** (390×844, DPR 2, `verification/nav-10-portrait`):
+- **Shelf.** The walk follows the smoke past the nook. The portrait shelf
+  point stands 1.6 m further into the room to fit the nook's width, so the
+  walk ends with a step back while facing it: 8.2 s in all.
+- **Chair.** The chair's mark shows from the entry, and the walk looks down
+  at the chair, draws it in and sits.
+- **A fix.** The chair's target reached past the right edge there: the
+  chair stands out to the right, its ring beside it. Its centre was off
+  screen, so a click aimed at the middle hit nothing. Targets are now kept
+  to the viewport.
+
+**Reduced motion** (`verification/nav-11-reduced`):
+- Every move is at once.
+- At the shelf the entry's mark shows and the shelf's hides.
+- Seated, the chair stands square at (0, 1.54), every mark is gone, and the
+  view is at yaw 0, pitch 75.
+
+**Frame rate.** An A/B against `7f9764a` (1440×900, interleaved over two
+rounds, on mains power, fps):
+
+| View | `7f9764a`, round 1 | Final, round 1 | `7f9764a`, round 2 | Final, round 2 |
+| --- | --- | --- | --- | --- |
+| Entry, idle | 60.2 | 60.4 | 60.4 | 60.2 |
+| Real walk to the chair | 45.2 | 51.8 | 53.0 | 50.0 |
+| Seated | 60.2 | 60.2 | 60.2 | 60.2 |
+| Scripted walk | 51.2 | 51.0 | 53.6 | 48.6 |
+| Portal open | 60.4 | 60.0 | 60.2 | 60.2 |
+| Real walk to the shelf | 45.6 | 50.7 | 50.7 | 54.2 |
+| Shelf, idle | 60.2 | 60.2 | 60.0 | 60.4 |
+
+The room's budget is unchanged (26 calls and 9,971 triangles at the entry
+and the seat). The trails and marks draw on the foreground layer: three
+discs of 48 triangles.
+
+**Tests:** all nine suites pass on the final code, with no browser or
+shader errors.
+
+**Still weak:**
+- **Lighting.** The chair's resting place, the room's front right, is dark,
+  and the pushed-back chair is hard to read at the entry. This is for the
+  lighting pass the user plans.
+- **Length.** The walk from the shelf to the chair is long (9.2 s). It goes
+  back along the trunk to the fork, as the one-trail-with-a-branch design
+  asks.
+- **The shelf's mark** is hidden behind the table from the entry. It shows
+  once the walk is under way.

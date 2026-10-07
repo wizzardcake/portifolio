@@ -154,7 +154,10 @@
       left = Math.min(left, p.x); right = Math.max(right, p.x); top = Math.min(top, p.y); bottom = Math.max(bottom, p.y);
     }
     button.hidden = Math.min(right, innerWidth) - Math.max(left, 0) < 48 || Math.min(bottom, innerHeight) - Math.max(top, 0) < 48;
-    Object.assign(button.style, {left: left - 12 + 'px', top: top - 12 + 'px', width: right - left + 24 + 'px', height: bottom - top + 24 + 'px'});
+    // Kept to the viewport: what reaches past an edge (the chair standing
+    // out to the right, on a narrow screen) cannot be pointed at anyway.
+    const x0 = Math.max(0, left - 12), y0 = Math.max(0, top - 12), x1 = Math.min(innerWidth, right + 12), y1 = Math.min(innerHeight, bottom + 12);
+    Object.assign(button.style, {left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px'});
   }
   function placeEntryTargets() {
     if (!entryTargets || entryTargets.hidden) return;

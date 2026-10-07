@@ -109,8 +109,10 @@
   // ---- A leg's way: a smooth curve from one point's eye along the trails
   // (`paths`) to the other's. It takes the trunk's points between them; to
   // the seat, it takes the trunk to the fork, the branch, and the settle into
-  // the seat. Built once per leg, format and seat distance. at(progress)
-  // gives the eye and its heading and tilt:
+  // the seat. Built once for everything it is made from: the leg, the
+  // format, both ends' points, the paths and the pace, so a point tuned live
+  // (sceneCamera.shelf.wide = ...) takes effect. at(progress) gives the eye
+  // and its heading and tilt:
   // - the eye stays at standing height until the settle, then sinks into
   //   the seat;
   // - the eye looks `ahead` along the way, turning from the view it set off
@@ -118,10 +120,11 @@
   // - the chair is drawn in during the settle (`settle` 0..1).
   const ways = new Map();
   function way(name, format) {
-    const key = name + ':' + format + ':' + points.seated.position[2].toFixed(4);
+    const [from, to] = name.split('>');
+    const key = name + ':' + format + ':' + JSON.stringify([points[from], points[to], state.paths, state.pace]);
     if (ways.has(key)) return ways.get(key);
     if (ways.size > 12) ways.clear();
-    const [from, to] = name.split('>'), {trunk, fork, branch, sit} = state.paths, {pace} = state;
+    const {trunk, fork, branch, sit} = state.paths, {pace} = state;
     const start = aim(points[from]), end = aim(points[to]), xz = p => [p.position[0], p.position[2]];
     // Where a point lies along the trunk: segment index plus fraction.
     const along = ([x, z]) => {

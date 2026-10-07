@@ -85,6 +85,11 @@ try{
   for(const [view,...args] of views.filter(v=>['door-from-shelf','threshold'].includes(v[0]))){await pose(...args);door[view]=await evaluate(luminance);}
   const seen=door['door-from-shelf'];
   assert.ok(seen.nearJamb>seen.opening*3&&seen.farJamb>seen.opening*2&&seen.head>seen.opening*1.5,'From the shelf the doorway reads: both jambs and the head stand clear of the dark opening');
+  // The lantern's pattern reaches the floor before the door. While the gobo's
+  // rings were drawn round a fixed point in the image, a new aim put the
+  // shadow of the lantern's solid cap on the threshold (0.33x the opening).
+  const near=door.threshold;
+  assert.ok(near.threshold>near.opening*.5,'At the threshold the floor before the door catches the pattern: '+JSON.stringify(near));
   const audit=await evaluate(`(()=>{
     const lights=[];studyRoom.scene.traverse(o=>{if(o.isLight)lights.push({name:o.name,type:o.type,at:o.position.toArray(),intensity:o.intensity,shadow:o.castShadow,penumbra:o.penumbra});});
     return {stats:studyRoom.lamps.stats,values:studyRoom.lamps.values,lights,source:studyRoom.architecture.source,render:{...studyRoom.renderer.info.render},memory:{...studyRoom.renderer.info.memory}};})()`);

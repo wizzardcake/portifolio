@@ -363,48 +363,71 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
   addHalo(lanternCenter, door.color, door.halo, door.haloSize, pulse(door.level, door.breath));
 
   // Its light: the patterned spot, and the glow. The pattern is the
-  // lantern's piercing as the bulb sees it: rosettes of small holes in
-  // panels whose seams run toward the solid cap straight below.
+  // lantern's piercing as the bulb sees it: rings of motifs round the
+  // lantern's upright, in panels whose seams run down to the solid cap
+  // straight below. Each motif is placed by its direction from the bulb (how
+  // far from straight down, how far round) and drawn where the spot casts
+  // that direction, at the size it has there. So the rings stay level round
+  // the lamp whatever the aim: on the floor they circle its foot, on the
+  // walls they arc, and the cap's shadow falls right under it.
   const gobo = (() => {
-    const c = document.createElement('canvas'); c.width = c.height = 512;
+    const size = 512, c = document.createElement('canvas'); c.width = c.height = size;
     const g = c.getContext('2d');
-    g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 512, 512);
+    g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, size, size);
     g.fillStyle = '#ffffff';
-    const dot = (x, y, r) => { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); };
-    // Rings of motifs round the point the bulb sees straight down through
-    // (338 px down the image for this aim): dots, rosettes, eight-point stars
-    // and petals pointing outward, alternating band by band.
-    const [nx, ny] = [256, 338];
-    const rosette = (x, y, size, turn) => {
-      dot(x, y, size * .26);
-      for (let k = 0; k < 8; k++) {
-        const a = turn + k * Math.PI / 4;
-        g.beginPath(); g.ellipse(x + Math.cos(a) * size * .56, y + Math.sin(a) * size * .56, size * .26, size * .13, a, 0, Math.PI * 2); g.fill();
-      }
+    // The spot's view, as three.js frames it: toward the aim, the room's up.
+    const forward = new THREE.Vector3(...door.aim).sub(lanternCenter).normalize();
+    const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+    const up = new THREE.Vector3().crossVectors(right, forward);
+    const scale = size / 2 / Math.tan(door.angle), d = new THREE.Vector3(), deg = Math.PI / 180;
+    // Where the spot casts the direction `fall` from straight down, `round`
+    // about the upright (canvas px), if it is in front of the light.
+    const cast = (fall, round) => {
+      d.set(Math.sin(fall) * Math.cos(round), -Math.cos(fall), Math.sin(fall) * Math.sin(round));
+      const z = d.dot(forward);
+      return z > .2 ? [size / 2 + d.dot(right) / z * scale, size / 2 - d.dot(up) / z * scale] : null;
     };
-    const star = (x, y, size, turn) => {
-      g.beginPath();
-      for (let k = 0; k < 16; k++) { const a = turn + k * Math.PI / 8, r = k % 2 ? size * .22 : size * .52; g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
-      g.closePath(); g.fill();
+    // Draws in the direction's own angles (radians): x down the lantern
+    // (away from the cap), y round it.
+    const at = (fall, round, draw) => {
+      const p = cast(fall, round), f = cast(fall + .01, round), r = cast(fall, round + .01 / Math.sin(fall));
+      if (!p || !f || !r) return;
+      g.setTransform((f[0] - p[0]) / .01, (f[1] - p[1]) / .01, (r[0] - p[0]) / .01, (r[1] - p[1]) / .01, p[0], p[1]);
+      draw(); g.setTransform(1, 0, 0, 1, 0, 0);
     };
-    const petal = (x, y, size, a) => { g.beginPath(); g.ellipse(x, y, size * .5, size * .2, a, 0, Math.PI * 2); g.fill(); };
-    const bands = [[70, 'dots', 30, 5.2], [108, 'rosette', 12, 30], [150, 'dots', 52, 5.6], [192, 'star', 18, 34],
-      [238, 'petal', 34, 30], [286, 'rosette', 22, 38], [336, 'dots', 92, 6.4], [382, 'star', 30, 40],
-      [432, 'petal', 50, 36], [486, 'rosette', 34, 44], [540, 'dots', 140, 7], [592, 'star', 42, 46], [650, 'petal', 70, 42]];
-    for (const [radius, kind, count, size] of bands) for (let k = 0; k < count; k++) {
-      const a = (k + (radius / 70) % 1 * .5) / count * Math.PI * 2, x = nx + Math.cos(a) * radius, y = ny + Math.sin(a) * radius;
-      if (kind === 'dots') dot(x, y, size / 2);
-      else if (kind === 'rosette') rosette(x, y, size, a);
-      else if (kind === 'star') star(x, y, size, a);
-      else petal(x, y, size, a);
-    }
-    // The panel seams and the solid cap below (where the bulb looks straight
-    // down; about a third of the way up the image for this aim).
-    g.strokeStyle = '#0b0b0b'; g.lineWidth = 9;
+    const blob = (x, y, rx, ry, a) => { g.beginPath(); g.ellipse(x, y, rx, ry, a, 0, Math.PI * 2); g.fill(); };
+    const motifs = {
+      dots: s => blob(0, 0, s / 2, s / 2, 0),
+      rosette: s => {
+        blob(0, 0, s * .26, s * .26, 0);
+        for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; blob(Math.cos(a) * s * .56, Math.sin(a) * s * .56, s * .26, s * .13, a); }
+      },
+      star: s => {
+        g.beginPath();
+        for (let k = 0; k < 16; k++) { const a = k * Math.PI / 8, r = k % 2 ? s * .22 : s * .52; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+        g.closePath(); g.fill();
+      },
+      petal: s => blob(0, 0, s * .5, s * .2, 0),
+    };
+    // How far apart each kind sits round its ring, in motif sizes.
+    const spacing = {dots: 3.2, rosette: 1.9, star: 2, petal: 1.47};
+    // The rings: degrees from straight down, the motif, its size (degrees).
+    const rings = [[20, 'dots', 2], [29, 'rosette', 7.5], [38, 'dots', 2.2], [47, 'star', 10], [57, 'petal', 9],
+      [67, 'rosette', 8], [77, 'dots', 2.4], [86, 'star', 10], [95, 'petal', 9], [105, 'rosette', 8],
+      [115, 'dots', 2.4], [124, 'star', 10], [133, 'petal', 9], [143, 'rosette', 8]];
+    rings.forEach(([fall, kind, sizeDeg], i) => {
+      const count = Math.max(6, Math.round(Math.PI * 2 * Math.sin(fall * deg) / (spacing[kind] * sizeDeg * deg)));
+      for (let k = 0; k < count; k++) at(fall * deg, (k + (i % 2) * .5) / count * Math.PI * 2 + .2, () => motifs[kind](sizeDeg * deg));
+    });
+    // The panel seams, down to the solid cap, and the cap itself.
+    g.fillStyle = '#0b0b0b';
     for (let k = 0; k < 8; k++) {
-      const a = k * Math.PI / 4 + .2; g.beginPath(); g.moveTo(256, 338); g.lineTo(256 + Math.cos(a) * 800, 338 + Math.sin(a) * 800); g.stroke();
+      const round = k * Math.PI / 4 + .2 + Math.PI / 8;
+      for (let fall = 12; fall < 150; fall += 3) at(fall * deg, round, () => { g.fillRect(0, -1.3 * deg, 3.2 * deg, 2.6 * deg); });
     }
-    g.fillStyle = '#0b0b0b'; dot(256, 338, 44);
+    g.beginPath();
+    for (let k = 0; k <= 64; k++) { const p = cast(14 * deg, k / 64 * Math.PI * 2); if (p) g.lineTo(...p); }
+    g.closePath(); g.fill();
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     return t;
   })();

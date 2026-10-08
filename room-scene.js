@@ -1344,7 +1344,6 @@ if (renderer) {
     const x=(table.offsetLeft+table.clientWidth/2-view.width/2)/u;
     const z=(table.offsetTop+table.clientHeight/2-view.height/2)/u;
     artifact.update(shape,view);
-    document.getElementById('screen').classList.add('has-table-model');
     teal.position.x=-view.width/u*.44;purple.position.x=view.width/u*.44;
     Object.assign(drape,{hx:w/2,hz:d/2,x,z});
     const changed=ritualCloth.update(w,d);lay();
@@ -1395,6 +1394,10 @@ if (renderer) {
     camera.setViewOffset(innerWidth,innerHeight,0,innerHeight*.5-view.originY,innerWidth,innerHeight);
     camera.updateProjectionMatrix();camera.updateMatrixWorld();
     camera.layers.set(0);renderer.render(scene,camera);host.classList.add('is-ready');
+    // The table model now stands in the drawn room: the CSS table's top and
+    // feet step aside (until then they stand in for it, whole).
+    const screenEl=document.getElementById('screen');
+    if(!screenEl.classList.contains('has-table-model')) screenEl.classList.add('has-table-model');
     // The approach ends in this chair: the eye descends over its backrest into
     // the seat, and the chair slides out of frame on its own. Narrow viewports
     // must seat the camera further back to fit the table; there the chair

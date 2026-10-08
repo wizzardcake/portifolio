@@ -7,6 +7,9 @@ body.intro-active .intro-indicator { pointer-events: auto; }
 .room-shell:not(.is-ready) {
   background: linear-gradient(155deg,#292621,#151b25 48%,#292522);
 }
+/* Until its first frame the canvas is an opaque black buffer: keep it out of
+   sight while the shaders compile, so the gradient stays behind the table. */
+.room-shell:not(.is-ready) canvas { visibility: hidden; }
 .room-shell.room-fallback { background: url('./assets/room-fallback.svg') center / 100% 100% no-repeat; }
 .room-fallback canvas { display: none; }
 /* Transparent furniture layer over the CSS table and under the held cards. */

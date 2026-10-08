@@ -249,37 +249,48 @@
   const rings = [];
 
   let gl = null, program = null, uniforms = {};
+  // The shader compiles and links off the main thread (gl-link.js); until it
+  // is ready, and if it fails, the CSS surface stands in. At load the pond is
+  // covered by the cloth, so nothing shows the difference.
   function initialize() {
+    gl = null; water.live = false; layer.classList.remove('webgl');
+    let context = null;
+    const fail = error => {
+      console.warn('Portal surface uses a CSS fallback:', error.message);
+      gl = null; water.live = false; layer.classList.remove('webgl'); invalidate();
+    };
     try {
-      gl = canvas.getContext('webgl', {alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false});
-      if (!gl) throw new Error('WebGL unavailable');
+      context = canvas.getContext('webgl', {alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false});
+      if (!context) throw new Error('WebGL unavailable');
       const compile = (type, source) => {
-        const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader);
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {const reason = gl.getShaderInfoLog(shader); gl.deleteShader(shader); throw new Error(reason);}
+        const shader = context.createShader(type); context.shaderSource(shader, source); context.compileShader(shader);
         return shader;
       };
-      program = gl.createProgram();
-      const vs = compile(gl.VERTEX_SHADER, vertex), fs = compile(gl.FRAGMENT_SHADER, fragment);
-      gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program);
-      gl.deleteShader(vs); gl.deleteShader(fs);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
-      gl.useProgram(program);
-      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
-      const position = gl.getAttribLocation(program, 'position');
-      gl.enableVertexAttribArray(position); gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-      uniforms = Object.fromEntries(['uAspect','uTime','uWater','uRipples','uPull','uRippleSpeed','uShimmer','uRefraction',
-        'uCloudSpeed','uGlow','uThroat','uEye','uWindow','uStair','uLancet','uNook','uOrb','uOrbAt','uOrbGlow','uContact']
-        .map(key => [key, gl.getUniformLocation(program, key)]));
-      gl.clearColor(0, 0, 0, 0);
-      layer.classList.add('webgl');
+      const linking = context.createProgram();
+      const vs = compile(context.VERTEX_SHADER, vertex), fs = compile(context.FRAGMENT_SHADER, fragment);
+      context.attachShader(linking, vs); context.attachShader(linking, fs); context.linkProgram(linking);
+      context.deleteShader(vs); context.deleteShader(fs);
+      surfaceReady = window.linkProgramAsync(context, linking).then(() => {
+        gl = context; program = linking;
+        gl.useProgram(program);
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
+        const position = gl.getAttribLocation(program, 'position');
+        gl.enableVertexAttribArray(position); gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+        uniforms = Object.fromEntries(['uAspect','uTime','uWater','uRipples','uPull','uRippleSpeed','uShimmer','uRefraction',
+          'uCloudSpeed','uGlow','uThroat','uEye','uWindow','uStair','uLancet','uNook','uOrb','uOrbAt','uOrbGlow','uContact']
+          .map(key => [key, gl.getUniformLocation(program, key)]));
+        gl.clearColor(0, 0, 0, 0);
+        layer.classList.add('webgl'); water.live = true;
+        invalidate();
+      }, fail);
     } catch (error) {
-      console.warn('Portal surface uses a CSS fallback:', error.message);
-      gl = null; layer.classList.remove('webgl');
+      fail(error); surfaceReady = Promise.resolve();
     }
-    water.live = !!gl;
     invalidate();
   }
+  // Settles once the surface's shader is ready or has fallen back to CSS.
+  let surfaceReady = Promise.resolve();
 
   let clock = 0, last = 0, measured = -1e9, dirty = true, visible = true, active = false, raf = 0, frames = 0, movedAt = -1e9;
   let width = 1, height = 1, level = 3, orbCentre = null, orbUniform = [0, 0, 0];
@@ -458,6 +469,8 @@
   sync();
   // lights: where the room's lights stand (read-only), shared with the orb.
   window.portalSurface = {params, layer, water, splash, glsl: WATER, lights: LIGHTS,
+    // Settles once the shader has linked or the CSS surface has taken over.
+    get ready() {return surfaceReady;},
     get stats() {return {frames, active, live: !!gl, level, rings: rings.length,
       renderPixels: gl ? canvas.width * canvas.height : 0};}};
 })();

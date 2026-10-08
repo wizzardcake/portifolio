@@ -898,9 +898,11 @@ if (renderer) {
     s.globalCompositeOperation='source-atop';s.lineWidth=1.3;
     for(let i=-H,n=0;i<W;i+=3,n++){s.strokeStyle=n%2?'#ffffff1e':'#0000002e';s.beginPath();s.moveTo(i,0);s.lineTo(i+H*.55,H);s.stroke();}
     g.drawImage(stitch,0,0);
-    // Glow mask: the letters themselves, and a soft halo around them.
-    const sharp=layer(),halo=layer(),h=halo.getContext('2d');
-    letters(sharp.getContext('2d'),(c,line,x,y)=>{c.fillStyle='#fff';c.fillText(line,x,y);});
+    // Glow mask: the letters themselves, and a soft halo around them. Both are
+    // read back below, so they are CPU canvases: a GPU canvas's read-back
+    // waits behind whatever the GPU is doing while the page loads.
+    const sharp=layer(),halo=layer(),h=halo.getContext('2d',{willReadFrequently:true});
+    letters(sharp.getContext('2d',{willReadFrequently:true}),(c,line,x,y)=>{c.fillStyle='#fff';c.fillText(line,x,y);});
     h.filter=`blur(${Math.round(size*.16)}px)`;h.drawImage(sharp,0,0);
     const mask=sharp.getContext('2d').getImageData(0,0,W,H),soft=h.getImageData(0,0,W,H);
     for(let i=0;i<mask.data.length;i+=4){mask.data[i+1]=Math.min(255,soft.data[i+3]*1.6);mask.data[i+2]=0;mask.data[i]=mask.data[i+3];mask.data[i+3]=255;}

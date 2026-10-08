@@ -1366,9 +1366,12 @@ if (renderer) {
   scene.traverse(object=>{if(object.isLight){object.layers.enable(1);object.layers.enable(lamps.breathLayer);}});
   // Register the aura's dormant lights before the first render. Adding them
   // later changes NUM_POINT_LIGHTS and recompiles every lit room material.
-  // Keep layer 0 only: the aura never lights the foreground or lamp-glass pass.
+  // They light the room and the lamps' glass pass (redrawn alone as it
+  // breathes, with the same lights as the full frame, so it shares the
+  // glass's program instead of compiling a second one just after the room
+  // appears), never the foreground layer.
   const auraLights=[new THREE.PointLight('#45d9b3',0,2.7,2),new THREE.PointLight('#9560d8',0,2.6,2)];
-  auraLights.forEach((light,i)=>{light.name='portal aura '+(i?'violet':'jade');scene.add(light);});
+  auraLights.forEach((light,i)=>{light.name='portal aura '+(i?'violet':'jade');light.layers.enable(lamps.breathLayer);scene.add(light);});
   frontCanvas.addEventListener('webglcontextlost',event=>{event.preventDefault();frontLost=true;frontHost.classList.remove('is-ready');});
   frontCanvas.addEventListener('webglcontextrestored',()=>{frontLost=false;invalidate();});
   let pending=false, lost=false, layoutKey='', shadowsStale=true;

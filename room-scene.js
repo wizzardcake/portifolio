@@ -1375,6 +1375,9 @@ if (renderer) {
   frontCanvas.addEventListener('webglcontextlost',event=>{event.preventDefault();frontLost=true;frontHost.classList.remove('is-ready');});
   frontCanvas.addEventListener('webglcontextrestored',()=>{frontLost=false;invalidate();});
   let pending=false, lost=false, layoutKey='', shadowsStale=true;
+  // Nothing is drawn until the warm-up (end of this block) has compiled the
+  // shaders: the room and its foreground appear together, whole.
+  let warmed=false;
   const sizeKey=()=>[innerWidth,innerHeight,view.width,view.height,view.units,devicePixelRatio,
     ...Object.values(window.portalTable.geometry).slice(0,3)].join(':');
   // cameraOnly: nothing in the room moved, so the shadow maps stay as they are.
@@ -1383,7 +1386,7 @@ if (renderer) {
     if(!pending&&!document.hidden&&!lost){pending=true;requestAnimationFrame(draw);}
   }
   function draw() {
-    pending=false;if(document.hidden||lost)return;
+    pending=false;if(document.hidden||lost||!warmed)return;
     // The camera moves physically (scene-camera.js), never the room's scale.
     camera.fov=view.fov;
     camera.aspect=innerWidth/innerHeight;camera.position.set(view.x,view.eyeHeight,view.distance);
@@ -1433,7 +1436,7 @@ if (renderer) {
     renderFront();
   }
   function renderFront() {
-    if(!front||frontLost) return;
+    if(!front||frontLost||!warmed) return;
     // Without the room's background colour, so only the chair and cloth are opaque.
     const background=scene.background;scene.background=null;camera.layers.set(1);
     front.render(scene,camera);
@@ -1677,4 +1680,18 @@ if (renderer) {
         lighting.lamp=warm.intensity;lighting.front=frontFill.intensity;invalidate();return this.values;}},
     invalidate};
   resize();
+  // ---- Warm-up. Every shader the room and its foreground draw is compiled
+  // before their first frame, off the main thread where the browser allows
+  // it (KHR_parallel_shader_compile): the page keeps running meanwhile
+  // instead of freezing for seconds inside the first frame, and the
+  // foreground (cloth, chair, smoke) never shows over an empty room. Each
+  // renderer compiles what it draws: the objects on its layer, lit by the
+  // lights its frames see. Without the extension three.js cannot tell when
+  // a program is ready, so the first frame compiles them itself, as before;
+  // after 30 s the room shows regardless.
+  const onLayer=n=>({traverse:fn=>scene.traverse(o=>{if(o.layers.isEnabled(n))fn(o);}),traverseVisible(){}});
+  const warmUp=(target,n)=>{camera.layers.set(n);try{return target.compileAsync(onLayer(n),camera,scene);}finally{camera.layers.set(0);}};
+  const parallel=renderer.extensions.has('KHR_parallel_shader_compile');
+  Promise.race([parallel?Promise.all([warmUp(renderer,0),front&&warmUp(front,1)]):null,new Promise(done=>setTimeout(done,30000))])
+    .catch(()=>{}).then(()=>{warmed=true;invalidate();});
 }

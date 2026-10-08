@@ -281,7 +281,7 @@
     invalidate();
   }
 
-  let clock = 0, last = 0, measured = -1e9, dirty = true, visible = true, active = false, raf = 0, frames = 0;
+  let clock = 0, last = 0, measured = -1e9, dirty = true, visible = true, active = false, raf = 0, frames = 0, movedAt = -1e9;
   let width = 1, height = 1, level = 3, orbCentre = null, orbUniform = [0, 0, 0];
   let orbAt = [0, 0], orbGlow = [.3, .85, .75], orbContact = [1, 1];
   function resize() {
@@ -290,7 +290,11 @@
     const budget = innerWidth < 700 ? 110000 : 260000;
     const ratio = Math.min(devicePixelRatio || 1, 1.5, Math.sqrt(budget / Math.max(1, r.width * r.height)));
     const w = Math.max(2, Math.round(r.width * ratio)), h = Math.max(2, Math.round(r.height * ratio));
-    if (canvas.width !== w || canvas.height !== h) {canvas.width = w; canvas.height = h;}
+    // A new size reallocates the drawing buffer. While the view moves (a walk
+    // round the table changes the projected size every frame) the buffer
+    // follows only in steps of an eighth; once still, the exact size.
+    const near = (a, b) => Math.abs(a - b) <= b / 8, moving = performance.now() - movedAt < 250;
+    if ((canvas.width !== w || canvas.height !== h) && !(moving && near(canvas.width, w) && near(canvas.height, h))) {canvas.width = w; canvas.height = h;}
     // How far below the rim the water lies (portal-depth.js owns the well).
     const depth = parseFloat(screen.style.getPropertyValue('--water-depth'));
     level = Number.isFinite(depth) ? depth : 3;
@@ -405,11 +409,16 @@
   function schedule() {if (!raf && active && gl) raf = requestAnimationFrame(frame);}
   function invalidate() {dirty = true; schedule();}
   function sync() {
-    active = !document.hidden && visible && !document.body.classList.contains('table-covered');
+    // Behind the eye (scene-camera.js: is-behind, e.g. walking to the shelf)
+    // the portal is hidden, though still "intersecting": draw nothing then.
+    active = !document.hidden && visible && !screen.classList.contains('is-behind') && !document.body.classList.contains('table-covered');
     if (raf) cancelAnimationFrame(raf);
     raf = 0; last = 0;
     invalidate();
   }
+  let behind = false;
+  new MutationObserver(() => {const now = screen.classList.contains('is-behind'); if (now !== behind) {behind = now; sync();}})
+    .observe(screen, {attributes: true, attributeFilter: ['class']});
   canvas.addEventListener('webglcontextlost', event => {
     event.preventDefault(); gl = null; water.live = false; layer.classList.remove('webgl');
   });
@@ -419,7 +428,7 @@
   document.addEventListener('visibilitychange', sync);
   reducedMotion.addEventListener('change', sync);
   addEventListener('resize', invalidate);
-  addEventListener('scene-camera-change', invalidate);
+  addEventListener('scene-camera-change', () => {movedAt = performance.now(); invalidate();});
   // Whatever enters the water rings it. The orb drop's rings start where the
   // reaction's own waves do (portal-reaction.js: contact, then .7 of it).
   addEventListener('portal-reaction-start', ({detail = {}}) => {

@@ -40,7 +40,7 @@
   const moteData=new Float32Array(volume.MOTES*4),offsets=new Float32Array(12),shifts=new Float32Array(4);
   const phases={nearFlow:0,nearTurn:0,deepFlow:0,deepTurn:0};
   let gl=null,uniforms=null,width=1,height=1,dirty=true,visible=true,active=false,raf=0,last=0;
-  let elapsed=0,particleTime=0,sampledDpr=0,frames=0,wallDepthPx=0,waterDepthPx=0,pixel=1,jx=[1,0],jy=[0,1];
+  let elapsed=0,particleTime=0,sampledDpr=0,frames=0,wallDepthPx=0,waterDepthPx=0,pixel=1,jx=[1,0],jy=[0,1],movedAt=-1e9,lagging=false;
   const pointer={x:0,y:0},view={x:0,y:0};
   const moteCount=()=>gl?(innerWidth<600?12:volume.MOTES):0;
   function initialize() {
@@ -93,7 +93,12 @@
     const budget=innerWidth<600?180000:600000;
     const ratio=Math.min(sampledDpr,Math.sqrt(budget/Math.max(1,box.width*box.height)));
     const cw=Math.max(1,Math.floor(box.width*ratio)),ch=Math.max(1,Math.floor(box.height*ratio));
-    if(canvas.width!==cw||canvas.height!==ch){canvas.width=cw;canvas.height=ch;}
+    // A new size reallocates the drawing buffer. While the view moves (a walk
+    // round the table changes the projected size every frame) the buffer
+    // follows only in steps of an eighth; once still, the exact size.
+    const near=(a,b)=>Math.abs(a-b)<=b/8,moving=performance.now()-movedAt<250;
+    lagging=moving&&near(canvas.width,cw)&&near(canvas.height,ch)&&(canvas.width!==cw||canvas.height!==ch);
+    if(!lagging&&(canvas.width!==cw||canvas.height!==ch)){canvas.width=cw;canvas.height=ch;}
   }
   function geometry() {
     const {localEyeZ:ez,localEyeY:ey}=camera,still=motion.matches,strength=PARALLAX*settings.parallaxStrength;
@@ -165,7 +170,7 @@
     if(now-last<FRAME-3&&!dirty){schedule();return;}
     const dt=last?Math.min(.1,(now-last)/1000):0;last=now;
     if(sampledDpr!==(devicePixelRatio||1))dirty=true;
-    if(dirty)measure();if(width<2||height<2)return;
+    if(dirty||(lagging&&now-movedAt>=250))measure();if(width<2||height<2)return;
     if(!motion.matches)advance(dt);
     const ease=1-Math.exp(-dt*3);
     view.x+=(pointer.x-view.x)*ease;view.y+=(pointer.y-view.y)*ease;
@@ -176,18 +181,23 @@
   function schedule(){if(!raf&&active)raf=requestAnimationFrame(render);}
   function invalidate(){dirty=true;schedule();}
   function sync() {
-    active=!document.hidden&&visible&&!document.body.classList.contains('table-covered');
+    // Behind the eye (scene-camera.js: is-behind, e.g. walking to the shelf)
+    // the portal is hidden, though still "intersecting": draw nothing then.
+    active=!document.hidden&&visible&&!screen.classList.contains('is-behind')&&!document.body.classList.contains('table-covered');
     if(raf)cancelAnimationFrame(raf);raf=0;last=0;
     if(motion.matches)pointer.x=pointer.y=view.x=view.y=0;
     invalidate();
   }
+  let behind=false;
+  new MutationObserver(()=>{const now=screen.classList.contains('is-behind');if(now!==behind){behind=now;sync();}})
+    .observe(screen,{attributes:true,attributeFilter:['class']});
   canvas.addEventListener('webglcontextlost',event=>{
     event.preventDefault();gl=null;abyss.classList.remove('webgl');aperture.classList.remove('has-depth');invalidate();
   });
   canvas.addEventListener('webglcontextrestored',initialize);
   initialize();
   new ResizeObserver(invalidate).observe(screen);
-  addEventListener('scene-camera-change',invalidate);
+  addEventListener('scene-camera-change',()=>{movedAt=performance.now();invalidate();});
   // A pixel-ratio change need not resize anything (another monitor), and a
   // static reduced-motion frame has no loop to notice it.
   (function watchPixelRatio() {

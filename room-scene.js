@@ -1482,6 +1482,15 @@ if (renderer) {
   addEventListener('blur',()=>{shelfPointer.set(4,4);wakeShelf();});
   document.documentElement.addEventListener('pointerleave',()=>{shelfPointer.set(4,4);wakeShelf();});
   addEventListener('scene-camera-change',wakeShelf);stillMotion.addEventListener('change',wakeShelf);
+  // Their moving shadows only matter to a light whose shadow camera can see
+  // them. None can where they stand (the door's, the moon's and the table's
+  // all look elsewhere), so their motion leaves the shadow maps alone;
+  // checked as they move, should a light or the shelf be moved.
+  const shadowLights=[],shelfCasters=[];
+  scene.traverse(o=>{if(o.isLight&&o.castShadow)shadowLights.push(o);});
+  shelfRoot.traverse(o=>{if(o.isMesh&&o.castShadow)shelfCasters.push(o);});
+  const shelfCastsShadow=()=>shadowLights.some(light=>{light.shadow.updateMatrices(light);
+    const frustum=light.shadow.getFrustum();return shelfCasters.some(mesh=>frustum.intersectsObject(mesh));});
   function tickShelfTools(now) {
     if(document.hidden||lost||!host.classList.contains('is-ready')){shelfAt=now;return;}
     if(now-shelfAt<33) return;
@@ -1496,8 +1505,9 @@ if (renderer) {
     if(index!==shelfHover){shelfHover=index;shelfTools.forEach((tool,i)=>tool.setHover(i===index));wakeShelf();}
     if(stillMotion.matches&&now>shelfAwakeUntil) return;
     shelfTools.forEach(tool=>tool.update(now/1000,dt));
-    // A full room redraw; the shadow maps refreshed at most 8 times a second.
-    const refreshShadows=now-shelfShadowAt>125;if(refreshShadows) shelfShadowAt=now;
+    // A full room redraw; the shadow maps refreshed, at most 8 times a
+    // second, only if a shadow camera can see the objects.
+    const refreshShadows=now-shelfShadowAt>125&&shelfCastsShadow();if(refreshShadows) shelfShadowAt=now;
     invalidate(!refreshShadows);
   }
   // The sound toggle (index.html, top right): off by default, the choice

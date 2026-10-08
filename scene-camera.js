@@ -231,6 +231,9 @@
   const offset = {x: 0, y: 0, yaw: 0, pitch: 0};
   function update() {
     const width = screen.clientWidth, height = screen.clientHeight;
+    // Read layout before publishing camera styles. Navigation hit targets use
+    // these same integer dimensions without forcing a second layout afterward.
+    const tableWidthPx = table.clientWidth, tableDepthPx = table.clientHeight;
     const units = Math.max(300, width / 2.06);
     const focal = innerHeight / (2 * Math.tan(state.fov * Math.PI / 360));
     const portrait = innerWidth < 900 && innerWidth < innerHeight;
@@ -282,7 +285,7 @@
     const viewX = now.right * units, viewY = -now.up * units, viewDistance = depth * units;
     // CSS cannot project a table behind the eye; it is out of view there anyway.
     const behind = depth < .4;
-    Object.assign(state, {width, height, units, tilt, focal, x, eyeHeight, distance, seatedDistance, viewX, viewY, viewDistance,
+    Object.assign(state, {width, height, tableWidthPx, tableDepthPx, units, tilt, focal, x, eyeHeight, distance, seatedDistance, viewX, viewY, viewDistance,
       originY, anchorY, format, appliedPitch: camera.pitch, elevation: eyeHeight - state.tableHeight,
       localEyeX: x * units, localEyeY: distance * units, localEyeZ: (eyeHeight - state.tableHeight) * units});
     for (const [key, value] of Object.entries({

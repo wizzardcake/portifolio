@@ -116,12 +116,11 @@
     matter.style.opacity = '1';
   }
 
-  function targetRect(nextMode) {
-    const w = screen.clientWidth, h = screen.clientHeight;
+  function targetRect(nextMode, w = screen.clientWidth, h = screen.clientHeight) {
     if (nextMode === 'locked') {
       // Dormant: the orb waits unseen inside the shaft, below the aperture,
       // until the cloth comes off. unlock() then raises it into its hover.
-      const idle = targetRect('idle');
+      const idle = targetRect('idle', w, h);
       return {...idle, z: -idle.w * .9};
     }
     // Reserve an upper viewport reader above the held cards. Invert the
@@ -265,11 +264,14 @@
     const dt = lastTime ? Math.min(.1, (now - lastTime) / 1000) : 0;
     lastTime = now;
     const still = reducedMotion.matches;
+    // Snapshot layout before writing any frame styles. The later water-contact
+    // calculation uses the same dimensions, without a write/read layout flush.
+    const screenWidth = screen.clientWidth, screenHeight = screen.clientHeight;
     // One fixed table plane before, during and after the intro. Neither
     // unlocking, projecting a page nor pointer movement tilts the portal.
     screen.style.setProperty('--view-yaw', camera.yaw + 'deg');
     screen.style.setProperty('--view-pitch', camera.pitch + 'deg');
-    const target = targetRect(mode);
+    const target = targetRect(mode, screenWidth, screenHeight);
     let t = 1;
     if (transition) {
       t = Math.min(1, (now - transition.start) / transition.duration);
@@ -385,9 +387,9 @@
     // What the water below needs of it. The drawn sphere's radius is .369 of
     // its element's width (.93 of a canvas widened 1.26 times for the lobes).
     const glow = settings.innerGlow * awake * (.72 + .28 * breath * settings.breathing);
-    const footprint = {x: rect.x - screen.clientWidth / 2 + drift.x, y: rect.y - screen.clientHeight / 2 + drift.y};
+    const footprint = {x: rect.x - screenWidth / 2 + drift.x, y: rect.y - screenHeight / 2 + drift.y};
     Object.assign(contact, {
-      x: .5 + footprint.x / (screen.clientWidth || 1), y: .5 + footprint.y / (screen.clientHeight || 1),
+      x: .5 + footprint.x / (screenWidth || 1), y: .5 + footprint.y / (screenHeight || 1),
       height, radius: radius * form.grow, breath,
       // Fades out as it becomes a page, and back in as it returns; gone while
       // it is lost in the depth.

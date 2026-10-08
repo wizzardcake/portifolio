@@ -1,4 +1,4 @@
-import * as THREE from './vendor/three/three.module.js';
+import './room-scene.js';
 
 // Presentation only: observe the completed intro, never drive cloth or cards.
 // No new WebGL context, room geometry, shadow map or full-screen postprocess.
@@ -77,11 +77,9 @@ const motes=Array.from({length:32},(_,i)=>{
 // (never the cloth/chair overlay's layer 1). No extra shadow maps. Its reach
 // ends short of the walls nearest the viewer, so the spill gathers round the
 // table instead of washing the room's sides in jade and violet.
-const lights = room ? [
-  new THREE.PointLight('#45d9b3',0,2.7,2),
-  new THREE.PointLight('#9560d8',0,2.6,2)
-] : [];
-lights.forEach((light,i)=>{light.name='portal aura '+(i?'violet':'jade');room.scene.add(light);});
+// The room registers these before compiling its first frame; this module
+// still owns their position, intensity and animation.
+const lights = room?.auraLights || [];
 let width=1,height=1,units=1,elapsed=0,fade=0,pulse=1;
 let enabled=true,active=false,raf=0,last=0,lastPaint=0,lastLight=-Infinity;
 let frames=0,lightUpdates=0,geometryKey='',wasReduced=motion.matches;
@@ -90,9 +88,9 @@ function place(el,x,y,z) {
   el.style.transform=`translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,${z.toFixed(2)}px) translate(-50%,-50%) ${FACE}`;
 }
 function resize() {
-  const key=[screen.clientWidth,screen.clientHeight,view.units].join(':');
+  const key=[view.width,view.height,view.units].join(':');
   if(key===geometryKey)return;geometryKey=key;
-  width=screen.clientWidth;height=screen.clientHeight;units=view.units;
+  width=view.width;height=view.height;units=view.units;
   for(const w of wisps){w.el.style.width=width*w.w+'px';w.el.style.height=units*w.h+'px';}
   for(const el of shimmers){el.style.width=width*.13+'px';el.style.height=units*.13+'px';}
   lights.forEach((light,i)=>light.position.set((i?1:-1)*width/units*.36,view.tableHeight+.10,-height/units*.04));

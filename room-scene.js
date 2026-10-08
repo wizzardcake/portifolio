@@ -1364,6 +1364,11 @@ if (renderer) {
   } catch {front=null;}
   // Every light also lights the foreground layer and the lamps' breathing glass.
   scene.traverse(object=>{if(object.isLight){object.layers.enable(1);object.layers.enable(lamps.breathLayer);}});
+  // Register the aura's dormant lights before the first render. Adding them
+  // later changes NUM_POINT_LIGHTS and recompiles every lit room material.
+  // Keep layer 0 only: the aura never lights the foreground or lamp-glass pass.
+  const auraLights=[new THREE.PointLight('#45d9b3',0,2.7,2),new THREE.PointLight('#9560d8',0,2.6,2)];
+  auraLights.forEach((light,i)=>{light.name='portal aura '+(i?'violet':'jade');scene.add(light);});
   frontCanvas.addEventListener('webglcontextlost',event=>{event.preventDefault();frontLost=true;frontHost.classList.remove('is-ready');});
   frontCanvas.addEventListener('webglcontextrestored',()=>{frontLost=false;invalidate();});
   let pending=false, lost=false, layoutKey='', shadowsStale=true;
@@ -1619,7 +1624,7 @@ if (renderer) {
   canvas.addEventListener('webglcontextrestored',()=>{lost=false;resize();});
   // Used by the local geometry/registration check and dev inspection.
   // hem: the cloth hem wave's parameters, live-tunable from the console.
-  window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,table:artifact,smoke,hoverMark,
+  window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,table:artifact,smoke,hoverMark,auraLights,
     // Room extents in scene (table-relative) coordinates; the plan objects
     // after it (window, tower, alcove, corner) are in plan coordinates.
     dimensions:{...room,back:room.back-placement.forward,front:room.front-placement.forward},

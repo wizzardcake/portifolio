@@ -161,8 +161,7 @@
   }
   function placeEntryTargets() {
     if (!entryTargets || entryTargets.hidden) return;
-    const table = screenEl.querySelector('.portal-table');
-    const halfWidth = table.clientWidth / camera.units / 2 + .05, halfDepth = table.clientHeight / camera.units / 2 + .05;
+    const halfWidth = camera.tableWidthPx / camera.units / 2 + .05, halfDepth = camera.tableDepthPx / camera.units / 2 + .05;
     // The armchair stands where scene-camera.js says: pushed back and turned
     // until the visitor sits. Its box turns with it.
     const {x: chairX, z: chairZ, yaw} = camera.chairPose, cos = Math.cos(yaw), sin = Math.sin(yaw), chairPoints = [], nookPoints = [];
@@ -429,13 +428,9 @@
     uncoverTable(0, 1);
   });
 
-  // ---- Keep the dial's own circle sized to fit inside the screen (not the
-  // old, deliberately oversized tap-timing orbit) — re-measured each frame
-  // so it tracks correctly through the pose transitions and any viewport
-  // size, using the screen's own flattest edge as the reference so heavy
-  // rotateX foreshortening (during the wide establishing pose) can't
-  // inflate it.
-  let syncHandle = null;
+  // The dial follows the screen's layout box. Camera transforms do not change
+  // that box, so only actual resizes need a measurement.
+  let syncObserver = null;
   function measureScreen() {
     // offsetWidth/Height (the element's own pre-transform layout box) —
     // getBoundingClientRect() would have been wrong here: it reports the
@@ -445,16 +440,15 @@
     const h = screenEl.offsetHeight;
     screenEl.style.setProperty('--indicator-radius', (Math.min(w, h) * 0.4) + 'px');
   }
-  function syncToScreen() {
-    measureScreen();
-    syncHandle = requestAnimationFrame(syncToScreen);
-  }
   function startSync() {
-    if (syncHandle === null) syncHandle = requestAnimationFrame(syncToScreen);
+    if (syncObserver) return;
+    measureScreen();
+    syncObserver = new ResizeObserver(measureScreen);
+    syncObserver.observe(screenEl, {box: 'border-box'});
   }
   function stopSync() {
-    if (syncHandle !== null) cancelAnimationFrame(syncHandle);
-    syncHandle = null;
+    syncObserver?.disconnect();
+    syncObserver = null;
   }
   startSync();
 

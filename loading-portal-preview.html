@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>The threshold · loading portal study</title>
+<link rel="stylesheet" href="./loading-portal.css">
+<style>
+  *{box-sizing:border-box}body{margin:0;background:#090c0f;color:#b6ad99;font:13px/1.5 Georgia,serif;min-height:100svh}
+  header{position:absolute;top:28px;left:34px;right:34px;display:flex;justify-content:space-between;align-items:center}
+  header b{font-weight:400;letter-spacing:.26em;color:#d1c4ab;font-size:15px}header span{font:10px/1.5 system-ui;letter-spacing:.2em;color:#6e756f;text-transform:uppercase}
+  main{min-height:100svh;display:grid;place-content:center;justify-items:center;padding:70px 16px 120px}
+  #artifact{margin-bottom:-16px}h1{margin:0;font-size:13px;font-weight:400;letter-spacing:.3em;text-transform:uppercase;color:#c1b195}
+  .caption{font:11px/1.7 system-ui;letter-spacing:.07em;color:#68736f;margin:13px 0 0}
+  .controls{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:20px;max-width:95vw;padding:11px 16px;border:1px solid #a2917522;border-radius:4px;background:#0b0f12e8;font:10px/1.5 system-ui;color:#7e8b85;white-space:nowrap}
+  button{font:inherit;color:#b6ad99;border:0;padding:3px 2px;background:none;cursor:pointer}button:focus-visible,input:focus-visible{outline:1px solid #ceb888;outline-offset:5px}
+  .controls label{display:flex;align-items:center;gap:10px}input{width:85px;accent-color:#9a8563}output{display:none}
+  body.clean header,body.clean .controls{display:none}
+  @media(max-width:500px){header{top:22px;left:22px;right:22px}header span{font-size:8px;letter-spacing:.1em}.controls{gap:12px;padding:10px}main{padding-bottom:105px}}
+</style>
+<header><b>ANNISJ</b><span>Threshold study · 02A</span></header>
+<main>
+  <div id="artifact"></div>
+  <h1>Between worlds</h1>
+  <p class="caption">The room is gathering.</p>
+</main>
+<div class="controls" aria-label="Prototype controls">
+  <button id="motion" aria-pressed="false">Pause motion</button>
+  <button id="shape">Round phase</button>
+  <label>Approach <input id="approach" type="range" min="0" max="1" step=".01" value="0"></label>
+</div>
+<script type="module">
+  import {createLoadingPortal} from './loading-portal.js';
+  const params=new URLSearchParams(location.search);
+  const portal=createLoadingPortal(document.querySelector('#artifact'),{autoplay:!params.has('time')});
+  window.loadingPortal=portal;
+  if(params.has('time'))portal.render(Number(params.get('time')));
+  if(params.has('clean'))document.body.classList.add('clean');
+  const button=document.querySelector('#motion');
+  button.onclick=()=>{const paused=!portal.stats.paused;paused?portal.pause():portal.play();button.textContent=paused?'Resume motion':'Pause motion';button.setAttribute('aria-pressed',String(paused));};
+  let round=false;
+  document.querySelector('#shape').onclick=event=>{round=!round;portal.pause();portal.render(round?6.85:0);event.target.textContent=round?'Square phase':'Round phase';button.textContent='Resume motion';button.setAttribute('aria-pressed','true');};
+  document.querySelector('#approach').oninput=event=>portal.setApproach(Number(event.target.value));
+</script>
+</html>

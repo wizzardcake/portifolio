@@ -1,0 +1,21 @@
+.loading-portal {
+  --portal-approach: 0;
+  position: relative;
+  width: min(440px, 86vw, 66svh);
+  aspect-ratio: 1;
+  isolation: isolate;
+  pointer-events: none;
+}
+.loading-portal canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 50%;
+}
+.loading-portal__atmosphere { opacity: calc(1 - var(--portal-approach) * .6); }
+.loading-portal__depth { transform: scale(calc(1 + var(--portal-approach) * 2.8)); }
+.loading-portal__liquid { transform: scale(calc(1 + var(--portal-approach) * 4)); }
+@media (prefers-reduced-motion: reduce) {
+  .loading-portal canvas { transform: none; }
+}

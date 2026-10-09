@@ -6,6 +6,9 @@ import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {lampTuning} from '../room-lamps.js';
+// The loading gate (loading-gate.js) covers the page until the room is ready;
+// every wait below begins once it has let the visitor in.
+const GATE_OPEN = "(document.readyState !== 'loading' && (!document.getElementById('loadingGate') || document.documentElement.dataset.siteEntered === 'yes'))";
 
 // The entry waits for the visitor (script.js): choosing the chair starts the
 // walk in. Polled by until(): chooses the chair at the entry, true once seated.
@@ -76,7 +79,7 @@ try {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   async function until(expression, timeout = 30000) {
     const start = Date.now();
-    while (!await evaluate(expression)) {
+    while (!await evaluate(GATE_OPEN + ' && (' + expression + ')')) {
       if (Date.now() - start > timeout) throw new Error('Timed out: ' + expression + '\n' + JSON.stringify(await evaluate(`({state:document.readyState,hidden:document.hidden,body:document.body.className,errors:[...document.querySelectorAll('body>div')].filter(e=>e.textContent.startsWith('JS ERROR')).map(e=>e.textContent)})`)));
       await sleep(100);
     }

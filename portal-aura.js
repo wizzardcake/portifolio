@@ -40,9 +40,11 @@ const shimmers = [part('aura-shimmer'),part('aura-shimmer')];
 
 // One 256x128 alpha texture shared by three separated billboards. Volume comes
 // from their actual CSS heights and drift, not animated noise rendering.
+// Drawn on a CPU canvas: reading a GPU canvas back (toDataURL) waits behind
+// whatever the GPU is doing, the room's shader compiling while it loads.
 function hazeMask() {
   const canvas=document.createElement('canvas');canvas.width=256;canvas.height=128;
-  const ctx=canvas.getContext('2d'), pixels=ctx.createImageData(256,128);
+  const ctx=canvas.getContext('2d',{willReadFrequently:true}), pixels=ctx.createImageData(256,128);
   const hash=(x,y)=>{const n=Math.sin(x*127.1+y*311.7)*43758.5453;return n-Math.floor(n);};
   const mix=(a,b,t)=>a+(b-a)*t;
   const noise=(x,y)=>{const ix=Math.floor(x),iy=Math.floor(y);let u=x-ix,v=y-iy;u=u*u*(3-2*u);v=v*v*(3-2*v);

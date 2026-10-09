@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ANNISJ — Markedsføringsportfolio</title>
+<!-- The loading gate: the portal over everything until the room is ready. -->
+<link rel="stylesheet" href="loading-gate.css">
+<script type="module" src="loading-gate.js" onerror="document.getElementById('loadingGate')?.remove();document.documentElement.dataset.siteEntered='yes'"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -17,6 +20,11 @@
 <link rel="stylesheet" href="tools-page.css">
 </head>
 <body class="intro-active table-covered">
+<div class="loading-gate" id="loadingGate" aria-busy="true">
+  <div class="loading-gate__portal"><div class="loading-gate__orb" aria-hidden="true"></div></div>
+  <p class="loading-gate__status" role="status">Laster rommet …</p>
+  <button type="button" class="loading-gate__enter" hidden>Gå inn</button>
+</div>
 
 <main class="experience" id="experience" aria-label="Interaktiv portfolio">
 <div class="intro-scene" id="introScene">
@@ -414,18 +422,22 @@ window.addEventListener('error', (e) => {
   document.body.appendChild(box);
 });
 </script>
+<!-- When the room is genuinely ready, for the loading gate: before the
+     scripts that report to it. -->
+<script src="site-ready.js"></script>
 <script src="portal-table.js"></script>
 <script src="scene-camera.js"></script>
-<script src="portal-surface.js"></script>
+<script src="gl-link.js"></script>
+<script src="portal-surface.js" onerror="siteReadiness.fail('water', 'portal-surface.js did not load')"></script>
 <script src="portal-orb-material.js"></script>
-<script src="portal-effects.js"></script>
+<script src="portal-effects.js" onerror="siteReadiness.fail('orb', 'portal-effects.js did not load')"></script>
 <script src="portal-depth-volume.js"></script>
-<script src="portal-depth.js"></script>
+<script src="portal-depth.js" onerror="siteReadiness.fail('depth', 'portal-depth.js did not load')"></script>
 <script src="portal-impact.js"></script>
 <script src="portal-reaction.js"></script>
 <script src="script.js"></script>
 <script src="tools-page.js"></script>
-<script type="module" src="room-scene.js"></script>
+<script type="module" src="room-scene.js" onerror="siteReadiness.fail('room', 'room-scene.js did not load')"></script>
 <script type="module" src="portal-aura.js"></script>
 <script>
 // The orb-drop review panel (dev/portal-impact.js) is fetched only on request: ?impactDebug=1

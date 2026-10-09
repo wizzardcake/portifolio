@@ -1,0 +1,72 @@
+/* The loading gate (loading-gate.js): the loading portal floating in
+   darkness from the very first paint, over everything, until the room is
+   genuinely ready (site-ready.js); then the way in through its doorway.
+   The portal itself is loading-portal.js (Codex); until it is there, or if
+   it cannot run, a quiet CSS orb stands in. Every motion here runs on the
+   compositor, so it stays smooth while the room is still being built. */
+.loading-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 60% 55% at 50% 52%, #1b1030 0%, #0d0817 48%, #06040a 100%);
+  color: #cdbfe6;
+  will-change: opacity;
+}
+.loading-gate[hidden] { display: none; }
+/* The portal (or the orb) emerges from the darkness. */
+.loading-gate__portal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  animation: gate-appear .9s ease-out both;
+  will-change: transform;
+}
+@keyframes gate-appear { from { opacity: 0; } }
+/* The stand-in orb: violet energy with a teal heart, floating and breathing. */
+.loading-gate__orb {
+  width: min(220px, 46vw, 34svh);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 56%, #6fe0c9 0%, #3aa6a0 9%, transparent 26%),
+    radial-gradient(circle at 42% 38%, #b48cf0 0%, #6a3fb0 30%, #2a1450 62%, #120a22 78%, transparent 80%);
+  box-shadow: 0 0 60px 8px #5b33a855, 0 0 140px 30px #2d175a40;
+  animation: gate-float 6.8s ease-in-out infinite, gate-breathe 4.6s ease-in-out infinite;
+}
+@keyframes gate-float { 0%, 100% { translate: 0 -6px; } 50% { translate: 0 8px; } }
+@keyframes gate-breathe { 0%, 100% { scale: .97; opacity: .86; } 50% { scale: 1.03; opacity: 1; } }
+/* Announced to assistive technology only. */
+.loading-gate__status {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* Offered only if the room is unusually slow: the visitor may go in anyway. */
+.loading-gate__enter {
+  position: absolute;
+  left: 50%;
+  bottom: max(28px, 8svh);
+  translate: -50% 0;
+  padding: 10px 22px;
+  border: 1px solid #cdbfe655;
+  border-radius: 999px;
+  background: #0d081799;
+  color: inherit;
+  font: 500 15px/1.2 Inter, system-ui, sans-serif;
+  letter-spacing: .04em;
+  cursor: pointer;
+  animation: gate-appear .6s ease-out both;
+}
+.loading-gate__enter[hidden] { display: none; }
+.loading-gate__enter:hover,
+.loading-gate__enter:focus-visible { border-color: #cdbfe6; outline: none; }
+@media (prefers-reduced-motion: reduce) {
+  .loading-gate__orb { animation: none; }
+}

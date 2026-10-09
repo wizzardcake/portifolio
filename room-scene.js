@@ -70,6 +70,8 @@ try {
 } catch {
   // A readable room silhouette also survives unavailable WebGL.
   host.classList.add('room-fallback');
+  // The silhouette is all there is to wait for (site-ready.js).
+  window.siteReadiness?.done('room','fallback');
 }
 
 if (renderer) {
@@ -898,9 +900,11 @@ if (renderer) {
     s.globalCompositeOperation='source-atop';s.lineWidth=1.3;
     for(let i=-H,n=0;i<W;i+=3,n++){s.strokeStyle=n%2?'#ffffff1e':'#0000002e';s.beginPath();s.moveTo(i,0);s.lineTo(i+H*.55,H);s.stroke();}
     g.drawImage(stitch,0,0);
-    // Glow mask: the letters themselves, and a soft halo around them.
-    const sharp=layer(),halo=layer(),h=halo.getContext('2d');
-    letters(sharp.getContext('2d'),(c,line,x,y)=>{c.fillStyle='#fff';c.fillText(line,x,y);});
+    // Glow mask: the letters themselves, and a soft halo around them. Both are
+    // read back below, so they are CPU canvases: a GPU canvas's read-back
+    // waits behind whatever the GPU is doing while the page loads.
+    const sharp=layer(),halo=layer(),h=halo.getContext('2d',{willReadFrequently:true});
+    letters(sharp.getContext('2d',{willReadFrequently:true}),(c,line,x,y)=>{c.fillStyle='#fff';c.fillText(line,x,y);});
     h.filter=`blur(${Math.round(size*.16)}px)`;h.drawImage(sharp,0,0);
     const mask=sharp.getContext('2d').getImageData(0,0,W,H),soft=h.getImageData(0,0,W,H);
     for(let i=0;i<mask.data.length;i+=4){mask.data[i+1]=Math.min(255,soft.data[i+3]*1.6);mask.data[i+2]=0;mask.data[i]=mask.data[i+3];mask.data[i+3]=255;}
@@ -1376,7 +1380,7 @@ if (renderer) {
   let pending=false, lost=false, layoutKey='', shadowsStale=true;
   // Nothing is drawn until the warm-up (end of this block) has compiled the
   // shaders: the room and its foreground appear together, whole.
-  let warmed=false;
+  let warmed=false,shown=false;
   const sizeKey=()=>[innerWidth,innerHeight,view.width,view.height,view.units,devicePixelRatio,
     ...Object.values(window.portalTable.geometry).slice(0,3)].join(':');
   // cameraOnly: nothing in the room moved, so the shadow maps stay as they are.
@@ -1437,6 +1441,9 @@ if (renderer) {
     if(!smoke.group.visible) smokeShown=false;
     if(stillMotion.matches) smoke.update(0);
     renderFront();
+    // Ready (site-ready.js) two frames after the first full one, so nothing
+    // that frame leaves behind lands after the visitor is in.
+    if(!shown){shown=true;requestAnimationFrame(()=>requestAnimationFrame(()=>window.siteReadiness?.done('room')));}
   }
   function renderFront() {
     if(!front||frontLost||!warmed) return;
@@ -1458,6 +1465,13 @@ if (renderer) {
     if(!smokeShown){smokeShown=true;smokeSince=now;}
     return Math.max(0,(now-smokeSince-600)/1000*1.6);
   }
+  // Behind the loading gate it has long grown in; it grows in again as the
+  // visitor comes through (loading-gate.js). Taken back while the gate is
+  // still opaque, so the room shows without it when the gate thins.
+  addEventListener('site-entering',()=>{
+    smokeShown=false;
+    if(smoke.group.visible&&!stillMotion.matches&&!lost){smoke.update(performance.now()/1000,0);renderFront();}
+  });
   // A mark lights up while its place is pointed at or focused (script.js),
   // easing in over about a quarter of a second; at once for reduced motion.
   const markHover={entry:{now:0,want:0},shelf:{now:0,want:0},chair:{now:0,want:0}};
@@ -1532,7 +1546,8 @@ if (renderer) {
     requestAnimationFrame(pulse);
     tickShelfTools(now);
     const smoking=smoke.group.visible;
-    if((!cloth.visible&&!smoking)||document.hidden||lost||stillMotion.matches||now-lastPulse<33) return;
+    // Unseen behind the loading gate, the drift waits (loading-gate.js).
+    if((!cloth.visible&&!smoking)||document.hidden||lost||stillMotion.matches||window.loadingGate?.veiled||now-lastPulse<33) return;
     const dt=Math.min(.1,(now-lastPulse)/1000);
     lastPulse=now;
     for(const [name,mark] of Object.entries(markHover)) if(mark.now!==mark.want) {
@@ -1579,7 +1594,7 @@ if (renderer) {
   let outsideAt=0;
   function liveOutside(now) {
     requestAnimationFrame(liveOutside);
-    if(document.hidden||lost||pending||!host.classList.contains('is-ready')||stillMotion.matches||now-outsideAt<40) return;
+    if(document.hidden||lost||pending||!host.classList.contains('is-ready')||stillMotion.matches||window.loadingGate?.veiled||now-outsideAt<40) return;
     outsideAt=now;night.update(now/1000);
     const light=1-.42*night.veil();
     lightInAir.uniforms.uMoonlight.value=dustMaterial.uniforms.uMoonlight.value=light;
@@ -1614,7 +1629,7 @@ if (renderer) {
   let lampsAt=0;
   function liveLamps(now) {
     requestAnimationFrame(liveLamps);
-    if(document.hidden||lost||pending||!host.classList.contains('is-ready')||stillMotion.matches||now-lampsAt<80) return;
+    if(document.hidden||lost||pending||!host.classList.contains('is-ready')||stillMotion.matches||window.loadingGate?.veiled||now-lampsAt<80) return;
     lampsAt=now;
     if(!lamps.clusters.some(cluster=>lampRect(cluster))) return;
     lamps.update(now/1000);

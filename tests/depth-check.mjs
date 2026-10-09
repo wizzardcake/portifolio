@@ -217,8 +217,10 @@ async function check() {
     await until('!portalDepth.stats.reducedMotion && portalDepth.stats.active');
     await sleep(900);
     // Whatever enters the water rings it: here a card arriving (script.js's hook).
-    await evaluate(`dispatchEvent(new CustomEvent('card-portal-arrival', {detail: {aperture: {x: .4, y: .55}, velocity: {x: 0, y: 900}}})); true`);
-    assert.equal((await water()).rings, 1, 'A card arriving rings the water');
+    // Counted in the same task: the orb answers the card with a dive 0.12 s
+    // later (arrivalDelay), whose own rings would race a separate read.
+    const arrivalRings = await evaluate(`dispatchEvent(new CustomEvent('card-portal-arrival', {detail: {aperture: {x: .4, y: .55}, velocity: {x: 0, y: 900}}})); portalSurface.stats.rings`);
+    assert.equal(arrivalRings, 1, 'A card arriving rings the water');
     await until('portalSurface.stats.rings === 0');
     const desktop = await evaluate('portalDepth.stats');
     assert.ok(desktop.renderPixels > 0 && desktop.renderPixels <= 700000, 'Desktop fog respects its aggregate pixel budget');

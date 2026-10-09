@@ -53,13 +53,14 @@
   addEventListener('error', broken);
   addEventListener('unhandledrejection', broken);
   // The cloth's inscription font (index.html's Google Fonts link). Asked for
-  // once the document is parsed: the body's scripts wait for the head's
-  // stylesheets, so its @font-face is known by then.
+  // once the parser is done: the body's scripts wait for the head's
+  // stylesheets, so its @font-face is known by then (DOMContentLoaded would
+  // also wait for the room's module scripts to run).
   const loadFont = () => {
     const font = document.fonts?.load('600 64px Cinzel');
     if (font) font.then(faces => window.siteReadiness.done('font', faces.length ? 'ready' : 'missing'), () => window.siteReadiness.done('font', 'missing'));
     else window.siteReadiness.done('font', 'missing');
   };
-  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', loadFont, {once: true});
+  if (document.readyState === 'loading') document.addEventListener('readystatechange', loadFont, {once: true});
   else loadFont();
 })();

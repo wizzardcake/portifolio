@@ -4,9 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ANNISJ — Markedsføringsportfolio</title>
-<!-- The loading gate: the portal over everything until the room is ready. -->
+<!-- The loading gate: the portal (loading-portal.js) over everything until
+     the room is ready; fetched early, started right after its markup. -->
 <link rel="stylesheet" href="loading-gate.css">
-<script type="module" src="loading-gate.js" onerror="document.getElementById('loadingGate')?.remove();document.documentElement.dataset.siteEntered='yes'"></script>
+<link rel="stylesheet" href="loading-portal.css">
+<link rel="modulepreload" href="loading-gate.js">
+<link rel="modulepreload" href="loading-portal.js">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -21,10 +24,11 @@
 </head>
 <body class="intro-active table-covered">
 <div class="loading-gate" id="loadingGate" aria-busy="true">
-  <div class="loading-gate__portal"><div class="loading-gate__orb" aria-hidden="true"></div></div>
+  <div class="loading-gate__portal" data-portal="loading-portal.js"></div>
   <p class="loading-gate__status" role="status">Laster rommet …</p>
   <button type="button" class="loading-gate__enter" hidden>Gå inn</button>
 </div>
+<script type="module" async src="loading-gate.js" onerror="document.getElementById('loadingGate')?.remove();document.documentElement.dataset.siteEntered='yes'"></script>
 
 <main class="experience" id="experience" aria-label="Interaktiv portfolio">
 <div class="intro-scene" id="introScene">

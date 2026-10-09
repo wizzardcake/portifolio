@@ -364,10 +364,14 @@
     raf = 0;
     const dt = last ? Math.min(.1, (now - last) / 1000) : 0;
     last = now;
-    const live = idling && !still.matches && !document.hidden;
+    // Not behind the loading gate either (loading-gate.js): unseen, it would
+    // only take frames from the way in. There it stops at once, and fades in
+    // as the gate thins.
+    const veiled = !!window.loadingGate?.veiled;
+    const live = idling && !still.matches && !document.hidden && !veiled;
     const {idle} = state, ease = response => 1 - Math.exp(-dt / response);
     // The idle life fades in where the visitor stands, and out once a walk starts.
-    weight += ((live && !move ? 1 : 0) - weight) * ease(.6);
+    weight = veiled ? 0 : weight + ((live && !move ? 1 : 0) - weight) * ease(.6);
     lean.x += (pointer.x - lean.x) * ease(idle.response);
     lean.y += (pointer.y - lean.y) * ease(idle.response);
     // At the shelf the view turns toward the side the pointer is on (left is
@@ -421,6 +425,7 @@
   }, {passive: true});
   root.addEventListener('pointerleave', () => { pointer.x = pointer.y = 0; });
   document.addEventListener('visibilitychange', wake);
+  addEventListener('site-unveiling', wake);
   still.addEventListener('change', () => {
     // Reduced motion switched on: a walk arrives at once, a look is let go.
     if (still.matches && move) { const {to, resolve} = move; move = null; state.leg.progress = to; update(); resolve(true); }

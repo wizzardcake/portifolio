@@ -6,6 +6,9 @@ import {resolve,extname,sep} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
+// The loading gate (loading-gate.js) covers the page until the room is ready;
+// every wait below begins once it has let the visitor in.
+const GATE_OPEN = "(document.readyState !== 'loading' && (!document.getElementById('loadingGate') || document.documentElement.dataset.siteEntered === 'yes'))";
 
 // The entry waits for the visitor (script.js): choosing the chair starts the
 // walk in. Polled by until(): chooses the chair at the entry, true once seated.
@@ -53,7 +56,7 @@ async function check(){
     await cdp('Page.enable');await cdp('Runtime.enable');
     const evaluate=async expression=>{const r=await cdp('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
     const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-    async function until(expression){const start=Date.now();while(!await evaluate(expression)){if(Date.now()-start>60000)throw new Error('Timed out: '+expression);await sleep(120);}}
+    async function until(expression){const start=Date.now();while(!await evaluate(GATE_OPEN + ' && (' + expression + ')')){if(Date.now()-start>60000)throw new Error('Timed out: '+expression);await sleep(120);}}
     async function shot(name){const {data}=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(resolve(output,'impact-'+name+'.png'),Buffer.from(data,'base64'));}
     await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`
       const realNow=performance.now.bind(performance),raf=requestAnimationFrame.bind(window);

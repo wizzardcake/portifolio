@@ -6,6 +6,9 @@ import {resolve,extname,sep} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
+// The loading gate (loading-gate.js) covers the page until the room is ready;
+// every wait below begins once it has let the visitor in.
+const GATE_OPEN = "(document.readyState !== 'loading' && (!document.getElementById('loadingGate') || document.documentElement.dataset.siteEntered === 'yes'))";
 
 const root=resolve(import.meta.dirname,'..');
 const round=process.argv.find(a=>a.startsWith('--round='))?.split('=')[1]||'final';
@@ -57,7 +60,7 @@ try{
   await cdp('Page.enable');await cdp('Runtime.enable');await cdp('Log.enable');
   const evaluate=async expression=>{const r=await cdp('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
   const sleep=ms=>new Promise(done=>setTimeout(done,ms));
-  async function until(expression){const start=Date.now();while(!await evaluate(expression)){if(Date.now()-start>25000)throw new Error('Timed out: '+expression);await sleep(100);}}
+  async function until(expression){const start=Date.now();while(!await evaluate(GATE_OPEN + ' && (' + expression + ')')){if(Date.now()-start>25000)throw new Error('Timed out: '+expression);await sleep(100);}}
   await cdp('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
   await cdp('Page.navigate',{url});await until('!!window.toolsPreview');await sleep(1200);
   const shot=async name=>{const {data}=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(resolve(output,name+'.png'),Buffer.from(data,'base64'));};

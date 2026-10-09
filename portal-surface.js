@@ -466,6 +466,7 @@
     splash(detail?.aperture?.x, detail?.aperture?.y, Math.min(1, .7 + speed / 5000));
   });
   initialize();
+  window.siteReadiness?.track('water', surfaceReady.then(() => gl ? 'ready' : 'css'));
   sync();
   // lights: where the room's lights stand (read-only), shared with the orb.
   window.portalSurface = {params, layer, water, splash, glsl: WATER, lights: LIGHTS,

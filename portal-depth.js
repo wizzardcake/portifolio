@@ -200,6 +200,7 @@
   });
   canvas.addEventListener('webglcontextrestored',initialize);
   initialize();
+  window.siteReadiness?.track('depth',depthReady.then(()=>gl?'ready':'css'));
   new ResizeObserver(invalidate).observe(screen);
   addEventListener('scene-camera-change',()=>{movedAt=performance.now();invalidate();});
   // A pixel-ratio change need not resize anything (another monitor), and a

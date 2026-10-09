@@ -5,6 +5,9 @@ import {resolve, extname, sep} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
+// The loading gate (loading-gate.js) covers the page until the room is ready;
+// every wait below begins once it has let the visitor in.
+const GATE_OPEN = "(document.readyState !== 'loading' && (!document.getElementById('loadingGate') || document.documentElement.dataset.siteEntered === 'yes'))";
 
 // The entry waits for the visitor (script.js): choosing the chair starts the
 // walk in. Polled by until(): chooses the chair at the entry, true once seated.
@@ -70,7 +73,7 @@ try {
   const sleep = ms => new Promise(done => setTimeout(done, ms));
   async function until(expression, timeout = 45000) {
     const start = Date.now();
-    while (!await evaluate(expression)) {
+    while (!await evaluate(GATE_OPEN + ' && (' + expression + ')')) {
       if (Date.now() - start > timeout) throw new Error('Timed out: ' + expression + '\n' + JSON.stringify(await evaluate(`({
         hidden: document.hidden, body: document.body.className, tools: window.toolsPage?.stats,
         orb: window.portalOrb?.stats.mode, ready: document.querySelector('#deviceTilt')?.dataset.approach

@@ -85,6 +85,7 @@
   } catch (error) {
     cssMaterial(error);
   }
+  window.siteReadiness?.track('orb', orbReady.then(() => gl ? 'ready' : 'css'));
   canvas.addEventListener('webglcontextlost', event => {
     event.preventDefault(); gl = null; matter.classList.remove('webgl');
   });
@@ -261,7 +262,8 @@
 
   function animate(now) {
     requestAnimationFrame(animate);
-    if (document.hidden || (now - lastTime < 32 && !transition && !window.portalReaction?.active)) return;
+    // Unseen behind the loading gate (loading-gate.js), it waits.
+    if (document.hidden || window.loadingGate?.veiled || (now - lastTime < 32 && !transition && !window.portalReaction?.active)) return;
     if (window.sceneCamera.appliedPitch !== camera.pitch) window.sceneCamera.update();
     const dt = lastTime ? Math.min(.1, (now - lastTime) / 1000) : 0;
     lastTime = now;

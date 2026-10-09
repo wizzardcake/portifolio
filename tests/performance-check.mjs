@@ -7,6 +7,9 @@ import {resolve,extname,sep} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
+// The loading gate (loading-gate.js) covers the page until the room is ready;
+// every wait below begins once it has let the visitor in.
+const GATE_OPEN = "(document.readyState !== 'loading' && (!document.getElementById('loadingGate') || document.documentElement.dataset.siteEntered === 'yes'))";
 
 const root=resolve(import.meta.dirname,'..');
 const sourceRoot=resolve(process.env.PORTFOLIO_TEST_ROOT||root);
@@ -42,7 +45,7 @@ try{
   await cdp('Page.enable');await cdp('Runtime.enable');
   const evaluate=async expression=>{const r=await cdp('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
   const sleep=ms=>new Promise(done=>setTimeout(done,ms));
-  async function until(expression){const at=Date.now();while(!await evaluate(expression)){if(Date.now()-at>45000)throw new Error('Timed out '+expression);await sleep(100);}}
+  async function until(expression){const at=Date.now();while(!await evaluate(GATE_OPEN + ' && (' + expression + ')')){if(Date.now()-at>45000)throw new Error('Timed out '+expression);await sleep(100);}}
   const motion=async value=>cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value}]});
   const shots=[];
   await cdp('Network.enable');await cdp('Network.setCacheDisabled',{cacheDisabled:true});await cdp('Performance.enable');

@@ -1,9 +1,9 @@
-/* The loading gate (loading-gate.js): the loading portal floating in
-   darkness from the very first paint, over everything, until the room is
-   genuinely ready (site-ready.js); then the way in through its doorway.
-   The portal itself is loading-portal.js (Codex); until it is there, or if
-   it cannot run, a quiet CSS orb stands in. Every motion here runs on the
-   compositor, so it stays smooth while the room is still being built. */
+/* The loading gate (loading-gate.js): the exterior (loading-exterior.js)
+   floating in the void from the very first paint, over everything, until the
+   room is genuinely ready (site-ready.js); then the way in through its
+   entrance. If the exterior cannot run, a quiet CSS orb stands in. Every
+   motion here runs on the compositor, so it keeps going while the room is
+   still being built. */
 .loading-gate {
   position: fixed;
   inset: 0;
@@ -11,17 +11,52 @@
   display: grid;
   place-items: center;
   overflow: hidden;
+  /* The void: near black, a faint violet and teal haze far off. */
   background:
-    radial-gradient(ellipse 60% 55% at 50% 52%, #1b1030 0%, #0d0817 48%, #06040a 100%);
+    radial-gradient(ellipse 38% 30% at 30% 34%, #1a3a3a1c, transparent 70%),
+    radial-gradient(ellipse 44% 36% at 72% 66%, #33195214, transparent 70%),
+    radial-gradient(ellipse 70% 62% at 50% 52%, #120c22 0%, #08060f 52%, #030206 100%);
   color: #cdbfe6;
   will-change: opacity;
 }
 .loading-gate[hidden] { display: none; }
+/* Sparse stars in two depths, each slowly fading in and out. */
+.loading-gate::before,
+.loading-gate::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-repeat: repeat;
+}
+.loading-gate::before {
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, #d8e8ffcc, transparent),
+    radial-gradient(1px 1px at 67% 9%, #c8f0ffaa, transparent),
+    radial-gradient(1.4px 1.4px at 38% 72%, #e6d8ffbb, transparent),
+    radial-gradient(1px 1px at 84% 46%, #ffffff99, transparent),
+    radial-gradient(1px 1px at 23% 58%, #bff5e6aa, transparent),
+    radial-gradient(1.2px 1.2px at 54% 33%, #ffffffaa, transparent);
+  background-size: 420px 380px;
+  animation: gate-stars 11s ease-in-out infinite;
+}
+.loading-gate::after {
+  background-image:
+    radial-gradient(1px 1px at 8% 64%, #ffffff66, transparent),
+    radial-gradient(1px 1px at 46% 12%, #d6c8ff66, transparent),
+    radial-gradient(1px 1px at 77% 81%, #c8fff066, transparent),
+    radial-gradient(1px 1px at 91% 23%, #ffffff55, transparent);
+  background-size: 260px 290px;
+  animation: gate-stars 15s ease-in-out -6s infinite;
+}
+@keyframes gate-stars { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 /* The portal (or the orb) emerges from the darkness. */
 .loading-gate__portal {
   position: relative;
   display: grid;
   place-items: center;
+  z-index: 1;
+  pointer-events: none;
   animation: gate-appear .9s ease-out both;
   will-change: transform;
 }
@@ -62,11 +97,12 @@
   font: 500 15px/1.2 Inter, system-ui, sans-serif;
   letter-spacing: .04em;
   cursor: pointer;
+  z-index: 2;
   animation: gate-appear .6s ease-out both;
 }
 .loading-gate__enter[hidden] { display: none; }
 .loading-gate__enter:hover,
 .loading-gate__enter:focus-visible { border-color: #cdbfe6; outline: none; }
 @media (prefers-reduced-motion: reduce) {
-  .loading-gate__orb { animation: none; }
+  .loading-gate__orb, .loading-gate::before, .loading-gate::after { animation: none; }
 }

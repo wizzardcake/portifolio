@@ -1,28 +1,30 @@
-/* The loading gate. From the first paint the loading portal floats in
-   darkness over everything (index.html's #loadingGate, loading-gate.css),
-   and the page beneath is inert, so nothing half-built is seen or touched.
-   When the room is genuinely ready (window.siteReady, site-ready.js) the
-   portal gathers energy, its doorway becomes the focus, and the view
-   accelerates toward and through it; once the doorway fills the screen the
-   gate thins away over the finished room, and the room's own entry carries
-   on. Under reduced motion the gate simply fades.
+/* The loading gate. From the first paint the exterior (the building of orb
+   glass the room is inside) floats in the void over everything (index.html's
+   #loadingGate, loading-gate.css), and the page beneath is inert, so nothing
+   half-built is seen or touched. When the room is genuinely ready
+   (window.siteReady, site-ready.js) the building gathers energy, its entrance
+   becomes the focus, and the view accelerates toward and through it; once
+   the entrance fills the screen the gate thins away over the finished room,
+   and the room's own entry carries on. Under reduced motion the gate simply
+   fades. No input reaches the room until the gate is gone.
 
    This module runs as soon as it arrives (async, right after the gate's
-   markup), so the portal starts before the rest of the page is parsed; what
+   markup), so the exterior starts before the rest of the page is parsed; what
    needs the whole page (the inert page, the ready signal) waits for it.
 
    While the gate hides the room completely (loadingGate.veiled), the room's
    idle life waits: unseen, it would only take frames from the way in.
    Events on window: 'site-entering' as the way in begins (the room takes its
    smoke back, to grow it in again from the visitor's feet), 'site-unveiling'
-   just before the gate starts to thin (the idle life resumes, the page is no
-   longer inert), 'site-entered' once the gate is gone (also
+   just before the gate starts to thin (the idle life resumes), 'site-entered'
+   once the gate is gone and the page is no longer inert (also
    <html data-site-entered="yes">).
 
-   The portal is the module the mount names (data-portal): Codex's
-   loading-portal.js (createLoadingPortal; opening, the doorway's place on
-   screen; setApproach, its layers' own parallax; dispose). Without it, or if
-   it fails, a CSS orb stands in and the way in centres on that. The gate's
+   What stands in the gate is the module the mount names (data-portal), with
+   createLoadingPortal(): loading-exterior.js (opening, the entrance's place
+   on screen; doorwayGrowth; setApproach; dispose), or Codex's
+   loading-portal.js, which keeps the same contract. Without it, or if it
+   fails, a CSS orb stands in and the way in centres on that. The gate's
    own motion is Web Animations, run by the compositor, so it keeps its pace
    even when the page's main thread is busy.
 
@@ -48,14 +50,13 @@ window.loadingGate = {
 function unveil() {
   if (!stats.veiled) return;
   stats.veiled = false;
-  // The page may be used again; its restyling is paid for while the gate
-  // still hides it, not as the room appears.
-  others.forEach(element => {element.inert = false;});
   stats.unveiledAt = Math.round(performance.now());
   dispatchEvent(new Event('site-unveiling'));
 }
 function entered(detail) {
   unveil();
+  // Only now may the page be used: no input reaches the room during the way in.
+  others.forEach(element => {element.inert = false;});
   stats.state = 'entered';
   stats.enteredAt = Math.round(performance.now());
   document.documentElement.dataset.siteEntered = 'yes';
@@ -127,8 +128,9 @@ else {
         unveil();
         await gate.animate([{opacity: 1}, {opacity: 0}], {duration: 450, easing: 'ease-in-out', fill: 'forwards'}).finished;
       } else {
-        // 1. The portal answers: its energy rises.
-        await mount.animate([{filter: 'brightness(1) saturate(1)'}, {filter: 'brightness(1.4) saturate(1.3)'}],
+        // 1. It answers: its energy rises, a little (the exterior's glass
+        // should stay dark; its entrance brightens through setApproach).
+        await mount.animate([{filter: 'brightness(1) saturate(1)'}, {filter: 'brightness(1.14) saturate(1.1)'}],
           {duration: 380, easing: 'ease-out', fill: 'forwards'}).finished;
         // 2. The doorway becomes the focus: the portal scales about it (the
         // dark around it stays; scaling that too would only cost raster) ...
@@ -137,16 +139,18 @@ else {
         mount.style.transformOrigin = `${opening.x - box.left}px ${opening.y - box.top}px`;
         // ... and the view accelerates through it. The doorway's size grows in
         // equal steps of log scale, at an easing-in rate, and fills the screen
-        // at COVERED of the way; the portal's own layers part around it as it
-        // nears (setApproach: the doorway's depth layer grows 1 + 2.8p by
-        // itself, so the mount does the rest).
+        // at COVERED of the way. What the doorway grows by itself as the view
+        // nears (setApproach) the mount's scale leaves out.
         const COVERED = .8, steps = 16, duration = 1100;
         const cover = Math.max(innerWidth / Math.max(1, opening.width), innerHeight / Math.max(1, opening.height)) * 1.1;
         const approach = t => portal ? Math.min(1, t * t) : 0;
+        // How much the doorway grows by itself at approach 1 (Codex's
+        // loading-portal.js: its depth layer, 1 + 2.8p; the exterior: none).
+        const growth = portal?.doorwayGrowth ?? (portal ? 2.8 : 0);
         const doorway = t => cover ** ((t / COVERED) ** 2);
         const zoom = mount.animate(Array.from({length: steps + 1}, (_, i) => {
           const t = i / steps;
-          return {transform: `scale(${Math.max(1, doorway(t) / (1 + 2.8 * approach(t)))})`};
+          return {transform: `scale(${Math.max(1, doorway(t) / (1 + growth * approach(t)))})`};
         }), {duration, easing: 'linear', fill: 'forwards'});
         // 3-4. Through the doorway, the gate thins over the room.
         const thin = gate.animate([{opacity: 1}, {opacity: 0}], {duration: duration * .3, delay: duration * .7, easing: 'ease-in-out', fill: 'forwards'});

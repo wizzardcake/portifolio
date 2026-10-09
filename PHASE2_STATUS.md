@@ -355,3 +355,167 @@ multi-second freezes on first use, are gone.
    to have let the visitor in (`data-site-entered`). Checks that must see the
    page before entry, such as `tests/loading-gate-check.mjs`, use their own
    waits.
+
+---
+
+# Phase 2C — the exterior: orb glass as architecture (Claude, after Codex)
+
+## Start here
+
+- Worktree: `C:\Users\ander\OneDrive\Skrivebord\Portifolio\verification\exterior-entry-refinement`.
+- Branch: `feature/exterior-entry-refinement`, from `c91388a` (Phase 2B above).
+- Not merged, pushed or deployed.
+
+**Stop point:** the revised exterior works end to end and is ready for the
+user's review.
+
+### Codex's state at takeover
+
+Codex stopped at its usage limit with no tracked file changed and nothing
+wired into the page. Its work:
+
+- `assets/loading/exterior.webp`, converted from
+  `verification/exterior-entry/exterior-source.png`: a polished concept-art
+  domed cathedral with gold filigree, purple stained glass and a tower.
+  - This is the image the user found too literal.
+  - It is left untracked and unused.
+- `tests/exterior-entry-check.mjs`: before/after evidence of the gate, and
+  checks that input stays blocked for the whole cinematic.
+  - Its "before" run had a sampler error.
+  - Kept; fixed and extended (below).
+
+## The direction
+
+The real portal orb is the material reference (`portal-orb-material.js`):
+- a dark translucent body;
+- the teal heart;
+- sparse curved currents in teal and violet, turning in layers;
+- mist that absorbs light;
+- a Fresnel skin;
+- green and violet light wrapping its edges;
+- one restrained highlight.
+
+The exterior reference images gave only the broad architecture:
+- one floating building with a central entrance;
+- a rounded main body;
+- an attached taller tower;
+- the void around it.
+
+What the loading screen shows: one artifact, as if the orb's material had
+become a building.
+
+- **The body** is an orb-derived dome, drawn up at its crown into a short
+  point. It sits on a short drum, with two smooth lips of the same glass.
+- **Beneath**, the glass gathers into a drop with a falling droplet, like
+  the orb's liquid neck.
+- **The entrance** is one pointed arch with a thin frame. The room's warm
+  light shows low in it, and its green and violet at the sides.
+- **The tower** grows out of the same glass and gathers into a slight swell.
+  It is then drawn up into a long pointed spire, with no orb on top. It has
+  two narrow windows.
+- **The windows** are two small slits in the drum. There is no filigree,
+  gold, buttresses or repeated ornament.
+- **The void** is near black with faint teal and violet haze and sparse,
+  slowly breathing stars. There is no ground.
+
+## How it is made
+
+- `dev/exterior-art.html` renders the building offline: ray-marched shapes
+  shaded with the orb's own material.
+  - The volume loop, noise, heart, currents, pockets, skin, wrap and tone map
+    are ported from `portal-orb-material.js`.
+  - `dev/exterior-export.mjs --assets` writes three moments of the glass's
+    inner flow to `assets/loading/exterior-{a,b,c}.webp` (1200 px, about
+    20 KB each). It also prints the entrance's position on the image, which
+    `loading-exterior.js` uses for the zoom.
+- `loading-exterior.js` and `loading-exterior.css` show the art in the gate.
+  They keep `loading-portal.js`'s contract: `opening`, `setApproach`,
+  `dispose`, plus `doorwayGrowth`.
+  - Layer A stays beneath while B and C crossfade over it in a 21 s cycle,
+    so the inside appears to flow and the glass never thins.
+  - The building floats, and the halo and the light in the entrance breathe.
+  - All of this is CSS on the compositor. The page's main thread is busy
+    building the room meanwhile (see Phase 2B, limitation 1).
+  - Reduced motion: one still image.
+- `index.html`:
+  - the gate names `loading-exterior.js`;
+  - its CSS is linked;
+  - the module and the three images are preloaded, the first at high
+    priority.
+- `loading-gate.js`:
+  - The zoom reads `doorwayGrowth`: 0 for the exterior, which does not
+    scale by itself.
+  - The energy rise is gentler (brightness 1.14, saturation 1.1), so the
+    glass stays dark.
+  - The page stays inert until the gate is gone, so no input reaches the
+    room during the way in (Codex's check). Earlier it was released when
+    the gate began to thin.
+- `loading-gate.css`: the void and stars. The mount lets clicks through, so
+  the "Gå inn" offer stays clickable over the taller art.
+
+Readiness, fallbacks and reduced motion are unchanged from Phase 2B:
+- If the exterior's module fails, the CSS orb stands in.
+- If the gate's script is missing, there is no gate.
+- With no WebGL, the room's silhouette is shown.
+- A missing part gives `degraded`.
+- After 12 s comes the "Gå inn" offer.
+
+Codex's `loading-portal.*` are kept unchanged but are no longer used by the
+page.
+
+## Verification
+
+All on mains power, on this laptop (headless Chrome, ANGLE D3D11).
+
+**Suites.** All 19 runs pass:
+- the 16 room suite runs;
+- `tests/loading-gate-check.mjs`, all four groups:
+  - the first paint holds the gate; the page is inert and a click reaches
+    nothing; every part is ready and the gate was still up at ready; the way
+    in goes through the entrance; the exterior is disposed with the gate;
+  - phone fit; reduced motion gives one still image and a fade;
+  - no WebGL; a missing part; a missing exterior module (the orb stands
+    in); a missing gate script;
+  - the slow "Gå inn" offer;
+- Codex's `tests/loading-portal-check.mjs`;
+- Codex's `tests/exterior-entry-check.mjs --out=after`: input stays
+  blocked for the whole cinematic, with no console errors or warnings.
+
+**Looked at:**
+- the loading state at 1440×900 and 390×844;
+- slow-motion films of the way in on both;
+- the old exterior and the new one side by side.
+
+**Measured:**
+
+| | Result |
+|---|---|
+| The way in, 3 traced loads | 0, 2 and 0 vsyncs dropped of 269; longest display gap 20–32 ms |
+| First 3 s in the room, now released only at the end (3 loads, interleaved with Phase 2B) | longest frame 18–33 ms, none over 50 ms; Phase 2B 18–34 ms |
+| While loading, 3 traced loads | 158–171 frames presented over 6.1–6.6 s; Codex's canvas portal 76–93 over 5.9–7.1 s |
+| Art | three 20 KB WebP files; Codex's single image was 282 KB |
+
+One stop of about 2.1 s remains in each load while loading. It coincides
+with a 2.1 s timer callback in the room's startup, which holds back the
+display itself, so nothing on the loading screen can move through it (Phase
+2B, limitation 1).
+
+## Remaining for later passes
+
+- **The user's visual review.** The palette, the tower's swell and spire,
+  the crown point, the two drum windows, the warm and violet light in the
+  entrance, and the zoom timings are first proposals. Each can be tuned in
+  `dev/exterior-art.html` and re-exported.
+- **Raster softness.** At the deepest point of the zoom the 1200 px art
+  softens. It is inside the dark of the entrance and the fade at normal
+  speed. A 1600 px export or a vector frame for the entrance would sharpen
+  it, at the cost of more bytes.
+- **The inner flow** is a crossfade of three moments, not a live
+  simulation. A live shader would move continuously but would pause with
+  the main thread while the room loads.
+- **Not touched in this pass:** interior lighting and navigation, the room
+  itself, Codex's `exterior.webp` (still untracked) and `loading-portal.*`.
+- **The 2.1 s stop while loading** is the room's startup. It is the next
+  thing to break up if the loading screen must never pause.
+- **Only measured here:** headless Chrome on this laptop; phone sizes are
+  emulated.

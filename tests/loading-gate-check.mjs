@@ -3,7 +3,7 @@
 // The gate covers the page from its first paint and keeps it inert until the
 // room is genuinely ready, then lets the visitor in and is gone. Also: the
 // way in on a phone, under reduced motion, without WebGL, with a part that
-// fails to load, without the portal module or the gate's own script, and
+// fails to load, without the exterior's module or the gate's own script, and
 // when the room is so slow that the visitor is offered to go in anyway.
 import {createServer} from 'node:http';
 import {readFile, mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
@@ -116,7 +116,7 @@ try {
   await until(loaded);
   assert.ok(await evaluate(`(() => { const r = document.getElementById('loadingGate').getBoundingClientRect(); return r.left <= 0 && r.top <= 0 && r.right >= innerWidth && r.bottom >= innerHeight; })()`), 'The gate covers the viewport');
   assert.equal(await evaluate("document.querySelector('#experience').inert"), true, 'The page beneath is inert while loading');
-  await until("document.querySelectorAll('.loading-gate .loading-portal canvas').length === 3");
+  await until("!!document.querySelector('.loading-gate .loading-exterior.is-shown')");
   await shot('loading');
   const [x, y] = await evaluate(goChair);
   await click(x, y);
@@ -132,7 +132,8 @@ try {
   await until(entered);
   await assertEntered('Desktop');
   const desk = await evaluate('loadingGate.stats');
-  assert.equal(desk.portal, 'loading-portal', 'The loading portal (loading-portal.js) is what the gate shows');
+  assert.equal(desk.portal, 'loading-portal', 'The exterior (loading-exterior.js) is what the gate shows');
+  assert.ok(await evaluate("!document.querySelector('.loading-exterior')"), 'The exterior is disposed with the gate');
   assert.equal(desk.way, 'through', 'The way in goes through the doorway');
   assert.ok(desk.frames.length > 10, 'The way in is animated over frames');
   await sleep(600); await shot('entered');
@@ -152,8 +153,9 @@ try {
   await viewport(1440, 900, 'reduce');
   await cdp('Page.navigate', {url});
   await until(loaded);
-  await until("!!document.querySelector('.loading-gate .loading-portal')");
-  assert.equal(await evaluate("document.querySelector('.loading-portal').dataset.reducedMotion"), 'true', 'Reduced motion: the portal is still');
+  await until("!!document.querySelector('.loading-gate .loading-exterior')");
+  assert.equal(await evaluate("document.querySelector('.loading-exterior').dataset.reducedMotion"), 'true', 'Reduced motion: the exterior knows');
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.loading-exterior__building, .loading-exterior__layer--b')].map(e => getComputedStyle(e).animationName + ':' + getComputedStyle(e).opacity)"), ['none:1', 'none:0'], 'Reduced motion: one still image, nothing moving');
   await until(entered);
   await assertEntered('Reduced motion');
   assert.equal(await evaluate('loadingGate.stats.way'), 'fade', 'Reduced motion: the gate fades instead of flying through');
@@ -182,16 +184,16 @@ try {
   missing.delete('/portal-effects.js');
   errors.length = 0; // the missing script's own consequences are expected here
 
-  // Without the portal's module, the CSS orb stands in and the way in still works.
-  missing.add('/loading-portal.js');
+  // Without the exterior's module, the CSS orb stands in and the way in still works.
+  missing.add('/loading-exterior.js');
   await cdp('Page.navigate', {url});
   await until(loaded);
   await until("!!window.loadingGate?.stats.portal");
-  assert.equal(await evaluate('loadingGate.stats.portal'), 'orb', 'No portal module: the orb stands in');
+  assert.equal(await evaluate('loadingGate.stats.portal'), 'orb', 'No exterior module: the orb stands in');
   assert.ok(await evaluate("!!document.querySelector('.loading-gate__orb')"), 'The stand-in orb is shown');
   await until(entered);
-  await assertEntered('No portal module');
-  missing.delete('/loading-portal.js');
+  await assertEntered('No exterior module');
+  missing.delete('/loading-exterior.js');
   errors.length = 0;
 
   // 5. Without the gate's own script, there is no gate in the way.
@@ -201,7 +203,7 @@ try {
   assert.ok(await evaluate("!document.getElementById('loadingGate') && !document.querySelector('[inert]')"), 'No gate script: no gate');
   missing.delete('/loading-gate.js');
   errors.length = 0;
-  console.log('PASS: no WebGL, a missing part, a missing portal module, a missing gate script');
+  console.log('PASS: no WebGL, a missing part, a missing exterior module, a missing gate script');
 
   // 6. A room that never gets ready: after a while the visitor may go in.
   let release;

@@ -1,0 +1,71 @@
+/* The loading screen's exterior (loading-exterior.js): the building of orb
+   glass floating in the void. Compositor-only motion: the inner flow is three
+   renders crossfaded over a fixed base, the building floats, the halo and the
+   light in the entrance breathe. */
+.loading-exterior {
+  --exterior-approach: 0;
+  position: relative;
+  /* The element is as narrow as the building (0.6 of its height); the
+     square art spills out on both sides, transparent there. The building
+     takes at most about 75 % of the screen's height, and on a phone stays
+     within its width. */
+  width: min(516px, 52.8svh, 96vw);
+  aspect-ratio: .6;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.1s ease-out;
+}
+.loading-exterior.is-shown { opacity: 1; }
+.loading-exterior__building {
+  position: absolute;
+  inset: 0 -33.333%;
+  animation: exterior-float 7.4s ease-in-out infinite;
+  will-change: transform;
+}
+.loading-exterior__layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+/* A stays beneath; B and C fade in over it in turn, so the glass is always
+   whole while its inside moves from one moment of its flow to the next. */
+.loading-exterior__layer--b { animation: exterior-flow-b 21s ease-in-out infinite; }
+.loading-exterior__layer--c { animation: exterior-flow-c 21s ease-in-out infinite; }
+@keyframes exterior-flow-b { 0%, 100% { opacity: 0; } 33%, 66% { opacity: 1; } }
+@keyframes exterior-flow-c { 0%, 33%, 100% { opacity: 0; } 66% { opacity: 1; } }
+@keyframes exterior-float { 0%, 100% { translate: 0 -.6%; } 50% { translate: 0 .6%; } }
+/* The orb's teal heart and violet edge, as a soft light around it. */
+.loading-exterior__halo {
+  position: absolute;
+  inset: 14% 22% 10%;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse 46% 40% at 46% 56%, #2fb39a2e, transparent 70%),
+    radial-gradient(ellipse 60% 52% at 58% 44%, #6a3fb01f, transparent 72%);
+  filter: blur(18px);
+  opacity: calc(1 - var(--exterior-approach) * .8);
+  animation: exterior-breathe 9.6s ease-in-out infinite;
+}
+@keyframes exterior-breathe { 0%, 100% { scale: .97; opacity: .82; } 50% { scale: 1.03; opacity: 1; } }
+/* The room's light in the entrance, a little alive; brighter as the view nears. */
+.loading-exterior__door {
+  position: absolute;
+  left: 47.6%;
+  top: 56%;
+  width: 8.8%;
+  height: 12%;
+  border-radius: 50% 50% 18% 18%;
+  background: radial-gradient(ellipse 60% 50% at 50% 72%, #ffb35c55, transparent 72%);
+  mix-blend-mode: screen;
+  opacity: calc(.55 + var(--exterior-approach) * .45);
+  animation: exterior-door 5.3s ease-in-out infinite;
+}
+@keyframes exterior-door { 0%, 100% { scale: .96; } 50% { scale: 1.04; } }
+.loading-exterior.is-paused *,
+.loading-exterior[data-reduced-motion="true"] * { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .loading-exterior__building, .loading-exterior__layer, .loading-exterior__halo, .loading-exterior__door { animation: none; }
+  .loading-exterior__layer--b, .loading-exterior__layer--c { opacity: 0; }
+}

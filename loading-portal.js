@@ -4,7 +4,7 @@ const TAU = Math.PI * 2;
 const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
 const mix = (a, b, t) => a + (b - a) * t;
 
-function texture(size = 256) {
+function texture(size = 192) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d'), image = ctx.createImageData(size, size);
@@ -13,15 +13,20 @@ function texture(size = 256) {
     h = Math.imul(h ^ h >>> 13, 1274126177);
     return ((h ^ h >>> 16) >>> 0) / 4294967295;
   };
+  // Reuse the small noise lattice rather than hashing four corners for every
+  // pixel and octave. These fields never sample outside [-8, 55].
+  const lattice = new Float64Array(64 * 64);
+  for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) lattice[y * 64 + x] = hash(x - 8, y - 8);
   const noise = (x, y) => {
     const ix = Math.floor(x), iy = Math.floor(y);
     let u = x - ix, v = y - iy; u *= u * (3 - 2 * u); v *= v * (3 - 2 * v);
-    return mix(mix(hash(ix, iy), hash(ix + 1, iy), u), mix(hash(ix, iy + 1), hash(ix + 1, iy + 1), u), v);
+    const at = (iy + 8) * 64 + ix + 8;
+    return mix(mix(lattice[at], lattice[at + 1], u), mix(lattice[at + 64], lattice[at + 65], u), v);
   };
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const px = (x / size - .5) * 2, py = (y / size - .5) * 2;
-    const r = Math.hypot(px, py), angle = Math.atan2(py, px) + r * 3.3;
-    const u = Math.cos(angle) * r * 3 + 8, v = Math.sin(angle) * r * 3 + 5;
+    const angle = Math.hypot(px, py) * 3.3, c = Math.cos(angle), s = Math.sin(angle);
+    const u = (px * c - py * s) * 3 + 8, v = (px * s + py * c) * 3 + 5;
     const n = noise(u, v), fine = noise(u * 2.8 + n * 1.7, v * 2.8 - n * 1.7);
     const vein = Math.pow(1 - Math.abs(fine * 2 - 1), 17) * clamp((n - .32) * 2);
     const density = .18 + n * .5 + fine * .2;
@@ -74,6 +79,7 @@ function doorPath(time, scale = 1) {
  * autoplay: false makes render(seconds) the only animation driver.
  */
 export function createLoadingPortal(container, {reducedMotion, autoplay = true} = {}) {
+  const setupStart = performance.now();
   if (!(container instanceof Element)) throw new TypeError('A mount element is required');
   const element = document.createElement('div');element.className = 'loading-portal';
   element.setAttribute('aria-hidden', 'true');
@@ -85,9 +91,10 @@ export function createLoadingPortal(container, {reducedMotion, autoplay = true} 
   container.append(element);
   const contexts = [atmosphere, depth, liquid].map(c => c.getContext('2d', {alpha: true}));
   if (contexts.some(c => !c)) {element.remove();throw new Error('Canvas 2D is unavailable');}
-  const grain = texture(), media = matchMedia('(prefers-reduced-motion: reduce)');
+  const textureStart = performance.now(), grain = texture(), textureMs = performance.now() - textureStart;
+  const media = matchMedia('(prefers-reduced-motion: reduce)');
   let disposed = false, paused = !autoplay, frame = 0, last = null, clock = 0, paintedAt = -Infinity;
-  let motionOverride = reducedMotion, scale = 1, reveal = 0, draws = 0, drawMs = 0;
+  let motionOverride = reducedMotion, scale = 1, reveal = 0, draws = 0, drawMs = 0, setupMs = 0;
   const isStill = () => motionOverride ?? media.matches;
   const clear = ctx => {ctx.setTransform(1, 0, 0, 1, 0, 0);ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);ctx.setTransform(scale, 0, 0, scale, ctx.canvas.width / 2, ctx.canvas.height / 2);};
   const draw = seconds => {
@@ -114,9 +121,9 @@ export function createLoadingPortal(container, {reducedMotion, autoplay = true} 
 
     // A dark throat with refracted, offset currents. Kept on its own canvas
     // so a later transition can push toward it without scaling the whole UI.
-    well.save();well.clip(door);
+    well.save();well.clip(doorPath(t, 1.09));
     well.fillStyle = '#03090b';well.fillRect(-100, -120, 200, 240);
-    well.fillStyle = radial(well, -5, 16, 100, [[0, '#1a443c'], [.25, '#102723'], [.65, '#091216'], [1, '#070b0e']]);
+    well.fillStyle = radial(well, -5, 16, 100, [[0, '#173831'], [.25, '#102522'], [.65, '#091216'], [1, '#070b0e']]);
     well.fillRect(-100, -120, 200, 240);
     for (let j = 0; j < 5; j++) {
       well.save();well.translate(-4, 22);well.rotate(t * .014 + j * .39);
@@ -124,7 +131,7 @@ export function createLoadingPortal(container, {reducedMotion, autoplay = true} 
       well.globalAlpha = .06 + j * .012;well.globalCompositeOperation = 'screen';
       well.drawImage(grain, -115, -115, 230, 230);well.restore();
     }
-    well.fillStyle = radial(well, -4, 18, 35, [[0, '#76b6a125'], [.35, '#4a9e8220'], [1, '#1b494500']]);
+    well.fillStyle = radial(well, -4, 18, 35, [[0, '#76b6a115'], [.35, '#4a9e8210'], [1, '#1b494500']]);
     well.fillRect(-80, -80, 160, 160);well.restore();
 
     // Back edge: a few millimetres of optically dense material, catching warm
@@ -132,11 +139,10 @@ export function createLoadingPortal(container, {reducedMotion, autoplay = true} 
     const back = skinPath(t, 1.015, 1, 5);back.addPath(door);
     skin.fillStyle = '#191611';skin.fill(back, 'evenodd');
     skin.strokeStyle = '#78533465';skin.lineWidth = 1.3;skin.stroke(skinPath(t, 1.008, 1, 3));
-    const body = new Path2D(outer);body.addPath(door);
-    skin.save();skin.clip(body, 'evenodd');
-    skin.fillStyle = radial(skin, -51, -80, 290, [[0, '#8d693d'], [.27, '#4b3824'], [.58, '#24201b'], [.86, '#171c1c'], [1, '#0e1417']]);
+    skin.save();skin.clip(outer);
+    skin.fillStyle = radial(skin, -51, -80, 290, [[0, '#5c4c33'], [.27, '#302c23'], [.58, '#181a19'], [.86, '#121a1c'], [1, '#0a1014']]);
     skin.fillRect(-190, -190, 380, 380);
-    skin.save();skin.rotate(.13 + t * .012);skin.globalCompositeOperation = 'screen';skin.globalAlpha = .64 * pulse;
+    skin.save();skin.rotate(.13 + t * .012);skin.globalCompositeOperation = 'screen';skin.globalAlpha = .42 * pulse;
     skin.drawImage(grain, -210, -210, 420, 420);skin.restore();
     skin.save();skin.rotate(-.28 - t * .009);skin.globalCompositeOperation = 'soft-light';skin.globalAlpha = .7;
     skin.drawImage(grain, -205, -205, 410, 410);skin.restore();
@@ -145,37 +151,52 @@ export function createLoadingPortal(container, {reducedMotion, autoplay = true} 
 
     // Long flowing filaments, buried in the material. Their asymmetric drift
     // never rotates the artifact itself and never restarts at a loop boundary.
-    for (let j = 0; j < 11; j++) {
+    for (let j = 0; j < 6; j++) {
       const p = new Path2D(), offset = j * 1.73;
       for (let k = 0; k <= 70; k++) {
         const a = k / 70 * 5.2 + offset + t * (j % 2 ? .016 : -.012);
-        const r = 42 + j * 7.8 + 11 * Math.sin(a * 2.2 + offset + t * .09);
+        const r = 42 + j * 14 + 11 * Math.sin(a * 2.2 + offset + t * .09);
         const x = Math.cos(a) * r * 1.06, y = Math.sin(a) * r;
         if (k) p.lineTo(x, y);else p.moveTo(x, y);
       }
-      skin.strokeStyle = j % 4 ? `rgba(219,159,73,${.025 + .02 * Math.sin(offset + t * .13) ** 2})` : '#78aaa61c';
+      skin.strokeStyle = j % 4 ? `rgba(219,159,73,${.018 + .013 * Math.sin(offset + t * .13) ** 2})` : '#78aaa614';
       skin.lineWidth = j % 3 ? .65 : 1.2;skin.stroke(p);
     }
 
     // The doorway is a depression in the glass: soft dark lip, reflected
     // amber on the inner left, a thin teal catch on the opposite surface.
-    skin.strokeStyle = '#090d10a6';skin.lineWidth = 18;skin.stroke(door);
+    const shadowLip = skin.createLinearGradient(-40, -90, 39, 85);
+    shadowLip.addColorStop(0, '#05090d77');shadowLip.addColorStop(.4, '#060b102f');shadowLip.addColorStop(1, '#05090d05');
+    skin.strokeStyle = shadowLip;skin.lineWidth = 24;skin.stroke(door);
     const lip = skin.createLinearGradient(-60, -75, 59, 84);
-    lip.addColorStop(0, '#e4bf8055');lip.addColorStop(.28, '#a8733944');lip.addColorStop(.51, '#221a1211');lip.addColorStop(.79, '#6eac9d44');lip.addColorStop(1, '#c6965644');
-    skin.strokeStyle = lip;skin.lineWidth = 4.5;skin.stroke(doorPath(t, 1.035));
-    skin.strokeStyle = '#d0ad681a';skin.lineWidth = 1;skin.stroke(doorPath(t, 1.12));
+    lip.addColorStop(0, '#e4bf8049');lip.addColorStop(.22, '#a873392d');lip.addColorStop(.48, '#221a1200');lip.addColorStop(.8, '#6eac9d29');lip.addColorStop(1, '#c6965609');
+    skin.filter = 'blur(4px)';skin.globalAlpha = .45;
+    skin.strokeStyle = lip;skin.lineWidth = 13;skin.stroke(doorPath(t, 1.065));
+    skin.filter = 'none';skin.globalAlpha = .5;skin.lineWidth = 1.2;skin.stroke(doorPath(t, 1.045));
+    skin.globalAlpha = 1;
 
     // The broad sheen and clean grazing rim follow the orb's material logic:
     // a dark body, one warm key, a teal edge, very little white.
-    skin.fillStyle = radial(skin, -88, -96, 79, [[0, '#fff0c263'], [.12, '#e7c89235'], [.55, '#b9914310'], [1, '#927d5700']]);
+    skin.fillStyle = radial(skin, -91, -89, 81, [[0, '#eed9b242'], [.12, '#d2b67d2b'], [.55, '#b9914310'], [1, '#927d5700']]);
     skin.fillRect(-190, -190, 380, 380);
     skin.fillStyle = radial(skin, 123, 54, 73, [[0, '#54938343'], [.36, '#426d6320'], [1, '#2a4d4a00']]);
     skin.fillRect(-190, -190, 380, 380);
     const rim = skin.createLinearGradient(-126, -120, 120, 112);
-    rim.addColorStop(0, '#ead8ab9c');rim.addColorStop(.23, '#93734455');rim.addColorStop(.49, '#1c171333');rim.addColorStop(.75, '#65988788');rim.addColorStop(1, '#d2a65b66');
-    skin.strokeStyle = rim;skin.lineWidth = 4.7;skin.stroke(outer);
-    skin.strokeStyle = '#efcf8e19';skin.lineWidth = 1;skin.stroke(skinPath(t, .952));
+    rim.addColorStop(0, '#f2dfbdbf');rim.addColorStop(.23, '#cba97388');rim.addColorStop(.49, '#1c171300');rim.addColorStop(.75, '#65988788');rim.addColorStop(1, '#d2a65b66');
+    skin.filter = 'blur(10px)';skin.globalAlpha = .37;skin.strokeStyle = rim;skin.lineWidth = 40;skin.stroke(outer);
+    skin.filter = 'blur(3px)';skin.globalAlpha = .4;skin.lineWidth = 9;skin.stroke(outer);
+    skin.filter = 'none';skin.globalAlpha = .85;skin.lineWidth = 2;skin.stroke(outer);
+    skin.globalAlpha = 1;
+    // A curved reflected window: tapered, discontinuous, attached to the skin.
+    const glint = new Path2D();
+    glint.moveTo(-127, -41);glint.bezierCurveTo(-130, -85, -118, -113, -82, -125);
+    const highlight = skin.createLinearGradient(-125, -50, -90, -126);
+    highlight.addColorStop(0, '#ead8b300');highlight.addColorStop(.35, '#ead8b32a');highlight.addColorStop(.65, '#fff0d978');highlight.addColorStop(1, '#ead8b300');
+    skin.strokeStyle = highlight;skin.lineWidth = 3;skin.stroke(glint);
     skin.restore();
+    // Refraction softens the opening into the same skin. No separate opaque
+    // doorframe; the separate depth layer shows through this feathered mask.
+    skin.save();skin.globalCompositeOperation = 'destination-out';skin.filter = 'blur(3px)';skin.fillStyle = '#000';skin.fill(door);skin.restore();
     draws++;drawMs += performance.now() - started;
   };
   function resize() {
@@ -186,19 +207,25 @@ export function createLoadingPortal(container, {reducedMotion, autoplay = true} 
     scale = pixels / 440;draw(clock);
   }
   function tick(now) {
-    frame = 0;if (disposed || paused || document.hidden || isStill()) {last = null;return;}
+    frame = 0;if (disposed || paused || document.hidden) {last = null;return;}
+    // Some browsers delay the media-query event. Stop immediately when the
+    // preference itself changes, including the layer presentation state.
+    if (isStill()) {syncMotion();return;}
     if (last !== null) clock += Math.min((now - last) / 1000, .1);
     last = now;
-    if (now - paintedAt >= 1000 / 24) {paintedAt = now;draw(clock);}
+    if (now - paintedAt >= 1000 / 24) {paintedAt = now - ((now - paintedAt) % (1000 / 24) || 0);draw(clock);}
     frame = requestAnimationFrame(tick);
   }
   function syncMotion() {
+    if (disposed) return;
+    element.dataset.reducedMotion = String(isStill());
+    element.style.setProperty('--portal-approach', isStill() ? 0 : reveal);
     cancelAnimationFrame(frame);frame = 0;last = null;
     draw(clock);if (!paused && !document.hidden && !isStill()) frame = requestAnimationFrame(tick);
   }
   const observer = new ResizeObserver(resize);observer.observe(element);
   media.addEventListener('change', syncMotion);document.addEventListener('visibilitychange', syncMotion);
-  resize();syncMotion();
+  resize();syncMotion();setupMs = performance.now() - setupStart;
   return {
     element,
     layers: Object.freeze({atmosphere, depth, liquid}),
@@ -213,13 +240,14 @@ export function createLoadingPortal(container, {reducedMotion, autoplay = true} 
       if (disposed || !Number.isFinite(value)) return;
       reveal = clamp(value);
       const amount = isStill() ? 0 : reveal;
+      element.dataset.reducedMotion = String(isStill());
       element.style.setProperty('--portal-approach', amount);
     },
     get opening() {
-      const r = element.getBoundingClientRect();
+      const r = liquid.getBoundingClientRect();
       return {x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width * 98 / 440, height: r.height * 177 / 440};
     },
-    get stats() {return {renderer: 'canvas2d',draws,meanDrawMs: draws ? drawMs / draws : 0,seconds: clock,reducedMotion: isStill(),paused,approach: reveal,pixels: liquid.width,disposed};},
+    get stats() {return {renderer: 'canvas2d',draws,meanDrawMs: draws ? drawMs / draws : 0,setupMs,textureMs,seconds: clock,reducedMotion: isStill(),paused,approach: reveal,pixels: liquid.width,disposed};},
     dispose() {
       if (disposed) return;disposed = true;cancelAnimationFrame(frame);observer.disconnect();
       media.removeEventListener('change', syncMotion);document.removeEventListener('visibilitychange', syncMotion);

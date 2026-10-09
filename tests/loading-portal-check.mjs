@@ -1,4 +1,5 @@
-// node tests/loading-portal-check.mjs --out=design-1
+// node tests/loading-portal-check.mjs --out=review [--record]
+// node tests/loading-portal-check.mjs --serve (prints local preview URL)
 // Local Chrome/CDP check; fresh profile, no package dependencies.
 import {createServer} from 'node:http';
 import {readFile,mkdir,writeFile,mkdtemp,rm} from 'node:fs/promises';
@@ -8,7 +9,7 @@ import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
 
 const root=resolve(import.meta.dirname,'..');
-const name=process.argv.find(a=>a.startsWith('--out='))?.slice(6)||'relay-final';
+const name=process.argv.find(a=>a.startsWith('--out='))?.slice(6)||'review';
 assert.match(name,/^[a-z0-9-]+$/i);
 const gpu=true;
 const out=resolve(root,'verification/loading-portal',name);await mkdir(out,{recursive:true});
@@ -18,6 +19,7 @@ const server=createServer(async(req,res)=>{
   try{res.setHeader('Content-Type',({'.html':'text/html','.css':'text/css','.js':'text/javascript','.png':'image/png','.svg':'image/svg+xml'})[extname(file)]||'application/octet-stream');res.end(await readFile(file));}catch{res.writeHead(404).end();}
 });
 await new Promise(done=>server.listen(0,'127.0.0.1',done));const url=`http://127.0.0.1:${server.address().port}/`;
+if(process.argv.includes('--serve')){console.log('Preview: '+url+'loading-portal-preview.html');await new Promise(()=>{});}
 const prefix=resolve(tmpdir(),'portfolio-loading-portal-'),profile=await mkdtemp(prefix);
 const chrome=spawn(process.env.CHROME_PATH||'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',[
   '--headless=new','--no-first-run','--no-default-browser-check','--disable-background-networking',
@@ -50,19 +52,42 @@ try{
   await sleep(300);await shot('square');
   await evaluate('loadingPortal.render(6.85);true');await shot('round');
   await evaluate('loadingPortal.render(13.7);true');await shot('square-flow');
+  const originalOpening=await evaluate('loadingPortal.opening');
   await evaluate('loadingPortal.render(2.7);loadingPortal.setApproach(.35);true');await shot('approach');
+  assert.ok((await evaluate('loadingPortal.opening')).width>originalOpening.width*2,'Opening bounds follow the manual approach transform');
   await evaluate('loadingPortal.setApproach(0);loadingPortal.play();true');
   const live=await evaluate(`new Promise(resolve=>{const start=performance.now(),d=[];let last=start;function step(now){d.push(now-last);last=now;if(now-start<5000)requestAnimationFrame(step);else resolve({fps:d.length*1000/(now-start),p95:d.sort((a,b)=>a-b)[Math.floor(d.length*.95)],stats:loadingPortal.stats});}requestAnimationFrame(step);})`);
   await motion('reduce');await sleep(300);
   const before=await evaluate('loadingPortal.stats');await sleep(500);
   const after=await evaluate('loadingPortal.stats');assert.equal(after.draws,before.draws,'Reduced motion schedules no redraws');
   await evaluate('loadingPortal.setApproach(.8);true');
-  assert.equal(await evaluate("getComputedStyle(loadingPortal.layers.liquid).transform"),'none','Reduced motion suppresses approach scaling');
+  assert.ok(await evaluate("(()=>{const t=getComputedStyle(loadingPortal.layers.liquid).transform;return t==='none'||new DOMMatrixReadOnly(t).isIdentity;})()"),'Reduced motion suppresses approach scaling');
   await evaluate('loadingPortal.setApproach(0);true');await shot('reduced-motion');
   await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:2,mobile:true});await sleep(250);await shot('mobile');
   assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth'),'No mobile horizontal overflow');
   const audit=await evaluate(`({stats:loadingPortal.stats,opening:loadingPortal.opening,longTasks:__long,paint:performance.getEntriesByType('paint').map(e=>e.toJSON()),resources:performance.getEntriesByType('resource').map(e=>({name:e.name.split('/').pop(),bytes:e.decodedBodySize})),canvasCount:document.querySelectorAll('canvas').length})`);
   assert.equal(audit.canvasCount,3);assert.ok(!audit.resources.some(r=>/three|room-scene/.test(r.name)),'Independent of room and Three.js');
+  await cdp('Emulation.setDeviceMetricsOverride',{width:844,height:390,deviceScaleFactor:1,mobile:true});await sleep(250);await shot('landscape');
+  assert.ok(await evaluate('document.documentElement.scrollHeight<=innerHeight+1'),'Short landscape viewport fits without scrolling');
+  await motion('no-preference');await evaluate('loadingPortal.pause();true');await sleep(200);
+  const pausedDraws=await evaluate('loadingPortal.stats.draws');await sleep(300);
+  assert.equal(await evaluate('loadingPortal.stats.draws'),pausedDraws,'Pause stops redraws');
+  if(process.argv.includes('--record')){
+    await cdp('Emulation.setDeviceMetricsOverride',{width:900,height:900,deviceScaleFactor:1,mobile:false});await sleep(200);
+    const video=await evaluate(`new Promise((resolve,reject)=>{
+      const c=document.createElement('canvas');c.width=c.height=640;const g=c.getContext('2d');
+      const stream=c.captureStream(24),mime=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm';
+      const recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:2400000}),chunks=[];
+      recorder.ondataavailable=e=>chunks.push(e.data);recorder.onerror=reject;
+      recorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const f=new FileReader();f.onload=()=>resolve(f.result.split(',')[1]);f.readAsDataURL(new Blob(chunks,{type:mime}));};
+      const start=performance.now();recorder.start();
+      function capture(now){const t=(now-start)/1000;loadingPortal.render(t);g.fillStyle='#090c0f';g.fillRect(0,0,640,640);
+        for(const layer of Object.values(loadingPortal.layers))g.drawImage(layer,70,45,500,500);
+        g.fillStyle='#c1b195';g.font='15px Georgia';g.textAlign='center';g.fillText('B E T W E E N   W O R L D S',320,559);
+        if(t<14.4)requestAnimationFrame(capture);else recorder.stop();}requestAnimationFrame(capture);
+    })`);
+    await writeFile(resolve(out,'idle-motion.webm'),Buffer.from(video,'base64'));
+  }
   await evaluate('loadingPortal.dispose();loadingPortal.dispose();true');
   assert.equal(await evaluate("document.querySelectorAll('.loading-portal').length"),0,'Dispose removes the component');
   assert.equal(await evaluate('loadingPortal.stats.disposed'),true);

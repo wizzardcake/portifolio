@@ -16,6 +16,4 @@
 .loading-portal__atmosphere { opacity: calc(1 - var(--portal-approach) * .6); }
 .loading-portal__depth { transform: scale(calc(1 + var(--portal-approach) * 2.8)); }
 .loading-portal__liquid { transform: scale(calc(1 + var(--portal-approach) * 4)); }
-@media (prefers-reduced-motion: reduce) {
-  .loading-portal canvas { transform: none; }
-}
+.loading-portal[data-reduced-motion="true"] canvas { transform: none; }

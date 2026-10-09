@@ -78,6 +78,9 @@ else {
     entered(detail);
   };
   try {
+    // The dark gate is painted first; the portal (its texture takes a moment
+    // to make) starts in the frame after, and emerges from it.
+    await new Promise(done => requestAnimationFrame(() => setTimeout(done)));
     if (mount.dataset.portal) {
       try {
         const {createLoadingPortal} = await import(new URL(mount.dataset.portal, document.baseURI).href);

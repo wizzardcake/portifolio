@@ -1,61 +1,116 @@
-# Phase 2A — liquid loading portal
+# Phase 2A — liquid loading portal: ready for visual review
 
-## Worktree and scope
+## Start here
 
 - Worktree: `C:\Users\ander\OneDrive\Skrivebord\Portifolio\verification\loading-portal-visual`
 - Branch: `feature/loading-portal-visual`
-- Base: `f024deed9e8e756cceecfbb914fad5d76352f899` (Phase 1 handoff read).
-- Production and other worktrees were clean at inspection and are untouched.
-- No merge, push, deployment, readiness gate, room integration, or automatic reveal.
-- This file is updated at each verified design checkpoint. Use this branch's latest HEAD, not an earlier session.
+- Base: `f024deed9e8e756cceecfbb914fad5d76352f899`. Its `HANDOFF.md` was read; all Phase 1 improvements are preserved.
+- `86f9c5c`: first independent prototype and browser checks.
+- `1c58729`: verified glass/doorway refinements, faster texture generation, responsive sizing, motion recording and lifecycle checks.
+- Final HEAD is the documentation commit containing this updated file. Resolve with `git rev-parse HEAD`; list checkpoints with `git log --oneline f024dee..HEAD`.
+- Working tree was clean after the implementation commit; only this handoff changed for the final documentation commit. Verification artifacts are ignored.
+- No production files, `main`, or other agents' worktrees changed. No merge, push or deployment.
 
-## Checkpoint 1
+**Stop point:** visual prototype ready for user review. No readiness gate, preload system, room reveal or automatic transition was implemented. Continue from this branch's latest state, not the initial prototype commit.
 
-Independent Canvas 2D prototype with three canvases: atmosphere, doorway depth,
-and liquid skin. Procedural texture, no external assets or Three.js. A 13.7 s
-square-to-round breath mixes with slower, unrelated flow frequencies. The
-clock never loops or resets. OS reduced motion draws a still frame and stops
-scheduling animation. Pause, play, external time, layer access, manual approach,
-opening bounds and disposal are exposed by `createLoadingPortal()`.
+## Preview and verification
 
-Read `portal-orb-material.js`, `portal-effects.js`, and the orb regression
-checks. Inspected the Phase 1 `orb-idle.png` and `orb-neck.png`: dark translucent
-body, teal heart, violet/green grazing reflections, sparse curved currents,
-restrained warm specular highlights; buoyant motion and viscous neck formation.
-The earlier approved square reference is not attached in this context.
+Run from this worktree with Node and local Chrome installed:
 
-### Files
+```powershell
+node tests/loading-portal-check.mjs --serve
+```
 
-- `loading-portal.js`: reusable procedural component.
-- `loading-portal.css`: scoped layer layout and approach transforms.
-- `loading-portal-preview.html`: independent review page and manual controls.
-- `tests/loading-portal-check.mjs`: local Chrome/CDP visual, motion, layout,
-  isolation and lifecycle checks. No package install required.
+Open the localhost URL printed by the command; Ctrl+C stops the server. The page is `loading-portal-preview.html`. No build or package installation. Any static HTTP server also works; `file://` does not support these module imports.
 
-### Verification and critique
+Controls: pause/resume, square/rounded phase, manual approach. `?time=0` or `?time=6.85` produces a deterministic paused pose; `&clean` hides the review controls/header. OS reduced motion keeps the artifact still.
 
-`node --check loading-portal.js`
+```powershell
+node --check loading-portal.js
+node --check tests/loading-portal-check.mjs
+node tests/loading-portal-check.mjs --out=review-final --record
+git diff --check
+```
 
-`node tests/loading-portal-check.mjs --out=design-1`
+All passed on 2026-10-09. The check creates and closes its own server and temporary Chrome profile. Set `CHROME_PATH` for a nonstandard Chrome installation.
 
-Passed: no console errors; desktop and 390×844 mobile; reduced motion stops
-redraws and approach scaling; no room/Three.js resource; disposal is idempotent.
-1440×900, DPR 1, isolated Chrome/ANGLE: 60.09 rAF fps, 16.8 ms p95,
-1.25 ms average component draw submission. These are local measurements, not
-mobile-device results or evidence during room compilation. One 372 ms startup
-long task needs investigation. Screenshots/report are ignored local files under
-`verification/loading-portal/design-1/`.
+Evidence: `verification/loading-portal/review-final/` (local, gitignored; regenerate with the command above).
 
-**Not yet ready for review:** the first image reads too much like an engraved
-amber plaque. The doorway has a hard frame and the surface needs stronger glass
-depth. Next checkpoint softens that lip and revises the reflections.
+- `square.png`, `round.png`, `square-flow.png`: silhouette and continuing flow.
+- `approach.png`: manual layer scaling, not a completed reveal.
+- `reduced-motion.png`, `mobile.png`, `landscape.png`.
+- `idle-motion.webm`: 14.4 seconds covering a complete breathing cycle.
+- `report.json`: measurements, resource list and console results.
 
-## Preview / continuation
+Earlier design rounds are in sibling `design-1`, `design-2`, `design-3-final` and `review` folders. Use `review-final` for the handoff.
 
-From this worktree, use any static HTTP server and open
-`/loading-portal-preview.html`. No bundler or build step. The automated check
-starts and closes its own server and fresh browser profile.
+## Visual design and source reference
 
-The component is intentionally not imported by `index.html`. Integration,
-preloading/readiness, focus/accessible loading announcements, and the final
-room reveal belong to Claude after visual approval.
+Before designing, inspected `portal-orb-material.js`, `portal-effects.js`, the orb checks, and Phase 1's `.qa/orb-idle.png` and `orb-neck.png`. The room orb has a dark translucent body, soft teal heart, violet/green grazing reflections, sparse curved currents, restrained warm highlights, buoyant motion and viscous neck formation.
+
+The prototype carries these cues into an irregular amber/gold lens with muted teal in a recessed gothic opening. A 13.7-second breath contracts the square toward a rounded form. Asymmetric ripples, counter-moving texture fields and independent glow frequencies continue across breathing cycles without a clock reset. There is no fake percentage or minimum duration. The earlier approved square reference image was not available in this conversation context.
+
+The first pass looked too much like an engraved plaque. Refinements softened the doorway into the skin, removed the hard decorative outline, smoothed the bevel reflections and reduced the surface linework.
+
+## Files and layers
+
+Only five new files relative to `f024dee`:
+
+| File | Purpose |
+| --- | --- |
+| `loading-portal.js` | Reusable Canvas 2D component; procedural material and animation. |
+| `loading-portal.css` | Scoped canvas layout and presentation transforms. |
+| `loading-portal-preview.html` | Standalone review page; labels and controls are not production UI. |
+| `tests/loading-portal-check.mjs` | Screenshots, recording, motion, responsive, isolation and cleanup checks. |
+| `PHASE2_STATUS.md` | This handoff. |
+
+Three transparent canvases, back to front:
+
+1. `layers.atmosphere`: dim halo, reflected light below, sparse drifting motes.
+2. `layers.depth`: dark pointed opening, offset internal currents and teal heart.
+3. `layers.liquid`: breathing silhouette, amber mist/veins, broad sheen, narrow rim highlight and feathered opening through the skin.
+
+A procedural 192×192 material atlas is generated once and reused. No WebGL context, Three.js, external images, fonts, models or network dependencies. Internal rendering is capped at 24 draws/second and canvas DPR at 1.5. Hidden documents stop the loop. Reduced motion draws a fixed pose and stops scheduling.
+
+## Integration API for Claude
+
+Include `loading-portal.css`, create a mount element, then:
+
+```js
+import {createLoadingPortal} from './loading-portal.js';
+const artifact = createLoadingPortal(document.querySelector('#loading-artifact'));
+```
+
+| API | Contract |
+| --- | --- |
+| `element` | Wrapper. Host owns placement, clipping, overall opacity and removal timing. |
+| `layers.atmosphere/depth/liquid` | Individual canvases for future transition choreography. |
+| `pause()` / `play()` | Pause/resume without resetting the clock. |
+| `render(seconds)` | Deterministic pose. Use `{autoplay:false}` for a host clock; avoid redundant calls under reduced motion. |
+| `setReducedMotion(boolean)` | Override the OS preference; `undefined` follows the OS again. |
+| `setApproach(0..1)` | Immediate presentation parameter, no timeline/readiness assumptions. Skin scales `1+4p`, depth `1+2.8p`, atmosphere fades slightly. Suppressed under reduced motion. |
+| `opening` | Approximate viewport rectangle of the liquid opening, including approach scaling; not a precise contour mask. |
+| `stats` | Draw count, average CPU submission time, setup/texture time, motion and lifecycle state. |
+| `dispose()` | Cancels RAF, removes listeners/observer and DOM, releases backing canvases; idempotent. |
+
+The component is `aria-hidden`; the host owns an accessible loading announcement. Never infer room readiness from its clock. After visual approval, mount it before expensive room work, connect a real ready signal as described in Phase 1's handoff, and design the zoom/dissolve. The slider only demonstrates separately controllable layers; it does not reveal the room.
+
+## Measured results and limits
+
+Latest run: Windows laptop, headless Chrome/ANGLE D3D11, 1440×900 DPR 1. Power checked immediately afterward: battery, 75%. Mobile tests emulate viewports, not physical devices.
+
+- 59.96 rAF fps; 16.9 ms p95 over five seconds.
+- 1.39 ms average CPU draw-submission time per component frame; not GPU time.
+- Setup 222 ms, including 163 ms procedural texture generation; one 226 ms startup long task. Earlier same-design run measured 59 ms setup. Cold setup varies materially with machine conditions.
+- Chrome reported first paint at 1496 ms, with paint work at 465 ms. CPU setup time is not total visitor load time.
+- Component JS + CSS: 15,934 decoded bytes. No room or Three.js resources.
+- No page/console errors. Pause, OS reduced motion, approach bounds, portrait 390×844 DPR 2, landscape 844×390, and idempotent disposal passed.
+- Syntax checks and `git diff --check` passed. Production room suites were not rerun because no production source/imports changed.
+
+## Remaining work after visual review
+
+- Depth is simulated in 2D, not volumetric refraction. Large approach scales expose raster softness. Choreograph the final handoff before excessive enlargement, or revisit resolution for that shot.
+- Palette is temporary, in the component's texture and gradient colors. It has not been approved against the missing reference.
+- Canvas animation shares the main JS thread and can pause during a long room initialization task. Independence means no room renderer/readiness dependency; uninterrupted integrated animation has not been tested.
+- Only Chrome was verified. Other browsers, a physical phone, long sessions and simultaneous room warm-up need integration testing.
+- Claude owns readiness/preloading, final zoom/reveal, keyboard/focus handling and production loading announcements. Do not merge or deploy without the user's next instruction.

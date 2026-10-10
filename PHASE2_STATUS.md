@@ -466,6 +466,48 @@ user's review.
      (phone); the ring shows on the phone and is still under reduced motion.
      `exterior-entry-check` presses Enter once asked.
 
+5. **The orb's material, enlarged into architecture** (the user: the body
+   still looked "smooth, flat and plastic"; they want it darker, deeper, more
+   liquid, glassy and mineral, layered inside, with broad readable swirling
+   currents suspended in the shell, the whole body fuller and orb-derived).
+   - **Form.** The dome is fuller and rounder: an orb's upper half (radii
+     1.07 × 0.98, up from 1.04 × 0.86), its crown point raised with it. The
+     drum swells a little between its lips, so the lower body continues the
+     orb's curve. The silhouette, tower, entrance and drop are unchanged.
+   - **Inside.** As the orb's, enlarged into the building's mass:
+     - layers turn about the body's axis, each at its own rate and twisting
+       with height, and the flow folds on itself (domain-warped);
+     - through it wind broad marbled ribbons of teal and aqua (violet where
+       the field turns) with bright cores;
+     - soft luminous clouds sit where the currents gather; large zones are
+       nearly empty, so there are dark and bright regions;
+     - a cloudy mist absorbs light, and the teal heart glows deep inside
+       (and sunk into the drop);
+     - the view goes nearly two units into the glass, with absorption, so
+       near currents read crisp and deep ones dimmer: they hang inside
+       rather than lie on top.
+     The lower body (drum, bowl, neck) and the tower share the same
+     inside.
+   - **Skin.** It is dark and clear. The broad grey sheen that read as
+     plastic is gone (found by viewing the inside and the skin apart). What
+     remains:
+     - a crisp highlight with a small soft halo, as on the orb;
+     - the void mirrored at grazing angles, the edge light and the thin
+       film;
+     - a slow liquid undulation in the skin's normals, so reflections never
+       sit still.
+   - **The still art** (`dev/exterior-art.html`, re-exported) has the same
+     material and fuller form, so the first view matches the live one.
+   - **Tuning view:** `loadingExterior3d.debug(1 | 2 | 3)` shows the inside
+     alone, the skin alone, or the glass's transmittance.
+   - **Checked:**
+     - `loading-gate-check` (4 groups) and `exterior-entry-check` pass,
+       with no console errors;
+     - the live view shot in three moments of its drift, and next to the
+       room's orb.
+     The room suites were not rerun: only the exterior's shader and art
+     changed.
+
 ### Codex's state at takeover
 
 Codex stopped at its usage limit with no tracked file changed and nothing

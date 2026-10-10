@@ -101,10 +101,11 @@ vec2 scene(vec3 p) {
     return vec2(smin(belly, tip, .05), 0.);
   }
   // The body: an orb-derived dome, swelling a little over a short drum.
-  float dome = sdEllipsoid(p - DOME, vec3(1.04, .86, 1.04));
-  float crown = sdRoundCone(p - vec3(0., .82, 0.), .16, .003, .5);
+  float dome = sdEllipsoid(p - DOME, vec3(1.07, .98, 1.07));
+  float crown = sdRoundCone(p - vec3(0., .96, 0.), .15, .003, .48);
   dome = smin(dome, crown, .14);
-  float drum = sdCylinder(p - vec3(0., -.2, 0.), 1., .3, .06);
+  // The drum swells a little between its lips, as the orb's curve goes on.
+  float drum = sdCylinder(p - vec3(0., -.2, 0.), 1.0 + .03 * (1. - pow((p.y + .2) / .3, 2.)), .3, .06);
   float body = smin(dome, drum, .06);
   // Two smooth lips of the same glass.
   float lipTop = length(vec2(length(p.xz) - 1.02, p.y - .1)) - .035;
@@ -190,44 +191,45 @@ vec3 voidLight(vec3 R) {
 }
 vec3 display(vec3 c) { c = 1. - exp(-c * 1.15); return mix(c * 12.92, 1.055 * pow(c, vec3(1. / 2.4)) - .055, step(vec3(.0031308), c)); }
 
-// The inside of the glass, as the orb's: layers turning about up at different
-// rates; mist absorbs; the heart, currents and glow pockets emit. Up the
-// tower a current spirals toward the spire.
+float fbm3(vec3 p) { return vnoise(p) * .55 + vnoise(p * 2.07 + 3.1) * .3 + vnoise(p * 4.13 + 7.7) * .15; }
+// The inside, as the orb's, enlarged into the building's mass (the same as
+// loading-exterior-3d-worker.js): layers turning about the body's axis and
+// twisting with height, the flow folded on itself, broad marbled ribbons of
+// teal and aqua (violet where the field turns) with bright cores, soft
+// luminous clouds where they gather, a cloudy mist of darker and brighter
+// zones, the teal heart deep inside and sunk into the drop; nearly two units
+// deep, so the currents hang inside the glass. Up the tower a current spirals.
 vec3 inside(vec3 P, vec3 rd, out float T) {
   vec3 inner = vec3(0.); T = 1.;
-  vec3 hueA = vec3(.04, .34, .31), hueB = vec3(.24, .12, .50);
-  float swirl = time * .21, dt = .05;
-  for (int i = 0; i < 26; i++) {
-    vec3 q = P + rd * (float(i) + .5) * dt;
+  float stepLen = 1.8 / 24.;
+  for (int i = 0; i < 24; i++) {
+    vec3 q = P + rd * (float(i) + .5) * stepLen;
     if (scene(q).x > .01) break;
     bool inTower = length((q - TOWER).xz) < .34 && q.y > -.2;
     vec3 c = subject > .5 ? vec3(0.) : inTower ? vec3(TOWER.x, clamp(q.y, .1, 1.7), TOWER.z) : DOME;
-    float scale = subject > .5 ? .1 : inTower ? .36 : 1.;
-    vec3 lq = (q - c) / scale * .93;
+    vec3 lq = (q - c) / (subject > .5 ? .1 : inTower ? .36 : 1.);
     float r = length(lq);
-    vec3 a = spinAbout(lq, swirl * (1.35 - r * .6) + r * 1.6);
-    vec3 w = spinAbout(lq, -swirl * .55 + 2.1);
-    float mist = vnoise(a * 2.2 + vec3(0., 0., time * .05)) * .65 + vnoise(w * 4.1 - vec3(time * .04, 0., 0.)) * .35;
-    float dens = smoothstep(.35, .75, mist);
-    float current = smoothstep(.4, .75, vnoise(w * .9 + vec3(-time * .02, .6, time * .015)));
-    float vein = pow(1. - abs(vnoise(a * 2.4 + vec3(1.7, -time * .035, .4)) * 2. - 1.), 12.) * current;
-    float fine = pow(1. - abs(vnoise(a * 5.3 + vec3(-.4, time * .05, 2.2)) * 2. - 1.), 18.) * current;
-    float pocket = smoothstep(.62, .9, vnoise(w * 1.25 + vec3(time * .03, 1.1, -time * .02)));
-    float heart = exp(-r * r * (inTower ? 4. : 8.)) * (inTower ? .16 : .42) * (1. + .3 * sin(time * .46));
-    // The heart's light has sunk into the drop: a second, smaller glow low in
-    // the bowl and down the neck.
-    if (!inTower && subject < .5) heart += exp(-dot(q - vec3(0., -.86, 0.), q - vec3(0., -.86, 0.)) * 9.) * .3 * (1. + .3 * sin(time * .46 + 1.4));
-    vec3 hue = mix(hueA, hueB, smoothstep(-.55, .55, a.x + .35 * a.y));
-    vec3 glow = hue * (dens * .02 + vein * 1.05 + fine * .5 + pocket * .16) + vec3(.14, .82, .64) * heart * .62;
+    vec3 a = spinAbout(lq, time * .11 * (1.4 - r * .6) + lq.y * 1.3 + r * 1.1);
+    vec3 fold = vec3(vnoise(a * 1.2 + vec3(0., time * .03, 0.)), vnoise(a * 1.2 + vec3(5.2, -time * .025, 1.3)), vnoise(a * 1.2 + vec3(2.7, 0., 8.1)));
+    vec3 wq = a + (fold - .5) * 1.15;
+    float band = 1. - abs(sin(wq.y * 1.45 + fbm3(wq * .8) * 4.6 + r * 1.7));
+    float broad = pow(band, 5.), core = pow(band, 16.);
+    float zone = smoothstep(.32, .72, vnoise(a * .62 + vec3(9.1, time * .02, 3.3)));
+    float dens = smoothstep(.32, .72, fbm3(a * 2.3 + vec3(1.3, time * .04, 0.)));
+    float turn = smoothstep(.38, .72, vnoise(wq * .7 + 4.));
+    vec3 ribbon = mix(vec3(.05, .44, .4), vec3(.28, .15, .58), turn * .75);
+    vec3 glow = ribbon * (broad * 1.1 + core * 3.6) * (.35 + 1.1 * dens) * (.05 + 1.4 * zone) + vec3(.003, .014, .016) * dens * dens;
+    glow += mix(vec3(.03, .2, .19), vec3(.12, .07, .24), turn) * dens * zone * zone * .55;
+    float heart = exp(-r * r * (inTower ? 4. : 6.5)) * (inTower ? .14 : .3) * (1. + .3 * sin(time * .46));
+    if (!inTower && subject < .5) { vec3 sq = q - vec3(0., -.86, 0.); heart += exp(-dot(sq, sq) * 9.) * .3 * (1. + .3 * sin(time * .46 + 1.4)); }
+    glow += vec3(.14, .82, .64) * heart * .6;
     if (inTower && subject < .5) {
-      // The spiral: a thin current winding up the tower near its glass.
       vec3 tq = q - TOWER;
-      float ang = atan(tq.z, tq.x), rad = length(tq.xz);
-      float helix = pow(max(0., cos(ang * 2. - tq.y * 6.2 + time * .5)), 30.) * smoothstep(.08, .2, rad);
+      float helix = pow(max(0., cos(atan(tq.z, tq.x) * 2. - tq.y * 6.2 + time * .5)), 30.) * smoothstep(.08, .2, length(tq.xz));
       glow += mix(vec3(.08, .62, .52), vec3(.42, .2, .74), smoothstep(.2, 2.2, tq.y)) * helix * .9;
     }
-    inner += T * glow * dt * 2.;
-    T *= exp(-(.95 + dens * 4.2) * dt);
+    inner += T * glow * stepLen * 2.;
+    T *= exp(-(.85 + dens * 3.4) * stepLen);
   }
   return inner;
 }
@@ -291,10 +293,10 @@ void main() {
       diffuse += C * wr * wr;
       float nh = max(dot(N, normalize(L + V)), 0.);
       float crisp = i == 0 || i == 3 ? 1. : 0.;
-      specular += mix(C, vec3(dot(C, vec3(.333))), .55) * (crisp * (pow(nh, 520.) * 1.6 + pow(nh, 70.) * .2) + pow(nh, 16.) * (.01 + .03 * (1. - crisp)));
+      specular += mix(C, vec3(dot(C, vec3(.333))), .55) * (crisp * (pow(nh, 420.) * 1.2 + pow(nh, 80.) * .12) + pow(nh, 30.) * .012 * (1. - crisp));
       wrap += C * pow(edge, 4.5) * smoothstep(-.1, .6, dot(N, L)) * max(0., .5 - .5 * dot(L, V));
     }
-    vec3 skin = diffuse * vec3(.002, .0035, .0035) + specular + voidLight(reflect(-V, N)) * fresnel + wrap * .55;
+    vec3 skin = specular + voidLight(reflect(-V, N)) * fresnel * .8 + wrap * .5;
     skin += mix(vec3(.006, .05, .042), vec3(.035, .016, .075), smoothstep(-.6, .6, N.x)) * pow(edge, 4.);
     // A thin film on the glass: violet, green and aqua where it turns away.
     vec3 film = .5 + .5 * cos(6.2832 * (edge * 1.5 + vec3(0., .33, .67)) + 1.2);
@@ -312,7 +314,7 @@ void main() {
         inner *= .22;
       }
     }
-    vec3 body = vec3(.004, .012, .012) * (.6 + .4 * ndv);
+    vec3 body = vec3(.002, .007, .008) * (.6 + .4 * ndv);
     // Where the glass is thin (drips, the neck, the spire) the light behind it
     // comes through: teal low, violet high, as the orb's edges.
     vec3 through = mix(vec3(.03, .12, .11), vec3(.08, .045, .13), smoothstep(-1.4, 2.4, P.y)) * T * T;

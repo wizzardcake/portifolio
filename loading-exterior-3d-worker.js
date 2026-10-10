@@ -18,12 +18,12 @@
 'use strict';
 let gl, programs, meshes, width = 1, height = 1, square = null, still = false, paused = false, start = 0, flight = null, drawnSent = false;
 // Its own clock, which a check may slow down (rate) to film the way in.
-let rate = 1, clock = 0, lastReal = null;
+let rate = 1, clock = 0, lastReal = null, debugView = 0;
 const tick = real => { if (lastReal !== null) clock += (real - lastReal) * rate; lastReal = real; return clock; };
 // While the room is still being built the view is lighter (the GPU is
 // shared with the room's start-up): fewer pixels, fewer steps through the
 // glass, fewer frames. For the way in, full quality.
-const LIGHT = {scale: .7, steps: 9, frameMs: 1000 / 15}, FULL = {scale: 1, steps: 16, frameMs: 1000 / 30};
+const LIGHT = {scale: .7, steps: 12, frameMs: 1000 / 15}, FULL = {scale: 1, steps: 16, frameMs: 1000 / 30};
 let quality = LIGHT, cssWidth = 1, cssHeight = 1, cssSquare = null;
 
 // ---- The building's shapes (as dev/exterior-art.html) ----------------------
@@ -37,9 +37,11 @@ const ell = (y, c, rx, ry) => Math.abs(y - c) < ry ? rx * Math.sqrt(1 - ((y - c)
 const cone = (y, y0, r0, y1, r1, power = 1) => y >= Math.min(y0, y1) && y <= Math.max(y0, y1) ? r0 + (r1 - r0) * Math.pow((y - y0) / (y1 - y0), power) : -1;
 // The body's radius at height y.
 function bodyRadius(y) {
-  let r = ell(y, .14, 1.04, .86);
-  r = smaxR(r, cone(y, .82, .16, 1.32, .0, 1.25), .1);
-  const drum = y <= .1 && y >= -.5 ? 1 - .02 * Math.max(0, (Math.abs(y + .2) - .26) / .04) : -1;
+  // A fuller, rounder mass: the dome an orb's upper half, the drum swelling
+  // a little between its lips as the orb's own curve continues.
+  let r = ell(y, .14, 1.07, .98);
+  r = smaxR(r, cone(y, .96, .15, 1.44, .0, 1.25), .1);
+  const drum = y <= .1 && y >= -.5 ? 1.0 + .03 * (1 - ((y + .2) / .3) ** 2) - .02 * Math.max(0, (Math.abs(y + .2) - .26) / .04) : -1;
   r = smaxR(r, drum, .05);
   r = smaxR(r, y > .02 && y < .18 ? 1.02 + .035 * Math.sqrt(Math.max(0, 1 - ((y - .1) / .06) ** 2)) : -1, .02);
   r = smaxR(r, y > -.58 && y < -.42 ? .995 + .045 * Math.sqrt(Math.max(0, 1 - ((y + .5) / .07) ** 2)) : -1, .02);
@@ -209,7 +211,7 @@ void main() {
 const GLASS_FRAGMENT = `precision highp float;
 varying vec3 vPos, vNormal, vObj;
 uniform vec3 camPos;
-uniform float time, part, alpha, approach, steps;
+uniform float time, part, alpha, approach, steps, debugView;
 const vec3 DOME = vec3(0., .14, 0.);
 const vec3 TOWER = vec3(${TOWER.join(', ')});
 ${NOISE}
@@ -242,9 +244,9 @@ vec3 voidLight(vec3 R) {
 vec3 display(vec3 c) { c = 1. - exp(-c * 1.15); return mix(c * 12.92, 1.055 * pow(c, vec3(1. / 2.4)) - .055, step(vec3(.0031308), c)); }
 // Whether a point is inside the glass (a cheap stand-in for the shape).
 float inGlass(vec3 q) {
-  vec3 d = (q - DOME) / vec3(1.04, .86, 1.04);
+  vec3 d = (q - DOME) / vec3(1.07, .98, 1.07);
   float r = length(q.xz);
-  float body = max(step(dot(d, d), 1.), step(r, 1.) * step(-.5, q.y) * step(q.y, .1));
+  float body = max(step(dot(d, d), 1.), step(r, 1.02) * step(-.5, q.y) * step(q.y, .1));
   vec3 b = (q - vec3(0., -.52, 0.)) / vec3(.94, .36, .94);
   body = max(body, step(dot(b, b), 1.));
   body = max(body, step(r, mix(.018, .56, clamp((q.y + 1.38) / .84, 0., 1.))) * step(-1.4, q.y) * step(q.y, -.5));
@@ -252,40 +254,50 @@ float inGlass(vec3 q) {
   float tower = step(length(t.xz), mix(.27, .2, clamp((t.y + .7) / 2.04, 0., 1.))) * step(-.9, t.y) * step(t.y, 2.4);
   return max(body, tower);
 }
-// The inside, as the orb's: layers turning about up at different rates;
-// mist absorbs; the heart, currents and pockets emit; the heart's glow also
-// sunk into the drop; a current spiralling up the tower.
+float fbm3(vec3 p) { return vnoise(p) * .55 + vnoise(p * 2.07 + 3.1) * .3 + vnoise(p * 4.13 + 7.7) * .15; }
+// The inside, as the orb's, enlarged into the building's mass. Layers turn
+// about the body's axis, each at its own rate and twisting with height;
+// the flow folds on itself (warped), and through it wind broad marbled
+// ribbons of teal and aqua (violet where the field turns), with bright
+// cores; a cloudy mist makes darker and brighter zones; the teal heart
+// glows deep inside, and sunk into the drop. The view goes nearly two
+// units into the glass: currents near the surface read crisp, deeper ones
+// dimmer and softer, so they hang inside rather than lie on top. Up the
+// tower a current also spirals toward the spire.
 vec3 inside(vec3 P, vec3 rd, out float T) {
   vec3 inner = vec3(0.); T = 1.;
-  vec3 hueA = vec3(.04, .34, .31), hueB = vec3(.24, .12, .50);
-  float swirl = time * .21, dt = .075;
+  float stepLen = 1.8 / steps;
   for (int i = 0; i < 16; i++) {
     if (float(i) >= steps) break;
-    vec3 q = P + rd * (float(i) + .5) * dt * 16. / steps;
+    vec3 q = P + rd * (float(i) + .5) * stepLen;
     if (inGlass(q) < .5) break;
     bool inTower = length((q - TOWER).xz) < .34 && q.y > -.2;
     vec3 c = inTower ? vec3(TOWER.x, clamp(q.y, .1, 1.7), TOWER.z) : DOME;
-    vec3 lq = (q - c) / (inTower ? .36 : 1.) * .93;
+    vec3 lq = (q - c) / (inTower ? .36 : 1.);
     float r = length(lq);
-    vec3 a = spinAbout(lq, swirl * (1.35 - r * .6) + r * 1.6);
-    vec3 w = spinAbout(lq, -swirl * .55 + 2.1);
-    float mist = vnoise(a * 2.2 + vec3(0., 0., time * .05)) * .65 + vnoise(w * 4.1 - vec3(time * .04, 0., 0.)) * .35;
-    float dens = smoothstep(.35, .75, mist);
-    float current = smoothstep(.4, .75, vnoise(w * .9 + vec3(-time * .02, .6, time * .015)));
-    float vein = pow(1. - abs(vnoise(a * 2.4 + vec3(1.7, -time * .035, .4)) * 2. - 1.), 12.) * current;
-    float pocket = smoothstep(.62, .9, vnoise(w * 1.25 + vec3(time * .03, 1.1, -time * .02)));
-    float heart = exp(-r * r * (inTower ? 4. : 8.)) * (inTower ? .16 : .42) * (1. + .3 * sin(time * .46));
+    vec3 a = spinAbout(lq, time * .11 * (1.4 - r * .6) + lq.y * 1.3 + r * 1.1);
+    vec3 fold = vec3(vnoise(a * 1.2 + vec3(0., time * .03, 0.)), vnoise(a * 1.2 + vec3(5.2, -time * .025, 1.3)), vnoise(a * 1.2 + vec3(2.7, 0., 8.1)));
+    vec3 wq = a + (fold - .5) * 1.15;
+    float band = 1. - abs(sin(wq.y * 1.45 + fbm3(wq * .8) * 4.6 + r * 1.7));
+    float broad = pow(band, 5.), core = pow(band, 16.);
+    // Large zones where the currents gather, and others nearly empty.
+    float zone = smoothstep(.32, .72, vnoise(a * .62 + vec3(9.1, time * .02, 3.3)));
+    float dens = smoothstep(.32, .72, fbm3(a * 2.3 + vec3(1.3, time * .04, 0.)));
+    float turn = smoothstep(.38, .72, vnoise(wq * .7 + 4.));
+    vec3 ribbon = mix(vec3(.05, .44, .4), vec3(.28, .15, .58), turn * .75);
+    vec3 glow = ribbon * (broad * 1.1 + core * 3.6) * (.35 + 1.1 * dens) * (.05 + 1.4 * zone) + vec3(.003, .014, .016) * dens * dens;
+    // Soft luminous clouds where the currents gather: the brighter zones.
+    glow += mix(vec3(.03, .2, .19), vec3(.12, .07, .24), turn) * dens * zone * zone * .55;
+    float heart = exp(-r * r * (inTower ? 4. : 6.5)) * (inTower ? .14 : .3) * (1. + .3 * sin(time * .46));
     if (!inTower) { vec3 s = q - vec3(0., -.86, 0.); heart += exp(-dot(s, s) * 9.) * .3 * (1. + .3 * sin(time * .46 + 1.4)); }
-    vec3 hue = mix(hueA, hueB, smoothstep(-.55, .55, a.x + .35 * a.y));
-    vec3 glow = hue * (dens * .02 + vein * 1.05 + pocket * .16) + vec3(.14, .82, .64) * heart * .62;
+    glow += vec3(.14, .82, .64) * heart * .6;
     if (inTower) {
       vec3 tq = q - TOWER;
       float helix = pow(max(0., cos(atan(tq.z, tq.x) * 2. - tq.y * 6.2 + time * .5)), 30.) * smoothstep(.08, .2, length(tq.xz));
       glow += mix(vec3(.08, .62, .52), vec3(.42, .2, .74), smoothstep(.2, 2.2, tq.y)) * helix * .9;
     }
-    float step = dt * 16. / steps;
-    inner += T * glow * step * 2.;
-    T *= exp(-(.95 + dens * 4.2) * step);
+    inner += T * glow * stepLen * 2.;
+    T *= exp(-(.85 + dens * 3.4) * stepLen);
   }
   return inner;
 }
@@ -319,6 +331,12 @@ void main() {
   if (part > 2.5) { gl_FragColor = vec4(display(roomThrough(vPos) * (1. + approach * .6)), 1.); return; }
   vec3 N = normalize(vNormal), V = normalize(camPos - vPos);
   if (dot(N, V) < 0. && part > 1.5) N = -N;
+  // A slow liquid undulation in the skin, so its reflections never sit still.
+  if (part < 1.5) {
+    vec3 lp = vPos * 2.4 + vec3(0., time * .07, time * .05);
+    vec3 g = vec3(vnoise(lp + vec3(.05, 0., 0.)) - vnoise(lp - vec3(.05, 0., 0.)), vnoise(lp + vec3(0., .05, 0.)) - vnoise(lp - vec3(0., .05, 0.)), vnoise(lp + vec3(0., 0., .05)) - vnoise(lp - vec3(0., 0., .05)));
+    N = normalize(N - g * .35);
+  }
   float ndv = clamp(dot(N, V), 0., 1.), edge = 1. - ndv;
   float fresnel = .04 + .96 * pow(edge, 5.);
   vec3 rd = refract(-V, N, .76);
@@ -332,10 +350,14 @@ void main() {
     diffuse += C * wr * wr;
     float nh = max(dot(N, normalize(L + V)), 0.);
     float crisp = i == 0 || i == 3 ? 1. : 0.;
-    specular += mix(C, vec3(dot(C, vec3(.333))), .55) * (crisp * (pow(nh, 520.) * 1.6 + pow(nh, 70.) * .2) + pow(nh, 16.) * (.01 + .03 * (1. - crisp)));
+    // Highlights as the orb's: a crisp core with a small soft halo; no broad
+    // sheen (that greys the whole shell and makes it read as plastic).
+    specular += mix(C, vec3(dot(C, vec3(.333))), .55) * (crisp * (pow(nh, 420.) * 1.2 + pow(nh, 80.) * .12) + pow(nh, 30.) * .012 * (1. - crisp));
     wrap += C * pow(edge, 4.5) * smoothstep(-.1, .6, dot(N, L)) * max(0., .5 - .5 * dot(L, V));
   }
-  vec3 skin = diffuse * vec3(.002, .0035, .0035) + specular + voidLight(reflect(-V, N)) * fresnel + wrap * .55;
+  // The shell itself stays dark and clear: what light it has is its
+  // highlights, the void mirrored at grazing angles, and its edges.
+  vec3 skin = specular + voidLight(reflect(-V, N)) * fresnel * .8 + wrap * .5;
   skin += mix(vec3(.006, .05, .042), vec3(.035, .016, .075), smoothstep(-.6, .6, N.x)) * pow(edge, 4.);
   vec3 film = .5 + .5 * cos(6.2832 * (edge * 1.5 + vec3(0., .33, .67)) + 1.2);
   skin += film * vec3(.14, .13, .2) * pow(edge, 2.6) * .38;
@@ -350,8 +372,11 @@ void main() {
     skin = skin * .4 + roomThrough(vec3(vPos.x * .7, vPos.y, vPos.z)) * .17 * back * (1. + approach);
     inner *= .22;
   }
-  vec3 body = vec3(.004, .012, .012) * (.6 + .4 * ndv);
+  vec3 body = vec3(.002, .007, .008) * (.6 + .4 * ndv);
   vec3 through = mix(vec3(.03, .12, .11), vec3(.08, .045, .13), smoothstep(-1.4, 2.4, vPos.y)) * T * T;
+  // (For tuning: 1 shows only the inside, 2 only the skin.)
+  if (debugView > 2.5) { gl_FragColor = vec4(vec3(T), 1.); return; }
+  if (debugView > .5) { gl_FragColor = vec4(display(debugView < 1.5 ? inner * (1. - fresnel) : skin + body + through), 1.); return; }
   gl_FragColor = vec4(display(inner * (1. - fresnel) + skin + body + through) * alpha, alpha);
 }`;
 // Soft lights drawn over everything (additive): the spire's glint and the
@@ -472,6 +497,7 @@ function frame(now) {
   gl.uniform1f(g.u.time, still ? 4 : t + 4);
   gl.uniform1f(g.u.approach, approach);
   gl.uniform1f(g.u.steps, quality.steps);
+  gl.uniform1f(g.u.debugView, debugView);
   gl.uniform1f(g.u.alpha, 1);
   gl.uniform3fv(g.u.offset, [0, 0, 0]); gl.uniform2fv(g.u.stretch, [1, 1]); gl.uniform1f(g.u.molten, 1);
   gl.uniform1f(g.u.part, 0); drawMesh(g, meshes.body);
@@ -579,6 +605,7 @@ onmessage = ({data}) => {
       postMessage({type: 'stats', framesWhileLoading: frames, seconds: Math.round(now - start) / 1000});
       quality = FULL; applySize();
     } else if (data.type === 'still') still = !!data.value;
+    else if (data.type === 'debug') debugView = +data.view || 0;
     else if (data.type === 'rate') { tick(performance.now()); rate = Math.max(.01, +data.value || 1); }
     else if (data.type === 'pause') paused = true;
     else if (data.type === 'play') paused = false;

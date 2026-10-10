@@ -73,7 +73,7 @@ export function createLoadingPortal(container, options = {}) {
       element.dataset.view = 'starting';
       // For checks: slow its clock to film the way in (with the gate's own
       // animations slowed alike).
-      window.loadingExterior3d = {setRate: value => worker?.postMessage({type: 'rate', value})};
+      window.loadingExterior3d = {setRate: value => worker?.postMessage({type: 'rate', value}), debug: view => worker?.postMessage({type: 'debug', view})};
       worker.postMessage({type: 'init', canvas: offscreen, ...pixels(), still: options.reducedMotion ?? still.matches, paused: lazy}, [offscreen]);
       const observer = new ResizeObserver(() => worker?.postMessage({type: 'resize', ...pixels()}));
       observer.observe(canvas); observer.observe(element);

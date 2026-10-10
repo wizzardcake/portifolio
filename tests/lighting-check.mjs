@@ -61,21 +61,35 @@ try{
     if(position)await evaluate(`sceneCamera.shelf.wide={position:${JSON.stringify(position)},lookAt:${JSON.stringify(lookAt)}};sceneCamera.shelf.portrait=sceneCamera.shelf.wide;true`);
     await evaluate(`sceneCamera.go('${position?'shelf':which}',{instant:true});sceneCamera.update();studyRoom.invalidate();true`);await sleep(300);
   }
+  // Poses follow the room (studyRoom.door: its centre and wall plane, scene
+  // coordinates; the tower's axis and the way out of its mouth): from the
+  // shelf, near the door off to one side, at the threshold, and into the
+  // tower from in front of its mouth, close and looking up.
+  const place=await evaluate(`(()=>{const R=studyRoom,f=R.placement.forward,d=R.door??{x:.8,z:R.dimensions.front};
+    const t={x:R.tower.x,z:R.tower.z-f},c=R.dimensions.apothem?{x:0,z:-f}:{x:-.1,z:1},l=Math.hypot(c.x-t.x,c.z-t.z);
+    return {door:d,shelf:sceneCamera.shelf.wide.position,tower:t,out:[(c.x-t.x)/l,(c.z-t.z)/l]};})()`);
+  const {door:D,tower:Tw,out:[ox,oz]}=place,inTower=(k,y)=>[+(Tw.x+ox*k).toFixed(3),y,+(Tw.z+oz*k).toFixed(3)];
   const views=[['entry','entry'],['seated','chair'],['shelf','shelf'],
-    ['door-from-shelf','shelf',[-.55,1.8,-1.55],[.8,1.1,5.9]],
-    ['door-near','shelf',[1.3,1.7,3.8],[.1,1.25,5.9]],
-    ['threshold','shelf',[.8,1.55,4.2],[.8,.15,6.1]],
-    ['stair-close','shelf',[1.10,1.8,-1.85],[2.10,2.65,-3.2]],
-    ['stair-up','shelf',[1.10,1.6,-1.85],[2.25,3.2,-2.8]]];
+    ['door-from-shelf','shelf',place.shelf,[D.x,1.1,D.z]],
+    ['door-near','shelf',[D.x+.5,1.7,D.z-2.1],[D.x-.7,1.25,D.z]],
+    ['threshold','shelf',[D.x,1.55,D.z-1.7],[D.x,.15,D.z+.2]],
+    ['stair-close','shelf',inTower(2.4,1.8),inTower(-.2,2.65)],
+    ['stair-up','shelf',inTower(2.4,1.6),inTower(-.4,3.2)]];
   for(const [label,...args] of views){await pose(...args);await shot(label);}
   // Door readability from the shelf (and at the threshold): mean linear
   // luminance in the opening, both jambs, the head, the threshold, the
   // passage's far reveal and the stone beside the lamp, read back from the
   // room canvas. The door reads when its jambs and head stand clear of the
   // dark opening; see PROGRESS.md (door A/B) for the comparisons.
-  const luminance=`(()=>{const z=5.9,q=(x0,x1,y0,y1)=>[[x0,y0,z],[x1,y0,z],[x1,y1,z],[x0,y1,z]];
-    const boxes={opening:q(.36,1.24,.2,1.9),nearJamb:q(.02,.22,.2,1.9),farJamb:q(1.38,1.58,.2,1.9),head:q(.3,1.3,2.13,2.38),
-      threshold:[[.3,0,5.35],[1.3,0,5.35],[1.3,0,5.85],[.3,0,5.85]],farReveal:[[1.35,.2,5.93],[1.35,.2,6.55],[1.35,1.9,6.55],[1.35,1.9,5.93]],lampStone:q(-1.1,-.5,.4,1.6)};
+  // The boxes sit round the door wherever it is: the opening, a jamb either
+  // side (near: the lantern's side, -x), the wall above its crown, the floor
+  // before it, the passage's far reveal and the wall by the lamp.
+  const hw=D.halfWidth??.55,top=D.peak??2.1,x=D.x,Z=D.z;
+  const luminance=`(()=>{const z=${Z},q=(x0,x1,y0,y1)=>[[x0,y0,z],[x1,y0,z],[x1,y1,z],[x0,y1,z]];
+    const boxes={opening:q(${x-hw+.11},${x+hw-.11},.2,${Math.min(1.9,top-.2)}),nearJamb:q(${x-hw-.23},${x-hw-.03},.2,1.9),farJamb:q(${x+hw+.03},${x+hw+.23},.2,1.9),
+      head:q(${x-hw+.05},${x+hw-.05},${top+.03},${top+.28}),
+      threshold:[[${x-hw},0,${Z-.55}],[${x+hw},0,${Z-.55}],[${x+hw},0,${Z-.05}],[${x-hw},0,${Z-.05}]],
+      farReveal:[[${x+hw},.2,${Z+.03}],[${x+hw},.2,${Z+.65}],[${x+hw},1.3,${Z+.65}],[${x+hw},1.3,${Z+.03}]],lampStone:q(${x-hw-.3},${x-hw-.05},.4,1.6)};
     const R=studyRoom,gl=R.renderer.getContext(),ratio=R.renderer.getPixelRatio(),H=gl.drawingBufferHeight,result={};
     const lin=c=>{c/=255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;};
     for(const [name,pts] of Object.entries(boxes)){let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9,behind=false;

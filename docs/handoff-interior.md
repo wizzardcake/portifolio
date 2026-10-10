@@ -357,3 +357,169 @@ needs:
 - **The exterior tower is slimmer** than the interior's stair needs (0.27
   units ≈ 1.2 m against about 1.45 m). Noted, not changed: the exterior is
   published and settled.
+
+## Stage 2 (Stage A in the resumed brief): what is built
+
+Uncommitted work at the time of the usage-limit stop, finished and verified
+after resuming. Files:
+
+| File | Change |
+| --- | --- |
+| `room-chamber.js` (new) | The chamber. Twelve bays at apothem 4.0 m (walls 0.35 m), each a flat wall from the floor into its pointed wall rib, with its opening or niche; a ribbed dome (springing 3.3 m, wall ribs rising 1.35 m, crown 6.4 m) of twelve glass cells; a boss and a hanging lantern; one bay's clustered column, diagonal rib and wall rib instanced round the twelve corners (two draw calls, timber and bronze); cornice, plinth, the nook's and shelving niches' built-ins; the floor's footprint, the cloth's walls (`beyond`), the vault's height (`ceilingAt`) and furnishing placements. |
+| `room-scene.js` | Builds the chamber in place of the box. The tower moves outside the bay at -30° (r 1.15, its circle through that bay's two columns); its stair, lancets, upper floor, lamps, green lights and shafts keep their design, turned 15° and scaled 0.85 about the axis (`fromOld`, `turned`). The window's moon spot, bounce, haze, shafts and redraw rectangle follow the great window. Cloth collision uses the chamber's walls; the cloth's flight goes in front of the new mouth and up the turned stair. The sky is turned 9.3° about the chair's eye so its composition centres on the new window. New: the vault's mosaic glass, the lantern glass, books (instanced), banners and a round rug under the table. Walls lose the brick coursing (dressed stone). |
+| `room-architecture.js` | Takes the window's and the door's plane mappings (`windowMap`, `doorMap`) instead of the alcove; frames the door with the alcove's old profile; a wide window gets two more mullions and four small heads (four lights and an eye). |
+| `room-lamps.js` | `place` overrides: the door lantern's spot and aim, the droplets' shift, the tower lamps' turn and scale, what 'beam' lamps hang from, and rods that reach the vault (`ceilingAt`). Defaults unchanged. |
+| `scene-camera.js` | Entry on the table's axis just inside the door (wide 0, 1.7, 3.4; portrait 0, 1.75, 3.75), looking at the window, with its own lens anchor (the table lower in frame, so the vault shows). Shelf eye in front of the new nook. New trunk and branch. The shelf's look-round reaches 150° (the chair is now about 175° round from the nook), at up to 80°/s. |
+| `script.js` | The nook's click box comes from `studyRoom.nook`. |
+| `tests/architecture-check.mjs` | The new plan and mappings. |
+| `tests/portal-check.mjs` | Re-based: the room budget (see below), and "the window rises from above the tabletop out of the top of the seated frame" in place of "the ceiling/wall junction is in frame". |
+| `tests/lighting-check.mjs` | Its poses and the door's luminance boxes follow `studyRoom.door` and the tower. |
+| `tests/interior-check.mjs` | Adds a clearance check: the nearest solid triangle to the eye on every walk, both formats. |
+
+### Layout (scene coordinates; the chamber's centre is at z 0.3)
+
+| Element | Where |
+| --- | --- |
+| Table | origin (unchanged) |
+| Great window | back bay, plane z -3.7; half-width 0.82, sill 0.8, peak 4.3 (above the springing) |
+| Door | front bay, plane z 4.3; the exterior's equilateral pointed arch, half-width 0.8, peak 2.75; a 1 m passage behind |
+| Study nook | left bay, face x -4.0, back -4.6, z -0.68..1.28; worktop 0.74, tool shelf 1.42 (top 1.4375), two shelves above |
+| Tower | axis (3.83, -1.91), r 1.15, 7 m; mouth = the whole -30° bay, arch peak 4.25 |
+| Shelving niches | bays 0°, 120°, 150°, 210°; blind arches with banners at -60°, 30°, 60°, 240° |
+| Entry eye | (0, 1.7, 3.4), 3.4 m from the table |
+| Seated eye | unchanged |
+| Shelf eye | (-2.25, 1.8, 0.3), looking at the nook's back (heading 90°) |
+| Chair at rest | unchanged (1.14, 0.64, 56°) |
+
+### Exterior fit (for Codex, not changed here)
+
+- The plan fits the drum: the chamber's outer apothem (4.35 m) corresponds to
+  the drum's radius 1.0 at about 4.35 m per unit.
+- The door matches the exterior's equilateral arch and faces +Z. The tower
+  stands back right, as outside.
+- **Mismatches for Codex** (the exterior is theirs, so nothing was changed):
+  - **Tower.** The interior tower is wider and stands further out than the
+    exterior's: outer radius about 1.45 m against 0.27 units (about 1.2 m),
+    with its axis 4.42 m out against 0.99 units (about 4.3 m). Widening the
+    exterior tower's foot to about 0.33 units, and moving it out to about
+    1.02 units, would match.
+  - **Vault.** The interior vault's crown (6.4 m) matches the exterior dome's
+    height. Near its springing the vault stands about 0.1–0.4 m outside the
+    exterior's ellipsoid, where the inner walls run vertical to 3.3 m.
+
+### Measured
+
+**Clearance** (`interior-check`):
+
+- the eye never comes within 0.42 m of anything solid on any walk, in either
+  format;
+- the nearest thing is the door lantern, just behind the entry;
+- walls, columns, the vault and the stair are further away.
+
+**Room renders** (calls and triangles, room canvas, lamps and shelf objects
+included):
+
+| View | Calls | Triangles |
+| --- | --- | --- |
+| Entry | 34 (baseline 45) | 37.9 k (24.7 k) |
+| Seated | 34 (45) | 37.9 k (24.7 k) |
+| Shelf | 33 (33) | 41.6 k (21.6 k) |
+
+**Seated, without lamps and shelf objects** (`portal-check`'s budget): 31
+calls, 34.3 k triangles at 1920 before the furnishing. The budget is now
+under 40 calls and 50 k triangles.
+
+### Decisions made in this pass (open for the user's review)
+
+- **Entry tilt.** The entry looks 15.03° down, a hair over the seat's 15°.
+  That keeps `portal-check`'s rule that the walk in tilts down once and up
+  once (a first try at about 6°, with straighter columns and more vault,
+  failed it). With 15° the columns lean slightly outward at the top.
+- **Shelf look-round.** It now reaches 150° at the very edge (it was 75°).
+  The nook stands level with the table, so the chair is about 175° round.
+  `portal-check` now measures the turn from the nook's heading, since the
+  wrapped yaw reads −120° at 240°.
+- **Door lantern.** It hangs 0.65 m in front of the door (it was 1.2 m), to
+  stay behind the entry eye. Its spot now lights the passage's end wall, so
+  `lighting-check`'s "jambs brighter than the opening" fails. This is for
+  the lighting pass.
+
+## Regression (2026-10-10, mains power, this worktree)
+
+16 of the 19 suite runs passed in the full run. Of the other three:
+
+- `aura-check` failed on a point that no longer exists. Its "nearby
+  architecture" was the old left wall at x -2.38, which the aura's lights
+  (reach about 2.7 m) could light. The chamber's walls are 4 m away. It now
+  samples the table's own rim, with the far reference on the floor before the
+  window (the window itself shows the moving sky). Passed on rerun.
+- `lighting-check` fails on "From the shelf the doorway reads": the lantern
+  now lights the passage behind the door (see above). This is for Stage C.
+- `loading-gate-check` fails at its first wait for "waiting": a click the
+  check makes while loading is taken as the answer (`continuedBy:
+  pointerdown`). **The untouched baseline `926adf8` fails the same way**
+  (`verification/interior-baseline`), so this predates this branch. It is a
+  race in the loading screen's check, which is Codex's: documented, not
+  changed.
+
+Passed:
+
+- `architecture`, `table`, `cloth`;
+- `portal-check` in all six modes (default, environment, foundation, cloth,
+  retrieval, depth);
+- `depth`, `impact`, `orb`, `tools`, `shelf-tools`;
+- `exterior-entry`, `loading-portal`.
+
+## Known failures and why
+
+- `lighting-check`: "From the shelf the doorway reads". This is lighting
+  (above), for Stage C.
+- `loading-gate-check`: a pre-existing race, also on the baseline (above).
+  For Codex.
+
+## The smoke markers' click bug (for Stage D)
+
+The user reports that clicking the left smoke marker goes to the chair.
+
+**Cause, from the code:**
+
+- `script.js` `placeEntryTargets()` lays two invisible buttons over the
+  screen's bounding rectangles of world points:
+  - `#goChair`: the table and the posed chair, plus a ring at the branch's
+    end;
+  - `#goShelf`: the nook, plus a ring round the shelf eye.
+- `#goChair` is on top (`room.css`, z-index 1).
+- In the old room the shelf eye (-0.55, -1.55) lay just behind the table as
+  seen from the entry, so its marker fell inside the chair button's rectangle.
+  The click went to the chair.
+- In the chamber the shelf marker (-2.25, 0.3) stands well left of the table,
+  so the rectangles probably no longer overlap. This is not yet verified by
+  clicking.
+
+**Fix in Stage D:**
+
+- hit-test the marker rings (ellipses on screen) before the rectangles, or
+  make the buttons non-overlapping;
+- check each by a real click on each marker, in both formats.
+
+## Next (from the resumed brief)
+
+1. **The user's visual review of this architecture.**
+   - Preview: run `node <scratchpad>/serve.mjs <worktree> 8765`, or any
+     static server from the worktree, and open `http://127.0.0.1:8765/`.
+   - Screenshots: `verification/interior/round4/`.
+2. **Stage B: the vertical structure.** The brief asks for two main floors
+   with matching footprints, a taller tower and the spiral stair connecting
+   them. This needs the user's choice, because a full second floor over the
+   chamber would hide the tall dome they asked for. Proposed: a gallery ring
+   at the springing (about 3.3 m) round the chamber, its floor matching the
+   twelve-sided footprint, open in the middle under the dome, reached from
+   the tower's stair (its landing raised to meet it); the second floor
+   otherwise empty.
+3. **Stage C: lighting.**
+   - Warm lamps at the shelves and walls.
+   - The vault's lantern lit.
+   - The window's light, and readable architecture.
+   - The door lantern re-aimed, so `lighting-check` passes.
+4. **Stage D: smoke markers and navigation**, as above.
+5. **Full regression and a performance A/B** against `../interior-baseline`.

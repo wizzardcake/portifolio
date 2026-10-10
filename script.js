@@ -170,9 +170,11 @@
       const x = chairX + across * cos + deep * sin, z = chairZ - across * sin + deep * cos;
       chairPoints.push([x, 0, z], [x, 1.05, z]);
     }
-    // The nook's opening in the left wall (room-scene.js: z -2.6 to -0.5,
-    // its arch 2.12 m high), and the floor in front where the smoke gathers.
-    for (const z of [-2.6, -.5]) nookPoints.push([-2.4, 0, z], [-2.4, 2.12, z], [-2.05, 0, z]);
+    // The nook's opening in the chamber's left bay (room-scene.js's
+    // studyRoom.nook: its face, width and arch), and the floor in front where
+    // the smoke gathers.
+    const nook = window.studyRoom?.nook ?? {x: -4, z0: -.68, z1: 1.28, top: 3};
+    for (const z of [nook.z0, nook.z1]) nookPoints.push([nook.x, 0, z], [nook.x, nook.top * .85, z], [nook.x + .35, 0, z]);
     // Each place's mark on the floor takes the click too: a ring round where
     // the visitor would stand.
     const ring = ([x, z]) => Array.from({length: 8}, (_, i) => [x + .36 * Math.cos(i * Math.PI / 4), 0, z + .36 * Math.sin(i * Math.PI / 4)]);

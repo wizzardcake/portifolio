@@ -1,5 +1,8 @@
 // Local architectural dressings only. Opening sizes, stair route and room
-// placement are supplied by room-scene.js; sky and interactions are untouched.
+// placement are supplied by room-scene.js (the chamber's bays come from
+// room-chamber.js); sky and interactions are untouched. windowMap and doorMap
+// place a point on the window's and the door's wall: (u, y, depth), u to the
+// right as seen from the room, depth toward it.
 export const architectureTuning = {
   frameWidth: .115, frameProjection: .085, revealDepth: .24,
   sillProjection: .16, traceryRadius: .012,
@@ -8,7 +11,7 @@ export const architectureTuning = {
   upperBounce: 6, upperReach: 1.55, shaftWidth: 1, shaftStrength: 1,
 };
 
-export function createRoomArchitecture(THREE,{aperture,alcove,tower,lancets,stair,roomBack},tuning=architectureTuning) {
+export function createRoomArchitecture(THREE,{aperture,windowMap,door,doorMap,tower,lancets,stair},tuning=architectureTuning) {
   const stone=[],metal=[];
   const at=(phi,r,y)=>new THREE.Vector3(tower.x+r*Math.cos(phi),y,tower.z+r*Math.sin(phi));
   const tread=i=>(i+1)*stair.rise;
@@ -35,7 +38,6 @@ export function createRoomArchitecture(THREE,{aperture,alcove,tower,lancets,stai
     }
     points.push([r,w.sill-pad]);return points;
   }
-  const planar=(x,z)=>(u,y,depth)=>new THREE.Vector3(x+u,y,z+depth);
   const radial=w=>(u,y,depth)=>at(w.at+u/tower.r,tower.r-depth,y);
   function ribbon(w,profile,map) {
     const rows=profile.map(([pad,depth])=>contour(w,pad).map(([u,y])=>map(u,y,depth)));
@@ -75,8 +77,9 @@ export function createRoomArchitecture(THREE,{aperture,alcove,tower,lancets,stai
     for(let i=0;i<p.count;i++){const v=map(p.getX(i),p.getY(i)+w.peak+width*.46,p.getZ(i)+proud+.004);p.setXYZ(i,v.x,v.y,v.z);}
     key.computeVertexNormals();metal.push(key);
   }
-  frame(alcove,planar(alcove.x,roomBack),1.18,false);
-  const back=planar(aperture.x,alcove.back);
+  // The door's frame is the broader, shallower profile the alcove had.
+  frame(door,doorMap,1.18,false);
+  const back=windowMap;
   frame(aperture,back);
   lancets.forEach(w=>frame(w,radial(w),.65));
   // Forked tracery in the large opening, with a small pointed eye. It lives
@@ -92,6 +95,17 @@ export function createRoomArchitecture(THREE,{aperture,alcove,tower,lancets,stai
   metal.push(rod([back(0,eyeY+.10,-.105),back(.057,eyeY,-.105),back(0,eyeY-.10,-.105),
     back(-.057,eyeY,-.105),back(0,eyeY+.10,-.105)],.011,12));
   metal.push(rod([back(0,eyeY+.10,-.105),back(0,aperture.peak-.008,-.105)],.008,1));
+  // A wide window is divided again: a slim mullion in each light, and four
+  // small pointed heads under the fork, so it reads as four lights and an eye.
+  if(aperture.halfWidth>.6) {
+    const r=aperture.halfWidth,head=join-.2,rise=.26;
+    for(const sign of [-1,1]) metal.push(rod([back(sign*r/2,aperture.sill,-.105),back(sign*r/2,head,-.105)],.011,1));
+    for(const [u0,u1] of [[-r,-r/2],[-r/2,0],[0,r/2],[r/2,r]]) {
+      const w=u1-u0,m=(u0+u1)/2;
+      metal.push(rod([back(u0,head,-.105),back(u0+w*.12,head+rise*.62,-.105),back(m,head+rise,-.105),
+        back(u1-w*.12,head+rise*.62,-.105),back(u1,head,-.105)],.009,6));
+    }
+  }
   // A small matching eye high in each slim lancet, never a grille across its view.
   for(const w of lancets) {
     const map=radial(w),y=w.shoulder+.14;

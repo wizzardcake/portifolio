@@ -2,6 +2,7 @@ import * as THREE from './vendor/three/three.module.js';
 import {createRitualTable} from './table-model.js';
 import {createRitualCloth} from './ritual-cloth.js';
 import {createRoomArchitecture,architectureTuning} from './room-architecture.js';
+import {createChamber,chamberTuning} from './room-chamber.js';
 import {createNightSky} from './night-sky.js';
 import {createRoomSmoke} from './room-smoke.js';
 import {createRoomLamps,lampTuning} from './room-lamps.js';
@@ -14,40 +15,49 @@ const host = document.getElementById('roomShell');
 const canvas = document.getElementById('roomCanvas');
 const view = window.sceneCamera;
 const stage = document.getElementById('deviceTilt');
-// Plan in metres, +Z toward the seated viewer. The main volume's back-right
-// corner is replaced by a round tower, its back-left corner by a curve and a
-// vaulted window alcove. Its open front lies behind every camera position,
-// including the intro start on tall viewports, so the floor never ends in view.
-const room = {left:-2.4, right:2.2, back:-2.6, front:7.2, height:2.45, wall:.30};
-// The table (world origin) stands this far in front of the plan's origin, so
-// the whole architecture is shifted back by it: clear floor behind the table.
-const placement = {forward:1.3};
-const corner = {x:-1.85, z:-2.05, r:.55};
-// The turret continues above the room's ceiling; its stair leads up out of view.
-const tower = {x:2.05, z:-2.0, r:1.35, height:4.3};
-tower.mouthBack = -Math.PI + Math.asin((tower.z - room.back) / tower.r); // meets the back wall
-tower.mouthRight = Math.acos((room.right - tower.x) / tower.r);          // meets the right wall
-const alcove = {left:-1.65, right:-.35, back:-3.2, shoulder:1.65, peak:2.25};
-alcove.x = (alcove.left + alcove.right) / 2; alcove.halfWidth = (alcove.right - alcove.left) / 2; alcove.sill = 0;
-const aperture = {x:alcove.x, halfWidth:.42, sill:.50, shoulder:1.45, peak:2.0};
-// Study nook: a wide, shallow basket-arched recess in the left wall with a
-// built-in worktop and shelf; the warm, horizontal counterpart to the tower.
-// back/front are plan Z; the arch springs at shoulder and rises by rise.
-const nook = {back:-1.3, front:.8, depth:.45, shoulder:1.7, rise:.42, desk:.74, shelf:1.42};
+// Plan in metres, +Z toward the seated viewer, the chamber's centre at the
+// origin: a twelve-sided chapter house under a ribbed dome (room-chamber.js),
+// the orb-glass building outside seen from within. Its door (+Z) lies behind
+// every camera position, the great window (-Z) straight behind the table, the
+// study nook in the left wall, and the stair tower back right, standing
+// outside the wall as the loading screen's tower does.
+const {apothem, sides} = chamberTuning;
+// The table (world origin) stands this far in front of the chamber's centre;
+// negative, behind it toward the window, so more floor lies before the door.
+// The whole architecture is shifted by it.
+const placement = {forward:-.3};
+// The stair tower: the circle through the two columns of the bay at -30
+// degrees, so its wall begins behind them and the whole bay opens into it.
+// It rises far above the vault's springing; its stair leads up out of view.
+// Its stair, lamps and lights keep the design they had in the rectangular
+// room's back corner (`was`), turned by `turn` degrees and scaled by `scale`
+// about its axis (fromOld, turned).
+const towerBay = -Math.PI / 6, bayHalf = apothem * Math.tan(Math.PI / sides);
+const tower = {r:1.15, height:7, was:{x:2.05, z:-2.0, r:1.35}, turn:15};
+const towerOut = apothem + Math.sqrt(tower.r ** 2 - bayHalf ** 2);
+Object.assign(tower, {x:towerOut * Math.cos(towerBay), z:towerOut * Math.sin(towerBay), scale:tower.r / tower.was.r});
+// Its wall runs from one of the bay's columns round the back to the other.
+const mouthWidth = Math.atan2(bayHalf, towerOut - apothem), mouthDirection = towerBay + Math.PI;
+tower.wallFrom = mouthDirection + mouthWidth; tower.wallTo = mouthDirection - mouthWidth + 2 * Math.PI;
+const turned = degrees => (degrees + tower.turn) * Math.PI / 180;
+function fromOld(x, z) {
+  const a = tower.turn * Math.PI / 180, dx = (x - tower.was.x) * tower.scale, dz = (z - tower.was.z) * tower.scale;
+  return [tower.x + dx * Math.cos(a) - dz * Math.sin(a), tower.z + dx * Math.sin(a) + dz * Math.cos(a)];
+}
 // Spiral stair along the tower wall. Step i spans plan angles
 // from - (i+1)*step .. from - i*step, so it starts on the right of the tower
 // (as seen from the table) and climbs leftward across its back wall.
 // soffit: thickness of the flight under the line through the nosings, square
 // to its slope; joint: how far each stone's underside is tucked up at the
 // next one; cap/nosing: each nosing's thickness and how far it overhangs the riser.
-const stair = {from:-12 * Math.PI / 180, step:10 * Math.PI / 180, rise:.19, inner:.70, count:14,
+const stair = {from:turned(-12), step:10 * Math.PI / 180, rise:.19, inner:.70 * tower.scale, count:14,
   soffit:.15, joint:.018, cap:.045, nosing:.028};
 const tread = i => (i + 1) * stair.rise;
 // Tall, narrow lancets stepped up with the stair: each sill clears the highest
 // tread beneath its opening. They sit where the stair is still low, so its
 // higher flight never covers them from the table.
 const lancets = [-25, -50, -75].map(degrees => {
-  const at = degrees * Math.PI / 180, halfWidth = .18;
+  const at = turned(degrees), halfWidth = .18;
   const sill = Math.round((tread(Math.floor((stair.from - at + halfWidth / tower.r) / stair.step)) + .18) * 100) / 100;
   return {at, halfWidth, sill, shoulder:sill + 1.5, peak:sill + 1.85};
 });
@@ -86,39 +96,25 @@ if (renderer) {
 
   let seed = 617;
   const random = () => ((seed = Math.imul(seed,1664525)+1013904223 >>> 0) / 4294967296);
-  function texture(kind) {
+  // Wood grain for the floor, the timber and the chair.
+  function woodTexture() {
     const image=document.createElement('canvas'); image.width=512; image.height=512;
     const ctx=image.getContext('2d');
-    ctx.fillStyle=kind==='stone'?'#74716c':'#786047'; ctx.fillRect(0,0,512,512);
-    if(kind==='stone') {
-      for(let row=0;row<8;row++) for(let col=-1;col<5;col++) {
-        const x=col*128+(row%2)*64, y=row*64;
-        const v=102+Math.floor(random()*18);
-        ctx.fillStyle=`rgb(${v+6},${v+4},${v})`; ctx.fillRect(x+2,y+2,124,60);
-        ctx.fillStyle='#a09b8520';ctx.fillRect(x+3,y+3,121,2);
-        ctx.fillStyle='#1c24252c';ctx.fillRect(x+3,y+59,121,3);
-      }
-      for(let i=0;i<21000;i++) {
-        const x=random()*512,y=random()*512;
-        ctx.fillStyle=random()>.5?'#ddd4be0b':'#0a111417';ctx.fillRect(x,y,1+random()*3,1+random()*2);
-      }
-    } else {
-      for(let i=0;i<1800;i++) {
-        const x=random()*512;
-        ctx.strokeStyle=random()>.45?'#25190e24':'#e1ba8415';ctx.lineWidth=.3+random();
-        ctx.beginPath();ctx.moveTo(x,0);ctx.bezierCurveTo(x+random()*10,140,x-random()*12,370,x,512);ctx.stroke();
-      }
+    ctx.fillStyle='#786047'; ctx.fillRect(0,0,512,512);
+    for(let i=0;i<1800;i++) {
+      const x=random()*512;
+      ctx.strokeStyle=random()>.45?'#25190e24':'#e1ba8415';ctx.lineWidth=.3+random();
+      ctx.beginPath();ctx.moveTo(x,0);ctx.bezierCurveTo(x+random()*10,140,x-random()*12,370,x,512);ctx.stroke();
     }
     const map=new THREE.CanvasTexture(image);
     map.colorSpace=THREE.SRGBColorSpace; map.wrapS=map.wrapT=THREE.RepeatWrapping;
     map.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
-    if(kind==='stone') map.repeat.set(.62,.62);
     return map;
   }
-  const stoneMap=texture('stone'), woodMap=texture('wood');
-  // Dressed stone for the spiral stair: the walls' tone and grain without their
-  // coursing. It draws from its own seeded generator, so the shared one still
-  // lays out the same planks, sky and cloth.
+  const woodMap=woodTexture();
+  // Dressed stone for the walls and the spiral stair: tone and grain, no
+  // coursing (the chamber's bays, columns and ribs give the walls their
+  // order now). It draws from its own seeded generator.
   function dressedStone() {
     let s=4057;const draw=()=>((s=Math.imul(s,1664525)+1013904223>>>0)/4294967296);
     const image=document.createElement('canvas');image.width=image.height=256;
@@ -138,7 +134,8 @@ if (renderer) {
     map.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());map.repeat.set(1.3,1.3);
     return map;
   }
-  const stone=new THREE.MeshStandardMaterial({color:'#c9c7c4',map:stoneMap,bumpMap:stoneMap,bumpScale:.012,roughness:1});
+  const stoneMap=dressedStone();
+  const stone=new THREE.MeshStandardMaterial({color:'#b8ab9a',map:stoneMap,bumpMap:stoneMap,bumpScale:.006,roughness:.96});
   const wood=new THREE.MeshStandardMaterial({color:'#a89980',map:woodMap,roughness:.94});
   const ceilingMaterial=new THREE.MeshStandardMaterial({color:'#7c756b',map:woodMap,roughness:1});
   const trim=new THREE.MeshStandardMaterial({color:'#969596',roughness:1});
@@ -147,11 +144,40 @@ if (renderer) {
   const timber=new THREE.MeshStandardMaterial({color:'#a8876a',map:woodMap,roughness:.95});
   const stairStone=new THREE.MeshStandardMaterial({color:'#7f786e',roughness:.95});
   // The stair's own stone, as dark as the walls' once its texture is multiplied in.
-  const stepStone=new THREE.MeshStandardMaterial({color:'#d6d1c8',map:dressedStone(),roughness:.9});
+  const stepStone=new THREE.MeshStandardMaterial({color:'#d6d1c8',map:stoneMap,roughness:.9});
   const architecturalMetal=new THREE.MeshStandardMaterial({color:'#827354',metalness:.48,roughness:.58});
   const chairWood=new THREE.MeshStandardMaterial({color:'#8f6a4c',map:woodMap,roughness:.6});
   const velvet=new THREE.MeshStandardMaterial({color:'#23403a',roughness:.92});
-  const materials=[stone,wood,ceilingMaterial,trim,timber,stairStone,chairWood,velvet,stepStone,architecturalMetal];
+  // The vault's cells: dark glass in teal, green and a little violet, held in
+  // dark leading, faintly lit from within as if by the night beyond (the
+  // concept's dome). Drawn once, seeded, and stretched over every cell.
+  function mosaic() {
+    let s=271;const draw=()=>((s=Math.imul(s,1664525)+1013904223>>>0)/4294967296);
+    const image=document.createElement('canvas');image.width=image.height=256;
+    const g=image.getContext('2d');g.fillStyle='#050b0a';g.fillRect(0,0,256,256);
+    // Leaded panes in courses that rise with the cell to the boss, each pane
+    // its own glass: mostly teal and green, now and then a deeper blue or
+    // violet, a little brighter at its heart where the light comes through.
+    const tones=['#1d6b5f','#1a5e57','#236f5c','#185a63','#1f6150','#1c4f66','#2f3f6e'];
+    const across=5,up=7,w=256/across,h=256/up;
+    for(let j=0;j<up;j++) for(let i=0;i<across;i++) {
+      const tone=tones[Math.floor(draw()**1.6*tones.length)],x=i*w,y=j*h;
+      const heart=g.createRadialGradient(x+w/2,y+h/2,2,x+w/2,y+h/2,Math.max(w,h)*.7);
+      heart.addColorStop(0,tone);heart.addColorStop(1,'#0b1d1b');
+      g.fillStyle=heart;g.fillRect(x+2,y+2,w-4,h-4);
+    }
+    // A fine gilded line where the cell meets its ribs and its wall.
+    g.strokeStyle='#7a5a2a';g.lineWidth=3;g.strokeRect(1.5,1.5,253,253);
+    const map=new THREE.CanvasTexture(image);
+    map.colorSpace=THREE.SRGBColorSpace;map.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
+    return map;
+  }
+  const vaultMap=mosaic();
+  const vaultGlass=new THREE.MeshStandardMaterial({color:'#9fb5ad',map:vaultMap,emissive:'#7fe0cc',emissiveMap:vaultMap,emissiveIntensity:.55,roughness:.42,metalness:.15});
+  // The lantern under the boss: warm glass, glowing on its own (its light on
+  // the room is the lighting pass's to add).
+  const lanternGlass=new THREE.MeshStandardMaterial({color:'#ffd9a0',emissive:'#ff9f45',emissiveIntensity:1.6,roughness:.35});
+  const materials=[stone,wood,ceilingMaterial,trim,timber,stairStone,chairWood,velvet,stepStone,architecturalMetal,vaultGlass];
   const textured = materials.map(m=>({map:m.map,color:m.color.clone()}));
   // Pieces sharing a material are merged into one mesh, which keeps the
   // curved shell inside the room's draw-call budget. Stone courses use world
@@ -246,31 +272,19 @@ if (renderer) {
     return geometry;
   }
 
-  const T=room.wall,H=room.height;
-  const rightJoin=tower.z+Math.sqrt(tower.r**2-(room.right-tower.x)**2); // tower meets the right wall
-  const backJoin=tower.x-Math.sqrt(tower.r**2-(room.back-tower.z)**2);   // tower meets the back wall
-  // Floor extent along Z at plan position x: main room with its curved corner,
-  // the alcove, and the tower circle.
-  function footprint(x) {
-    let back=Infinity,front=-Infinity;
-    if(x>=room.left&&x<=room.right) {
-      back=x<corner.x?corner.z-Math.sqrt(Math.max(0,corner.r**2-(x-corner.x)**2)):room.back;
-      front=room.front;
-    }
-    if(x>=alcove.left&&x<=alcove.right) back=Math.min(back,alcove.back);
-    if(x<room.left&&x>=room.left-nook.depth){back=Math.min(back,nook.back);front=Math.max(front,nook.front);}
-    const dx=x-tower.x;
-    if(Math.abs(dx)<=tower.r) {
-      const s=Math.sqrt(tower.r**2-dx*dx);back=Math.min(back,tower.z-s);front=Math.max(front,tower.z+s);
-    }
-    return [back,front];
-  }
-  const east=tower.x+tower.r,west=room.left-nook.depth;
-  mesh('floor substrate',block(east-west+T*2,.07,room.front-(tower.z-tower.r-T),
-    (west+east)/2,-.06,(room.front+tower.z-tower.r-T)/2),
+  const T=chamberTuning.wall,H=chamberTuning.spring;
+  // The chamber (room-chamber.js): its twelve bays, their openings and
+  // niches, the vault, and the columns and ribs that carry it.
+  const chamber=createChamber(THREE,{towerTop:tower.height});
+  const aperture=chamber.window,nook=chamber.nook,door=chamber.door;
+  // Floor extent along Z at plan position x: the chamber with its recesses
+  // and the door's passage, and the tower's circle.
+  const footprint=x=>chamber.footprint(x,tower);
+  const east=tower.x+tower.r+T,west=nook.back-T,south=-apothem-T,north=door.z+door.depth+.05;
+  mesh('floor substrate',block(east-west+T*2,.07,north-south+T*2,(west+east)/2,-.06,(north+south)/2),
     new THREE.MeshStandardMaterial({color:'#151312',roughness:1}),false);
   // Each board runs to the outermost wall line across its width; the ragged
-  // ends of curved rows disappear under the 30 cm walls.
+  // ends of the round chamber's rows disappear under its walls.
   const planks=[],board=.22;
   for(let x=west;x<east-.01;x+=board) {
     let back=Infinity,front=-Infinity;
@@ -294,87 +308,23 @@ if (renderer) {
     boards.setMatrixAt(i,dummy.matrix);boards.setColorAt(i,new THREE.Color().setScalar(.70+random()*.28));
   });
   boards.instanceMatrix.needsUpdate=true;shell.add(boards);
-  // Stone shell: straight left/right walls, a curved back-left corner, the
-  // back wall with the alcove's pointed opening, the alcove vault, and the
-  // round tower whose wall runs from the back wall around to the right wall.
-  const alcoveOpening=shape=>{
-    shape.lineTo(alcove.left,0);shape.lineTo(alcove.left,alcove.shoulder);
-    shape.quadraticCurveTo(alcove.left,control(alcove),alcove.x,alcove.peak);
-    shape.quadraticCurveTo(alcove.right,control(alcove),alcove.right,alcove.shoulder);
-    shape.lineTo(alcove.right,0);return shape;
-  };
-  const backShape=alcoveOpening(new THREE.Shape().moveTo(corner.x,0));
-  backShape.lineTo(backJoin,0);backShape.lineTo(backJoin,H);backShape.lineTo(corner.x,H);backShape.closePath();
-  const vaultShape=alcoveOpening(new THREE.Shape().moveTo(alcove.left-T,0));
-  vaultShape.lineTo(alcove.right+T,0);vaultShape.lineTo(alcove.right+T,alcove.peak+T);
-  vaultShape.lineTo(alcove.left-T,alcove.peak+T);vaultShape.closePath();
-  const extrude=(shape,depth,z,curveSegments=20)=>
-    worldUV(new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:false,curveSegments}).translate(0,0,z));
-  // The left wall is traced in (plan Z, height) and turned so its extrusion
-  // runs outward (-X) from the inner face at x.
-  const extrudeX=(shape,depth,x)=>worldUV(new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:false,curveSegments:20})
-    .rotateY(-Math.PI/2).translate(x,0,0));
-  const nookOpening=shape=>{
-    const rx=(nook.front-nook.back)/2;
-    shape.lineTo(nook.back,0);shape.lineTo(nook.back,nook.shoulder);
-    shape.absellipse(nook.back+rx,nook.shoulder,rx,nook.rise,Math.PI,0,true);
-    shape.lineTo(nook.front,0);return shape;
-  };
-  const nookTop=nook.shoulder+nook.rise+T;
-  const leftShape=nookOpening(new THREE.Shape().moveTo(corner.z,0));
-  leftShape.lineTo(room.front,0);leftShape.lineTo(room.front,H);leftShape.lineTo(corner.z,H);leftShape.closePath();
-  const nookShell=nookOpening(new THREE.Shape().moveTo(nook.back-T,0));
-  nookShell.lineTo(nook.front+T,0);nookShell.lineTo(nook.front+T,nookTop);
-  nookShell.lineTo(nook.back-T,nookTop);nookShell.closePath();
-  const nookBack=new THREE.Shape().moveTo(nook.back-T,0);
-  nookBack.lineTo(nook.front+T,0);nookBack.lineTo(nook.front+T,nookTop);
-  nookBack.lineTo(nook.back-T,nookTop);nookBack.closePath();
-  // The front wall closes the room behind the entry. Its doorway, where the
-  // visitor came in, opens on a short dark passage. It is seen only when the
-  // visitor turns round at the shelf, so it is a few flat faces turned into
-  // the room rather than blocks: the room's triangle budget is nearly spent,
-  // and faces seen only from the room cast no shadow into it.
-  const door={x0:.25,x1:1.35,height:2.1,passage:1};
-  const doorX=(door.x0+door.x1)/2,doorWidth=door.x1-door.x0,doorDeep=T+door.passage,doorIn=room.front+doorDeep/2;
-  const face=(w,h,x,y,z,turn)=>worldUV(turn(new THREE.PlaneGeometry(w,h)).translate(x,y,z));
-  const facingIn=g=>g.rotateY(Math.PI);
+  // Stone shell: the chamber's bays, and the tower's round wall from one of
+  // its mouth's columns round the back to the other, with its lancets.
   mesh('stone shell',merge([
-    face(door.x0-room.left,H,(room.left+door.x0)/2,H/2,room.front,facingIn),
-    face(room.right-door.x1,H,(door.x1+room.right)/2,H/2,room.front,facingIn),
-    face(doorWidth,H-door.height,doorX,(door.height+H)/2,room.front,facingIn),
-    // The doorway's reveals run on as the passage's sides; its head, floor and end.
-    face(doorDeep,door.height,door.x0,door.height/2,doorIn,g=>g.rotateY(Math.PI/2)),
-    face(doorDeep,door.height,door.x1,door.height/2,doorIn,g=>g.rotateY(-Math.PI/2)),
-    face(doorWidth,doorDeep,doorX,door.height,doorIn,g=>g.rotateX(Math.PI/2)),
-    face(doorWidth,doorDeep,doorX,.002,doorIn,g=>g.rotateX(-Math.PI/2)),
-    face(doorWidth,door.height,doorX,door.height/2,room.front+doorDeep,facingIn),
-    extrudeX(leftShape,T,room.left),
-    extrudeX(nookShell,nook.depth-T,room.left-T),
-    extrudeX(nookBack,T,room.left-nook.depth),
-    worldUV(block(T,H,room.front-rightJoin,room.right+T/2,H/2,(room.front+rightJoin)/2)),
-    arcWall({...corner,t:T,from:Math.PI,to:1.5*Math.PI,y1:H,steps:12}),
-    extrude(backShape,T,room.back-T),
-    extrude(vaultShape,room.back-T-alcove.back,alcove.back),
-    arcWall({...tower,t:T,from:tower.mouthBack,to:tower.mouthRight,y1:tower.height,steps:56,openings:lancets}),
-    // The tower rises above the main ceiling; this band closes it over the mouth.
-    arcWall({...tower,t:T,from:tower.mouthRight,to:tower.mouthBack+2*Math.PI,y0:H,y1:tower.height,steps:20}),
-    // Round piers mark both ends of the tower mouth.
-    worldUV(new THREE.CylinderGeometry(.1,.12,H,20).translate(backJoin,H/2,room.back)),
-    worldUV(new THREE.CylinderGeometry(.1,.12,H,20).translate(room.right,H/2,rightJoin)),
+    ...chamber.parts.walls,
+    arcWall({...tower,t:T,from:tower.wallFrom,to:tower.wallTo,y1:tower.height,steps:56,
+      openings:lancets.map(w=>({...w,at:w.at<tower.wallFrom?w.at+2*Math.PI:w.at}))}),
   ]),stone);
-  // The alcove's end wall keeps the large pointed window.
-  const windowShape=new THREE.Shape().moveTo(alcove.left-T,0);
-  windowShape.lineTo(alcove.right+T,0);windowShape.lineTo(alcove.right+T,alcove.peak+T);
-  windowShape.lineTo(alcove.left-T,alcove.peak+T);windowShape.closePath();
-  windowShape.holes.push(arch(new THREE.Path(),aperture));
-  mesh('back wall with through opening',extrude(windowShape,T,alcove.back-T,24),stone);
+  // The great window's bay keeps its one through opening.
+  mesh('back wall with through opening',chamber.parts.windowWall,stone);
 
-  // Shared carved profiles for the alcove, actual window reveals and curved
-  // tower lancets. The same pointed tracery is carried into the stair rail.
+  // Shared carved profiles for the door, the window's reveals and the
+  // curved tower lancets. The same pointed tracery is carried into the stair
+  // rail; the chamber's boss and lantern share the bronze.
   const radialAt=(at,rho)=>[tower.x+rho*Math.cos(at),tower.z+rho*Math.sin(at)];
-  const architecture=createRoomArchitecture(THREE,{aperture,alcove,tower,lancets,stair,roomBack:room.back});
+  const architecture=createRoomArchitecture(THREE,{aperture,windowMap:aperture.map,door,doorMap:door.map,tower,lancets,stair});
   mesh('stone trim',architecture.stone,trim);
-  mesh('gothic bronze tracery',architecture.metal,architecturalMetal);
+  mesh('gothic bronze tracery',merge([architecture.metal,...chamber.parts.metal]),architecturalMetal);
 
   // The spiral stair, in its own dressed stone. Each step is one solid from the
   // stair's open inner edge into the wall, its profile carrying a nosing that
@@ -442,39 +392,14 @@ if (renderer) {
     ...Array.from({length:stair.count},(_,i)=>arcWall({...tower,...stepAt(i),r:tower.r-proud,
       t:proud+.02,y0:tread(i),y1:tread(i)+plinth,steps:1})),
   ]),stepStone);
-  // Dressed stone: a low plinth where the other walls meet the floor.
-  mesh('dressed stone',merge([
-    arcWall({...corner,r:corner.r-proud,t:proud+.02,from:Math.PI,to:1.5*Math.PI,y1:plinth,steps:12}),
-    block(proud,plinth,nook.back-corner.z,room.left+proud/2,plinth/2,(corner.z+nook.back)/2),
-    block(proud,plinth,room.front-nook.front,room.left+proud/2,plinth/2,(nook.front+room.front)/2),
-    block(alcove.left-corner.x,plinth,proud,(corner.x+alcove.left)/2,plinth/2,room.back+proud/2),
-    block(backJoin-.12-alcove.right,plinth,proud,(alcove.right+backJoin-.12)/2,plinth/2,room.back+proud/2),
-    block(proud,plinth,room.front-rightJoin-.12,room.right-proud/2,plinth/2,(rightJoin+.12+room.front)/2),
-    // Along the front wall, either side of the doorway: its face and its top.
-    face(door.x0-room.left-proud,plinth,(room.left+proud+door.x0)/2,plinth/2,room.front-proud,facingIn),
-    face(door.x0-room.left-proud,proud,(room.left+proud+door.x0)/2,plinth,room.front-proud/2,g=>g.rotateX(-Math.PI/2)),
-    face(room.right-proud-door.x1,plinth,(door.x1+room.right-proud)/2,plinth/2,room.front-proud,facingIn),
-    face(room.right-proud-door.x1,proud,(door.x1+room.right-proud)/2,plinth,room.front-proud/2,g=>g.rotateX(-Math.PI/2)),
-  ]),stairStone);
+  // Dressed stone: a low plinth where the chamber's walls meet the floor.
+  mesh('dressed stone',merge(chamber.parts.plinth),stairStone);
 
-  // Dark timber: cross beams ending on a curved ring beam over the tower
-  // mouth, radial tower rafters, the alcove mullion and the stair's handrail.
-  const beamParts=[
-    arcWall({...tower,r:tower.r-.1,t:.2,from:tower.mouthRight,to:tower.mouthBack+2*Math.PI,
-      y0:H-.2,y1:H,bottom:true,steps:24}),
-    new THREE.CylinderGeometry(.12,.12,.16,12).translate(tower.x,tower.height-.08,tower.z),
-  ];
-  // The nook's built-ins: a worktop at desk height with a thin apron, and
-  // one shelf, both spanning between the arch's jambs.
-  const nookZ=(nook.back+nook.front)/2,nookW=nook.front-nook.back-.02;
-  beamParts.push(
-    block(nook.depth+.07,.045,nookW,room.left-nook.depth/2+.035,nook.desk-.0225,nookZ),
-    block(.03,.09,nookW,room.left+.055,nook.desk-.09,nookZ),
-    block(.26,.035,nookW,room.left-nook.depth+.13,nook.shelf,nookZ));
-  for(let z=-1.95;z<room.front-.2;z+=1.2) {
-    const dz=z-tower.z,end=Math.abs(dz)<tower.r?tower.x-Math.sqrt(tower.r**2-dz*dz):room.right;
-    beamParts.push(block(end-room.left+.1,.17,.16,(end+room.left-.1)/2,H-.085,z));
-  }
+  // Dark timber: the chamber's cornice and the built-ins of the nook and the
+  // shelving niches (room-chamber.js), radial rafters under the tower's roof,
+  // the stair's handrail and the tower's upper floor.
+  const beamParts=[...chamber.parts.timber,
+    new THREE.CylinderGeometry(.12,.12,.16,12).translate(tower.x,tower.height-.08,tower.z)];
   for(let i=0;i<6;i++) {
     const a=i*Math.PI/3+.3,[x,z]=radialAt(a,(tower.r+T/2)/2);
     beamParts.push(block(tower.r+T/2,.12,.1,x,tower.height-.06,z,-a));
@@ -484,32 +409,74 @@ if (renderer) {
   beamParts.push(architecture.handrail);
   // Upper floor inside the tower, one riser above the last step. Its stairwell
   // keeps headroom over the flight and clears the tall lancets, so the stair
-  // visibly arrives at another level instead of ending in the wall.
-  const well={from:stair.from-stair.count*stair.step,to:-40*Math.PI/180,inner:stair.inner-.06};
+  // visibly arrives at another level instead of ending in the wall. It stops
+  // at the mouth's plane, so it never reaches out into the chamber.
+  const well={from:stair.from-stair.count*stair.step,to:turned(-40),inner:stair.inner-.06};
   const upper=new THREE.Shape().moveTo(tower.r*Math.cos(well.to),tower.r*Math.sin(well.to));
-  upper.absarc(0,0,tower.r,well.to,well.from+2*Math.PI,false);
+  upper.absarc(0,0,tower.r,well.to,tower.wallTo,false);
+  upper.lineTo(tower.r*Math.cos(tower.wallFrom),tower.r*Math.sin(tower.wallFrom));
+  upper.absarc(0,0,tower.r,tower.wallFrom,well.from+2*Math.PI,false);
   upper.lineTo(well.inner*Math.cos(well.from),well.inner*Math.sin(well.from));
   upper.absarc(0,0,well.inner,well.from,well.to,false);
   upper.closePath();
   beamParts.push(new THREE.ExtrudeGeometry(upper,{depth:.12,bevelEnabled:false,curveSegments:24})
     .rotateX(Math.PI/2).translate(tower.x,tread(stair.count),tower.z));
-  // Wall plates along both long walls carry the cross beams' ends.
-  beamParts.push(block(.14,.14,room.front-corner.z,room.left+.07,H-.07,(room.front+corner.z)/2),
-    block(.14,.14,room.front-rightJoin,room.right-.07,H-.07,(room.front+rightJoin)/2));
   mesh('timber beams',merge(beamParts),timber);
 
-  // Ceilings: the main lid follows the room outline and stops at the tower
-  // circle; the tower's own ceiling sits higher.
-  const ceilingShape=new THREE.Shape().moveTo(room.left,room.front);
-  ceilingShape.lineTo(room.right,room.front);ceilingShape.lineTo(room.right,rightJoin);
-  ceilingShape.absarc(tower.x,tower.z,tower.r,tower.mouthRight,tower.mouthBack+2*Math.PI,false);
-  ceilingShape.lineTo(corner.x,room.back);
-  ceilingShape.absarc(corner.x,corner.z,corner.r,1.5*Math.PI,Math.PI,true);
-  ceilingShape.closePath();
-  mesh('ceiling',merge([
-    new THREE.ShapeGeometry(ceilingShape,24).rotateX(Math.PI/2).translate(0,H,0),
-    new THREE.CircleGeometry(tower.r+T,48).rotateX(Math.PI/2).translate(tower.x,tower.height,tower.z),
-  ]),ceilingMaterial,false);
+  // The tower's roof, far above the vault's springing (the part over the
+  // chamber hides above its vault).
+  mesh('ceiling',new THREE.CircleGeometry(tower.r+T,48).rotateX(Math.PI/2).translate(tower.x,tower.height,tower.z),ceilingMaterial,false);
+  // The vault's cells: one draw call. They look down on everything, so
+  // they cast no shadow.
+  mesh('vault',chamber.parts.vault,vaultGlass,false);
+  // Columns and ribs: one bay's frame in timber, its capitals and bases in
+  // bronze, each instanced round the twelve corners (one draw call apiece).
+  for(const [name,parts,material] of [['columns and ribs',chamber.frame.geometry,timber],['capitals and bases',chamber.frame.caps,architecturalMetal]]) {
+    const instanced=new THREE.InstancedMesh(merge(parts),material,chamber.frame.instances.length);
+    chamber.frame.instances.forEach((matrix,i)=>instanced.setMatrixAt(i,matrix));
+    instanced.name=name;instanced.castShadow=instanced.receiveShadow=true;instanced.computeBoundingSphere();shell.add(instanced);
+  }
+  mesh('vault lantern',chamber.parts.lanternGlass,lanternGlass,false);
+  // ---- Furnishing, simplified: books on the shelving niches' shelves (one
+  // instanced mesh), a banner in each blind arch, and a round rug under the
+  // table, as in the concept. Its own seeded generator, so the room's shared
+  // one lays out the cloth as before.
+  {
+    let s=9173;const draw=()=>((s=Math.imul(s,1664525)+1013904223>>>0)/4294967296);
+    const {books,banners}=chamber.furnish(draw);
+    const shelved=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({roughness:.78}),books.length);
+    books.forEach((book,i)=>{shelved.setMatrixAt(i,book.matrix);shelved.setColorAt(i,book.colour);});
+    shelved.name='books';shelved.receiveShadow=true;shelved.computeBoundingSphere();shell.add(shelved);
+    const canvas=(w,h,paint)=>{const c=document.createElement('canvas');c.width=w;c.height=h;paint(c.getContext('2d'),w,h);
+      const map=new THREE.CanvasTexture(c);map.colorSpace=THREE.SRGBColorSpace;map.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());return map;};
+    // Deep violet cloth, a gilt border and a crescent over a small star.
+    const bannerMap=canvas(128,320,(g,w,h)=>{
+      const cloth=g.createLinearGradient(0,0,0,h);cloth.addColorStop(0,'#2c1840');cloth.addColorStop(1,'#1c0f2a');
+      g.fillStyle=cloth;g.fillRect(0,0,w,h);
+      g.strokeStyle='#a07a3a';g.lineWidth=4;g.strokeRect(9,9,w-18,h-18);g.lineWidth=1.5;g.strokeRect(16,16,w-32,h-32);
+      g.fillStyle='#b8904a';g.beginPath();g.arc(w/2,h*.38,26,0,Math.PI*2);g.fill();
+      g.fillStyle='#24133a';g.beginPath();g.arc(w/2+11,h*.38-6,23,0,Math.PI*2);g.fill();
+      g.fillStyle='#b8904a';g.beginPath();
+      for(let k=0;k<8;k++){const a=k*Math.PI/4,r=k%2?4:11;g.lineTo(w/2+Math.cos(a)*r,h*.62+Math.sin(a)*r);}g.fill();
+      for(let x=12;x<w-8;x+=8){g.fillStyle='#8a6830';g.fillRect(x,h-10,3,10);}
+    });
+    mesh('banners',merge(banners.map(b=>new THREE.PlaneGeometry(b.width,b.height).rotateY(Math.PI).applyMatrix4(b.matrix))),
+      new THREE.MeshStandardMaterial({map:bannerMap,roughness:.92}),false);
+    // The rug: plum ground, a gilt and teal border, rings of small motifs and
+    // a medallion at its heart, under the table where the portal glows.
+    const rugMap=canvas(512,512,(g,w)=>{
+      const c=w/2,ring=(r,width,colour)=>{g.strokeStyle=colour;g.lineWidth=width;g.beginPath();g.arc(c,c,r,0,Math.PI*2);g.stroke();};
+      const ground=g.createRadialGradient(c,c,20,c,c,c);ground.addColorStop(0,'#3a1630');ground.addColorStop(.85,'#2a0f24');ground.addColorStop(1,'#1d0a19');
+      g.fillStyle='#000';g.fillRect(0,0,w,w);g.fillStyle=ground;g.beginPath();g.arc(c,c,c-2,0,Math.PI*2);g.fill();
+      ring(c-10,8,'#8a6a34');ring(c-24,3,'#1f5a55');ring(c-36,2,'#8a6a34');ring(c*.55,3,'#8a6a34');ring(c*.3,2,'#1f5a55');
+      for(const [r,n,size,colour] of [[c-30,48,5,'#b08a48'],[c*.75,32,8,'#245f58'],[c*.42,16,10,'#b08a48']])
+        for(let k=0;k<n;k++){const a=k/n*Math.PI*2;g.save();g.translate(c+Math.cos(a)*r,c+Math.sin(a)*r);g.rotate(a);
+          g.fillStyle=colour;g.beginPath();g.moveTo(-size,0);g.lineTo(0,-size*.6);g.lineTo(size,0);g.lineTo(0,size*.6);g.fill();g.restore();}
+    });
+    const rug=new THREE.Mesh(new THREE.CircleGeometry(2.05,64).rotateX(-Math.PI/2),
+      new THREE.MeshStandardMaterial({map:rugMap,roughness:.96,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));
+    rug.name='rug';rug.position.y=.004;rug.receiveShadow=true;scene.add(rug);
+  }
 
   // ---- The view out of the windows (night-sky.js): a moonlit purple night
   // over a misty valley, in layers at real distances behind the walls, which
@@ -517,6 +484,13 @@ if (renderer) {
   // and part of it moves (see "The night outside is alive" below).
   const night=createNightSky(THREE,{eye:{x:0,y:view.seated.eye,z:view.seated.distance+placement.forward},
     anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy())});
+  // It was composed for the old window, 9.3 degrees left of the chair's axis
+  // (azimuth 189.3); the great window is on the axis, so the whole view is
+  // turned about the chair's eye to bring the composition round to it.
+  {
+    const eye=new THREE.Vector3(0,0,view.seated.distance+placement.forward),turn=-9.3*Math.PI/180;
+    night.group.rotation.y=turn;night.group.position.copy(eye).sub(eye.clone().applyAxisAngle(new THREE.Vector3(0,1,0),turn));
+  }
   shell.add(night.group);
 
   // The armchair the seated camera sits in: centred in front of the table and
@@ -554,8 +528,17 @@ if (renderer) {
   // glow, the droplets' light, the tower's lamp glow; the upper floor's green
   // now hangs in two of the tower's lamps). Every lit surface samples the
   // lantern's pattern softer the further it is from it.
+  // In the chamber the door's lantern hangs as it did, 0.65 m to the right of
+  // the doorway (seen from inside) and a little behind the entry; the
+  // droplets as far in front of the nook as before; the tower's lamps turned
+  // and scaled with the tower. Their rods reach up to the vault.
   const lamps=createRoomLamps(THREE,{tower,stair,height:H,slab:tread(stair.count)-.12,ringBeam:H-.2,
-    anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy())});
+    anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy()),place:{
+      door:{at:[door.x-.65,door.z-.65],aim:[door.x,1.25,door.z]},
+      shelf:{shift:[nook.x+2.4,nook.z+.25]},
+      stair:{turn:tower.turn,scale:tower.scale},
+      mouth:top=>new THREE.Vector3(top.x,chamber.ceilingAt(top.x,top.z)+.04,top.z),
+      ceilingAt:chamber.ceilingAt}});
   shell.add(lamps.group,...Object.values(lamps.lights),...lamps.targets);
 
   // ---- Smoke on the floor (room-smoke.js): low mist along the ways the
@@ -586,14 +569,16 @@ if (renderer) {
     // At the nook the mist gathers and rises a little along the worktop's
     // front, staying well below its top (0.74 m) and the things that will
     // stand there.
-    {name:'gathering at the nook',fadeIn:.5,fadeOut:.55,points:[[-2.12,-.6],[-2.19,-1.1],[-2.2,-1.6],[-2.14,-2.15]],
+    {name:'gathering at the nook',fadeIn:.5,fadeOut:.55,points:[[.28,1.05],[.21,.55],[.2,.05],[.26,-.5]]
+      .map(([x,z])=>[nook.x+x,nook.z-placement.forward+z]),
       strands:[{offset:0,width:.21,height:.22,phase:2.6,speed:.6,density:.62,wobble:.5},
         {offset:.04,width:.13,height:.36,phase:5.1,speed:.8,density:.45,wobble:.55},
         {offset:-.03,width:.28,height:0,phase:3.3,speed:.5,density:.3,wobble:.6}]},
     // At the doorway the mist pools across the threshold and spills out of
     // the passage, rising a little under the lantern: where it begins, and
     // where it will lead back to.
-    {name:'gathering at the door',fadeIn:.35,fadeOut:.5,points:[[.36,6.3],[.66,6.02],[.98,5.86],[1.28,5.58]],
+    {name:'gathering at the door',fadeIn:.35,fadeOut:.5,points:[[-.44,.4],[-.14,.12],[.18,-.04],[.48,-.32]]
+      .map(([x,z])=>[door.x+x,door.z-placement.forward+z]),
       strands:[{offset:0,width:.24,height:.2,phase:1.7,speed:.55,density:.55,wobble:.5},
         {offset:-.05,width:.14,height:.32,phase:4.6,speed:.75,density:.4,wobble:.55},
         {offset:.04,width:.3,height:0,phase:2.9,speed:.5,density:.32,wobble:.6}]},
@@ -625,13 +610,13 @@ if (renderer) {
   const warm=lamps.lights.shelf;
   // Moonlight still enters through the pointed window, now at the alcove's end.
   const moon=new THREE.SpotLight('#a0bcf4',28,9,.54,.75,1.7);
-  moon.position.set(aperture.x,1.75,alcove.back-T/2);moon.target.position.set(-1.7,0,-1.4);
+  moon.position.set(aperture.x,2.4,aperture.z-T/2);moon.target.position.set(-1.7,0,-1.4);
   moon.castShadow=true;moon.shadow.mapSize.set(1024,1024);moon.shadow.bias=-.001;moon.shadow.normalBias=.025;
   shell.add(moon,moon.target);
   const windowBounce=new THREE.PointLight('#91acd7',2.2,2.8,2);
-  windowBounce.position.set(aperture.x,1.42,alcove.back+.24);shell.add(windowBounce);
+  windowBounce.position.set(aperture.x,aperture.sill+.62,aperture.z+.24);shell.add(windowBounce);
   // The same cool window light inside the tower, so its lancets read at night.
-  const towerBounce=new THREE.PointLight('#91acd7',2.2,3,2),[bounceX,bounceZ]=radialAt(lancets[1].at,.75);
+  const towerBounce=new THREE.PointLight('#91acd7',2.2,3,2),[bounceX,bounceZ]=radialAt(lancets[1].at,.75*tower.scale);
   towerBounce.position.set(bounceX,lancets[1].sill+.3,bounceZ);shell.add(towerBounce);
   // The viewer's end of the room takes its light from the lantern by the
   // door (room-lamps.js): its patterned spot on the doorway, the wall and the
@@ -671,31 +656,31 @@ if (renderer) {
   //   shafts     the sky's beams in the air and the dust in them (multiplier)
   //   haze       the glow of the air just inside the alcove window (multiplier)
   const windowLight={intensity:22,shafts:1,haze:1};
-  moon.color.set(skyLight);moon.intensity=windowLight.intensity;moon.penumbra=.92;moon.target.position.set(.35,0,-1.35);
+  moon.color.set(skyLight);moon.intensity=windowLight.intensity;moon.penumbra=.92;moon.target.position.set(.4,0,-1.9);
   windowBounce.color.set('#b6b4f6');towerBounce.color.set('#b6b4f6');
   // Inside the tower the lancets' fill stays under the green from above, so
   // the stair is lit from its landing and the sky only tints its lower walls.
   towerBounce.intensity=1.5;
   // The upper floor's light falling through the stairwell: over the upper
   // flight, down the wall beneath it and softly onto the tower floor.
-  const [wellX,wellZ]=radialAt(-66*Math.PI/180,.94),wellY=tread(stair.count);
+  const [wellX,wellZ]=radialAt(turned(-66),.94*tower.scale),wellY=tread(stair.count);
   const presence=new THREE.SpotLight(upperGreen,architectureTuning.greenIntensity,5,architectureTuning.greenAngle,.68,2);presence.name='stairwell light';
   // Aimed a little toward the tower's mouth: its pool lands where the chair
   // can see it, on the floor just inside the opening.
-  presence.position.set(wellX,wellY+.45,wellZ);presence.target.position.set(2.02,.1,-1.5);
+  presence.position.set(wellX,wellY+.45,wellZ);{const [x,z]=fromOld(2.02,-1.5);presence.target.position.set(x,.1,z);}
   shell.add(presence,presence.target);
   // Its source, up in the tower room just above the well, stays out of view.
   // The seated eye sees it as the wall at the top of the stair: brightest just
   // under the landing, fading down the flight.
-  const upstairs=new THREE.PointLight(upperGreen,architectureTuning.upperBounce,architectureTuning.upperReach,2),[upX,upZ]=radialAt(-118*Math.PI/180,.85);
+  const upstairs=new THREE.PointLight(upperGreen,architectureTuning.upperBounce,architectureTuning.upperReach,2),[upX,upZ]=radialAt(turned(-118),.85*tower.scale);
   upstairs.name='upper floor glow';upstairs.position.set(upX,wellY+.23,upZ);shell.add(upstairs);
   // Where the green lands on the tower floor it gives a little back: a faint
   // fill from the floor that only shines upward, onto the middle of the
   // flight's underside, so the sweep shades as one curved surface instead of
   // a flat black silhouette. The floor and the newel stay out of its cone.
-  const [underX,underZ]=radialAt(-100*Math.PI/180,1);
+  const [underX,underZ]=radialAt(turned(-100),tower.scale);
   const floorBounce=new THREE.SpotLight(upperGreen,5,3.4,.85,1,2);floorBounce.name='stairwell floor bounce';
-  floorBounce.position.set(2.18,.04,-1.96);floorBounce.target.position.set(underX,1.9,underZ);
+  {const [x,z]=fromOld(2.18,-1.96);floorBounce.position.set(x,.04,z);}floorBounce.target.position.set(underX,1.9,underZ);
   shell.add(floorBounce,floorBounce.target);
   // Shafts of light, from their source to where they fade out: open cones,
   // brightest along their axis as seen from any angle, fading at both ends.
@@ -707,9 +692,10 @@ if (renderer) {
   // mullion) at several heights and run parallel to land on the spot's patch
   // on the floor: one soft sheet of moonlight per light, so the light in the
   // air and the light on the floor are the same light.
-  const moonWay=moon.target.position.clone().sub(new THREE.Vector3(aperture.x,1.2,alcove.back)).normalize();
+  const windowMiddle=(aperture.sill+aperture.peak)/2;
+  const moonWay=moon.target.position.clone().sub(new THREE.Vector3(aperture.x,windowMiddle,aperture.z)).normalize();
   const fromWindow=(dx,y,r0,r1,strength,motes)=>{
-    const from=new THREE.Vector3(aperture.x+dx,y,alcove.back+.03);
+    const from=new THREE.Vector3(aperture.x+dx,y,aperture.z+.03);
     const to=from.clone().addScaledVector(moonWay,(y-.04)/-moonWay.y);
     return {from:from.toArray(),to:to.toArray(),r0,r1,color:skyLight,strength,motes,moonlit:true,veiled:true};
   };
@@ -717,7 +703,9 @@ if (renderer) {
   // room they emerge from behind the ring beam, brightest at the top. They fall
   // past the lower flight, the only part of the stair seen from above the
   // treads; over the upper flight's soffit they would read as pale columns.
-  const fall=(degrees,rho,above,to)=>{const [x,z]=radialAt(degrees*Math.PI/180,rho);return {from:[x,wellY+above,z],to};};
+  // (Angles, radii and landing points as designed in the old corner: fromOld.)
+  const fall=(degrees,rho,above,to)=>{const [x,z]=radialAt(turned(degrees),rho*tower.scale),[tx,tz]=fromOld(to[0],to[2]);
+    return {from:[x,wellY+above,z],to:[tx,to[1],tz]};};
   // Slit-like shafts emerge together from the upper well, not from the
   // windows. Shorter/finer falloff keeps their mint core distinct from the
   // untouched lavender moonlight. Reuse the existing batch and dust count.
@@ -732,9 +720,9 @@ if (renderer) {
     // in there, wide and faint.
     {...inward(lancets[1],.55,2.5),r0:.1,r1:.34,color:skyLight,strength:.18,motes:30,moonlit:true},
     {...inward(lancets[0],.62,2.3),r0:.08,r1:.28,color:skyLight,strength:.12,motes:18,moonlit:true},
-    ...[-.22,.22].flatMap(dx=>[.85,1.2,1.55].map(y=>fromWindow(dx,y,.1,.24,.13,14))),
+    ...[-.5,.5].flatMap(side=>[.2,.38,.56].map(f=>fromWindow(side*aperture.halfWidth,aperture.sill+f*(aperture.peak-aperture.sill),.1,.24,.13,14))),
     // And the haze between them: one wide, faint veil from the whole window.
-    fromWindow(0,1.2,.42,.7,.06,0),
+    fromWindow(0,windowMiddle,.6,1,.06,0),
   ];
   const lightInAir=new THREE.ShaderMaterial({
     // uMoonlight: how much of the moon is clear of cloud, for the alcove
@@ -815,8 +803,8 @@ if (renderer) {
   })();
   const windowHaze=new THREE.Sprite(new THREE.SpriteMaterial({map:hazeMap,color:skyLight,transparent:true,depthWrite:false,
     blending:THREE.AdditiveBlending,opacity:.065*windowLight.haze}));
-  windowHaze.name='moonlit air at the window';windowHaze.scale.set(1.4,2.2,1);
-  windowHaze.position.set(aperture.x,1.25,alcove.back+.3);windowHaze.renderOrder=5;shell.add(windowHaze);
+  windowHaze.name='moonlit air at the window';windowHaze.scale.set(aperture.halfWidth*3.3,(aperture.peak-aperture.sill)*.7,1);
+  windowHaze.position.set(aperture.x,windowMiddle,aperture.z+.3);windowHaze.renderOrder=5;shell.add(windowHaze);
 
   // ---- The cloth over the table until the viewer pulls it off: a heavy, dark
   // velvet with an embroidered hem, on the foreground layer so it truly covers
@@ -957,29 +945,14 @@ if (renderer) {
   }
   document.fonts?.load('600 64px Cinzel').then(()=>{if(clothAspect)repaintCloth();},()=>{});
   const clothSize=()=>ritualCloth.size;
-  // Walls the dragged cloth meets, in scene coordinates: the left wall (with
-  // the nook's recess), the back wall (with the alcove), the right wall, and
-  // the tower's round wall for everything behind its mouth. Fills `hit` with
-  // the signed distance past the nearest wall (positive = beyond it), that
-  // wall's inward normal, an id, and a coordinate along the wall.
-  const shift=placement.forward,backZ=room.back-shift,mouthZ=rightJoin-shift,towerZ=tower.z-shift;
-  const nookSpan=[nook.back-shift,nook.front-shift],alcoveZ=alcove.back-shift;
-  function beyondWall(x,z,hit) {
-    if(x>backJoin&&z<mouthZ) {
-      // Behind the tower mouth: the round wall bounds whatever lies outside
-      // the main room's rectangle.
-      const dx=x-tower.x,dz=z-towerZ,d=Math.hypot(dx,dz)||1;
-      hit.p=x<=room.right&&z>=backZ?Math.min(d-tower.r,Math.max(x-room.right,backZ-z)):d-tower.r;
-      hit.nx=-dx/d;hit.nz=-dz/d;hit.id=3;hit.t=Math.atan2(dz,dx)*tower.r;
-      return hit;
-    }
-    const left=z>nookSpan[0]&&z<nookSpan[1]?room.left-nook.depth:room.left;
-    const back=x>alcove.left&&x<alcove.right?alcoveZ:backZ;
-    hit.p=left-x;hit.nx=1;hit.nz=0;hit.id=0;hit.t=z;
-    if(back-z>hit.p){hit.p=back-z;hit.nx=0;hit.nz=1;hit.id=1;hit.t=x;}
-    if(z>mouthZ&&x-room.right>hit.p){hit.p=x-room.right;hit.nx=-1;hit.nz=0;hit.id=2;hit.t=z;}
-    return hit;
-  }
+  // Walls the dragged cloth meets, in scene coordinates: the chamber's twelve
+  // bays (with the recesses that come down to the floor) and the tower's
+  // round wall behind its mouth (room-chamber.js). Fills `hit` with the
+  // signed distance past the nearest wall (positive = beyond it), that wall's
+  // inward normal, an id (the bay, or 12 for the tower), and a coordinate
+  // along the wall.
+  const beyondWall=(x,z,hit)=>chamber.beyond(x,z+placement.forward,hit,tower);
+  const walls=sides+1;
   const clothCount=clothGeometry.attributes.position.count;
   // Laid shape (lay), and what stirHem needs to bring its hanging folds to
   // life, per vertex: how much it hangs free toward the hem, its outward
@@ -989,7 +962,7 @@ if (renderer) {
   const hemFold=new Float32Array(clothCount),hemLaidFold=new Float32Array(clothCount);
   const loose=new Float32Array(clothCount*3),reachP=new Float32Array(clothCount),reachT=new Float32Array(clothCount);
   const reachN=new Float32Array(clothCount*2),reachId=new Uint8Array(clothCount),hit={};
-  const push=new Float32Array(4),spanMin=new Float32Array(4),spanMax=new Float32Array(4),support={x:0,z:0};
+  const push=new Float32Array(walls),spanMin=new Float32Array(walls),spanMax=new Float32Array(walls),support={x:0,z:0};
   function lay() {
     const {x:cx,z:cz,ox,oz}=drape,top=view.tableHeight+.004;
     const p=clothGeometry.attributes.position;
@@ -1152,15 +1125,17 @@ if (renderer) {
   // above the nosing line (low enough to stay in view across the back of the
   // tower) and out through the stairwell.
   const plan=(x,y,z)=>new THREE.Vector3(x,y,z-placement.forward);
-  const towerApproach=plan(1.7,1.15,-1);
+  // In the chamber: in front of the tower's mouth, then up the turned stair
+  // (its angles and radii as designed in the old corner).
+  const out=chamber.mouth.out,towerApproach=plan(out.x*(apothem-.9),1.15,out.z*(apothem-.9));
   function stairRoute(start,heading) {
     const spiral=(degrees,rho,above)=>{
-      const phi=degrees*Math.PI/180,line=((stair.from-phi)/stair.step+1)*stair.rise;
-      return plan(tower.x+rho*Math.cos(phi),line+above,tower.z+rho*Math.sin(phi));
+      const phi=turned(degrees),line=((stair.from-phi)/stair.step+1)*stair.rise;
+      return plan(tower.x+rho*tower.scale*Math.cos(phi),line+above,tower.z+rho*tower.scale*Math.sin(phi));
     };
     return new THREE.CatmullRomCurve3([start,start.clone().addScaledVector(heading,.8).add(new THREE.Vector3(0,.3,0)),
       towerApproach,...[-25,-50,-75,-100,-125,-150].map(d=>spiral(d,.95,.75)),
-      spiral(-170,.8,.75),plan(tower.x,5.2,tower.z)],false,'centripetal');
+      spiral(-170,.8,.75),plan(tower.x,5.6,tower.z)],false,'centripetal');
   }
   // The waking portal's grip on the cloth, as release begins. The fabric lying
   // over the opening is drawn down into it (tug.depth at the centre of the
@@ -1489,7 +1464,7 @@ if (renderer) {
   // to see them (`shelfNear` m); further off they hold still and the room
   // stays drawn on demand. Their sound is off until the corner toggle.
   const shelfRoot=new THREE.Group();shelfRoot.name='physical shelf tools';
-  shelfRoot.position.set(room.left-nook.depth+.13,nook.shelf+.0175,(nook.back+nook.front)/2);
+  shelfRoot.position.set(nook.back+.13,nook.shelf+.0175,nook.z);
   shelfRoot.rotation.y=Math.PI/2;shell.add(shelfRoot);
   const shelfSound=createShelfSound(),toolOptions={camera,reducedMotion:()=>stillMotion.matches,sound:shelfSound};
   const shelfTools=[createFigmaObject(toolOptions),createGrimoireObject(toolOptions),createCrystalBallObject(toolOptions)];
@@ -1570,7 +1545,7 @@ if (renderer) {
   const windowPoints=(()=>{
     const points=[],add=(x,y,z)=>points.push(new THREE.Vector3(x,y,z));
     for(const x of [aperture.x-aperture.halfWidth-.12,aperture.x+aperture.halfWidth+.12])
-      for(const y of [aperture.sill-.12,aperture.peak+.12]) for(const z of [alcove.back-T,alcove.back+.35]) add(x,y,z);
+      for(const y of [aperture.sill-.12,aperture.peak+.12]) for(const z of [aperture.z-T,aperture.z+.35]) add(x,y,z);
     // The glow inside the window, and the beams down to the floor.
     for(const x of [-.7,.7]) for(const y of [-1.1,1.1]) add(windowHaze.position.x+x,windowHaze.position.y+y,windowHaze.position.z);
     for(const beam of beams) if(beam.veiled) for(const end of [beam.from,beam.to]) for(const d of [-beam.r1,beam.r1])
@@ -1659,10 +1634,15 @@ if (renderer) {
   // Used by the local geometry/registration check and dev inspection.
   // hem: the cloth hem wave's parameters, live-tunable from the console.
   window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,table:artifact,smoke,hoverMark,auraLights,
-    // Room extents in scene (table-relative) coordinates; the plan objects
-    // after it (window, tower, alcove, corner) are in plan coordinates.
-    dimensions:{...room,back:room.back-placement.forward,front:room.front-placement.forward},
-    window:aperture,tower,alcove,corner,
+    // The chamber's extents in scene (table-relative) coordinates: height is
+    // the vault's springing, back the window's wall, front the door's. The
+    // door and the nook (scene) place their targets and checks; the plan
+    // objects after them (window, tower, chamber) are in plan coordinates.
+    dimensions:{apothem,sides,wall:T,height:H,apex:chamberTuning.apex,
+      back:aperture.z-placement.forward,front:door.z-placement.forward,left:nook.x,right:-nook.x},
+    door:{x:door.x,z:door.z-placement.forward,halfWidth:door.halfWidth,shoulder:door.shoulder,peak:door.peak},
+    nook:{x:nook.x,back:nook.back,z0:nook.z-nook.halfWidth-placement.forward,z1:nook.z+nook.halfWidth-placement.forward,top:nook.peak,shelf:nook.shelf},
+    window:aperture,tower,chamber:{stats:chamber.stats,tuning:chamberTuning},
     architecture:{get tuning(){return {...architectureTuning};},stats:architecture.stats,
       source:{position:presence.position.toArray(),target:presence.target.position.toArray(),wellHeight:wellY}},
     project(x,y,z){const p=new THREE.Vector3(x,y,z).project(camera);return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};},

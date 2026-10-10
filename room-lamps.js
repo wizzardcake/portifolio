@@ -118,15 +118,26 @@ const shapes = {
   drop: [[0, 0], [.024, -.01], [.045, -.04], [.062, -.09], [.068, -.138], [.06, -.183], [.035, -.214], [0, -.224]],
 };
 
-export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, anisotropy = 1}, tuning = lampTuning) {
+// place: where the room's architecture puts each cluster, over lampTuning's
+// own (plan) positions, which date from the rectangular room:
+//   door      {at: [x, z], aim: [x, y, z]}  the lantern, and where its spot points
+//   shelf     {shift: [dx, dz]}            moves the droplets and their aim together
+//   stair     {turn, scale}                turns (degrees) and scales the tower's
+//                                          lamps about its axis
+//   mouth     (top) => anchor             what a 'beam' lamp hangs from
+//   ceilingAt (x, z) => height            what the door's and droplets' rods reach
+export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, anisotropy = 1, place = {}}, tuning = lampTuning) {
   const group = new THREE.Group();
   group.name = 'hanging lamps';
   const breath = {value: 0};
   const tread = i => (i + 1) * stair.rise;
-  const around = (degrees, radius, y) => {
+  const at = (degrees, radius, y) => {
     const a = degrees * Math.PI / 180;
     return new THREE.Vector3(tower.x + radius * Math.cos(a), y, tower.z + radius * Math.sin(a));
   };
+  // A tuned lamp's place, turned and scaled with the tower.
+  const around = (degrees, radius, y) => at(degrees + (place.stair?.turn ?? 0), radius * (place.stair?.scale ?? 1), y);
+  const ceiling = (x, z) => place.ceilingAt ? place.ceilingAt(x, z) + .04 : height;
   const srgb = hex => new THREE.Color(hex).convertLinearToSRGB();
   // A lamp's glow attribute: its level and its breath (depth scaled by the global breath).
   const pulse = (level, [phase, rate, depth]) => [level, phase, rate, depth * tuning.breath];
@@ -330,10 +341,12 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
   const metal = new THREE.MeshStandardMaterial({color: '#6b5332', metalness: .62, roughness: .48});
 
   // ---- The door lantern.
+  // It keeps its height; its rod reaches whatever is above it.
   const door = tuning.door, doorTop = door.hang - door.rod;
-  const [dx, dz] = door.at;
-  metalParts.add(new THREE.CylinderGeometry(.05, .05, .016, 12).translate(dx, door.hang - .008, dz));
-  metalParts.add(rod(new THREE.Vector3(dx, door.hang, dz), new THREE.Vector3(dx, doorTop - .01, dz), .008, 6));
+  const [dx, dz] = place.door?.at ?? door.at, doorAim = place.door?.aim ?? door.aim;
+  const mount = place.ceilingAt ? ceiling(dx, dz) : door.hang;
+  metalParts.add(new THREE.CylinderGeometry(.05, .05, .016, 12).translate(dx, mount - .008, dz));
+  metalParts.add(rod(new THREE.Vector3(dx, mount, dz), new THREE.Vector3(dx, doorTop - .01, dz), .008, 6));
   // The shade: a broad woven cap like a mushroom's, its rim gently waved and
   // a little uneven, darker natural fibre striped with black.
   const shadeProfile = [[.014, 0], [.06, -.012], [.13, -.041], [.2, -.074], [.26, -.102], [.297, -.118], [.312, -.112]]
@@ -376,7 +389,7 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
     g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, size, size);
     g.fillStyle = '#ffffff';
     // The spot's view, as three.js frames it: toward the aim, the room's up.
-    const forward = new THREE.Vector3(...door.aim).sub(lanternCenter).normalize();
+    const forward = new THREE.Vector3(...doorAim).sub(lanternCenter).normalize();
     const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
     const up = new THREE.Vector3().crossVectors(right, forward);
     const scale = size / 2 / Math.tan(door.angle), d = new THREE.Vector3(), deg = Math.PI / 180;
@@ -432,7 +445,7 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
     return t;
   })();
   const spot = new THREE.SpotLight(door.color, door.spot, door.reach, door.angle, .55, 2);
-  spot.name = 'door lantern'; spot.position.copy(lanternCenter); spot.target.position.set(...door.aim);
+  spot.name = 'door lantern'; spot.position.copy(lanternCenter); spot.target.position.set(...doorAim);
   spot.map = gobo; spot.castShadow = true;
   spot.shadow.mapSize.set(1024, 1024); spot.shadow.bias = -.0008; spot.shadow.normalBias = .02; spot.shadow.camera.near = .12;
   const glow = new THREE.SpotLight(door.glowColor, door.glow, door.glowReach, Math.PI / 2, .35, 2);
@@ -445,7 +458,8 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
   const dropProfile = [[.009, 0], [.013, -.02], [.022, -.06], [.04, -.12], [.06, -.18], [.072, -.225], [.072, -.255], [.06, -.28], [.04, -.293], [.026, -.296]];
   let shelfLight = null;
   for (const drop of shelf.drops) {
-    const s = drop.scale, h = .29 * s, [x, z] = drop.at, top = drop.bottom + h;
+    const [sx, sz] = place.shelf?.shift ?? [0, 0];
+    const s = drop.scale, h = .29 * s, x = drop.at[0] + sx, z = drop.at[1] + sz, top = drop.bottom + h, hang = ceiling(x, z);
     const body = intoCell(lathe(dropProfile, s, 20, {ribs: 12, depth: .07}), DROPLET).translate(x, top, z);
     glassParts.add(body, {glow: pulse(drop.level, drop.breath)});
     // The bulb, showing through the open lip from below and from the side.
@@ -453,19 +467,19 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
     const uv = lip.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, .5, .02);
     glassParts.add(intoCell(lip, DROPLET), {glow: pulse(drop.level * 1.4, drop.breath)});
     metalParts.add(new THREE.CylinderGeometry(.014 * s, .011 * s, .03, 8).translate(x, top + .012, z));
-    metalParts.add(rod(new THREE.Vector3(x, height, z), new THREE.Vector3(x, top + .02, z), .0028));
-    metalParts.add(new THREE.CylinderGeometry(.028, .028, .012, 10).translate(x, height - .006, z));
+    metalParts.add(rod(new THREE.Vector3(x, hang, z), new THREE.Vector3(x, top + .02, z), .0028));
+    metalParts.add(new THREE.CylinderGeometry(.028, .028, .012, 10).translate(x, hang - .006, z));
     const center = new THREE.Vector3(x, drop.bottom + h * .38, z);
     addHalo(center, shelf.color, shelf.halo * drop.level, shelf.haloSize * s, pulse(drop.level, drop.breath));
     if (drop.light && !shelfLight) {
       shelfLight = new THREE.SpotLight(shelf.color, shelf.light, shelf.reach, shelf.angle, .35, 2);
-      shelfLight.name = 'droplet lamp'; shelfLight.position.set(x, drop.bottom + .07, z); shelfLight.target.position.set(...shelf.aim);
+      shelfLight.name = 'droplet lamp'; shelfLight.position.set(x, drop.bottom + .07, z); shelfLight.target.position.set(shelf.aim[0] + sx, shelf.aim[1], shelf.aim[2] + sz);
     }
   }
 
   // ---- The tower's mosaic lamps.
   const st = tuning.stair, stairCenters = [];
-  const railAt = post => around(stair.from * 180 / Math.PI - post * stair.step * 180 / Math.PI, stair.inner + .03, tread(post) + .86);
+  const railAt = post => at(stair.from * 180 / Math.PI - post * stair.step * 180 / Math.PI, stair.inner + .03, tread(post) + .86);
   stairLamps.forEach((lamp, i) => {
     const profile = shapes[lamp.shape], s = lamp.scale, depth = -profile[profile.length - 1][1] * s;
     const top = around(lamp.angle, lamp.radius, lamp.top);
@@ -477,7 +491,7 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
     // What it hangs from.
     const anchor = lamp.anchor === 'slab' ? new THREE.Vector3(top.x, slab, top.z)
       : lamp.anchor === 'ceiling' ? new THREE.Vector3(top.x, tower.height, top.z)
-      : lamp.anchor === 'beam' ? new THREE.Vector3(top.x, ringBeam, top.z) : railAt(lamp.post);
+      : lamp.anchor === 'beam' ? place.mouth?.(top) ?? new THREE.Vector3(top.x, ringBeam, top.z) : railAt(lamp.post);
     metalParts.add(rod(anchor, new THREE.Vector3(top.x, top.y + .014 * s, top.z), .0032));
     if (lamp.anchor !== 'rail') metalParts.add(new THREE.CylinderGeometry(.02, .02, .01, 8).translate(anchor.x, anchor.y - .005, anchor.z));
     const center = new THREE.Vector3(top.x, top.y - .012 * s - depth * .48, top.z);
@@ -576,8 +590,12 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
 
   // Screen regions for the breathing redraw: each cluster's lamps and halos.
   const clusters = [
-    {name: 'door', points: [lanternCenter.clone().setY(door.hang), lanternCenter.clone().setY(orbTop - .4)], pad: door.haloSize / 2 + door.shade},
-    {name: 'shelf', points: shelf.drops.flatMap(d => [new THREE.Vector3(d.at[0], height, d.at[1]), new THREE.Vector3(d.at[0], d.bottom, d.at[1])]), pad: shelf.haloSize / 2 + .1},
+    // The lamps themselves (their rods may now reach far higher).
+    {name: 'door', points: [lanternCenter.clone().setY(doorTop + .1), lanternCenter.clone().setY(orbTop - .4)], pad: door.haloSize / 2 + door.shade},
+    {name: 'shelf', points: shelf.drops.flatMap(d => {
+      const [sx, sz] = place.shelf?.shift ?? [0, 0], x = d.at[0] + sx, z = d.at[1] + sz;
+      return [new THREE.Vector3(x, d.bottom + .29 * d.scale + .1, z), new THREE.Vector3(x, d.bottom, z)];
+    }), pad: shelf.haloSize / 2 + .1},
     {name: 'stair', points: stairCenters.map(c => c.clone()), pad: st.haloSize / 2 + .12},
   ];
   // The lights each cluster lends the smoke on the floor (room-smoke.js).

@@ -241,7 +241,8 @@ try {
         return {error:Math.hypot(o.x-p.x,o.y-p.y),table:t.toJSON(),portal:r.toJSON(),
           calls:room.calls,triangles:room.triangles,shelf,lamps:{calls:info.calls-room.calls-shelf.calls,triangles:info.triangles-room.triangles-shelf.triangles,...R.lamps.stats},pixels:roomCanvas.width*roomCanvas.height,
           opening:studyRoom.scene.getObjectByName('back wall with through opening').geometry.parameters.shapes.holes.length,
-          thickness:studyRoom.dimensions.wall,ceiling:studyRoom.project(0,studyRoom.dimensions.height,studyRoom.dimensions.back).y};
+          thickness:studyRoom.dimensions.wall,sill:studyRoom.project(studyRoom.window.x,studyRoom.window.sill,studyRoom.dimensions.back).y,
+          peak:studyRoom.project(studyRoom.window.x,studyRoom.window.peak,studyRoom.dimensions.back).y};
       })()`);
       assert.ok(registration.error<1,'CSS and Three camera projections agree');
       assert.ok(registration.table.left>=width*.02 && registration.table.right<=width*.98,'Both outer table edges leave visible floor');
@@ -282,9 +283,12 @@ try {
       // front fill into the door lantern's glow (room-lamps.js lampTuning);
       // the rest of the balance is as the architecture pass left it.
       assert.deepEqual(architecture.global,{fill:.5,ambient:.06,lamp:lampTuning.shelf.light,front:lampTuning.door.glow,table:9,tableAwake:.35},'The room keeps its light balance, the lamps carrying the nook and the door');
-      assert.ok(registration.ceiling>0 && registration.ceiling<height*.4,'The ceiling/wall junction is in frame');
+      assert.ok(registration.sill>0 && registration.sill<height*.6 && registration.peak<0,'Behind the table the great window rises from above the tabletop out of the top of the frame, into the vault');
       assert.equal(registration.opening,1,'The gothic window cuts through the actual wall geometry');
-      assert.ok(registration.thickness>.2 && registration.calls<30 && registration.triangles<10000 && registration.pixels<=2600000,'Architectural depth stays within the room rendering budget');
+      // The budget was written for the flat-ceilinged box. The round chamber
+      // (room-chamber.js: bays, vault, instanced columns and ribs, books,
+      // banners and the rug) is measured in docs/handoff-interior.md.
+      assert.ok(registration.thickness>.2 && registration.calls<40 && registration.triangles<50000 && registration.pixels<=2600000,'Architectural depth stays within the room rendering budget: '+JSON.stringify({calls:registration.calls,triangles:registration.triangles}));
       assert.ok(registration.lamps.drawCalls===4 && registration.lamps.calls<=4 && registration.lamps.triangles<9000,'The lamps keep to their own budget: '+JSON.stringify(registration.lamps));
       assert.ok(registration.shelf.calls<=17 && registration.shelf.triangles<8000,'The shelf\'s objects keep to their own budget: '+JSON.stringify(registration.shelf));
       const frame=await evaluate(`studyRoom.renderer.info.render.frame`);await sleep(250);
@@ -527,7 +531,9 @@ try {
   await click('#goShelf');
   await until(`sceneCamera.navigation === 'SHELF_INSPECTION'`, 15000);
   await cdp('Input.dispatchMouseEvent', {type:'mouseMoved', x:2, y:500, buttons:0});
-  await until(`${targetShown('#goChair')} && sceneCamera.camera.yaw > 150`, 8000);
+  // How far left of the nook (heading 90) the view has turned, in (-180, 180]:
+  // in the round chamber the chair stands nearly behind the visitor.
+  await until(`${targetShown('#goChair')} && (sceneCamera.camera.yaw - 90 + 540) % 360 - 180 > 60`, 8000);
   await shot('00t-shelf-turned');
   await click('#goChair');
   await until(`sceneCamera.navigation === 'CHAIR_APPROACH'`, 3000);

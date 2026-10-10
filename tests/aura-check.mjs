@@ -181,11 +181,13 @@ try {
   await assertViewport();await assertHeldHand();
   assert.equal(await invariants(),before,'Aura activation cannot change camera, tabletop, portal or canvas count');
 
-  // Read two real room surfaces immediately after drawing, without relying on
-  // screenshot brightness thresholds or DOM overlays over the table.
+  // Read real room surfaces immediately after drawing, without relying on
+  // screenshot brightness thresholds or DOM overlays over the table: the
+  // floor round the table, the table's own rim (in the round chamber no wall
+  // stands within the aura's reach), and the floor before the far window.
   const sample=()=>evaluate(`(() => {
     const r=studyRoom.renderer,c=studyRoom.camera,gl=r.getContext();c.layers.set(0);r.render(studyRoom.scene,c);
-    return [[1.9,.005,-.7],[-1.9,.005,-.7],[1.9,.005,-1.2],[-1.9,.005,-1.2],[-2.38,.45,-.5],[0,2.43,-3.7]].map(q=>{
+    return [[1.9,.005,-.7],[-1.9,.005,-.7],[1.9,.005,-1.2],[-1.9,.005,-1.2],[-.8,.44,0],[0,.005,-3.45]].map(q=>{
       const p=studyRoom.project(...q),pixel=new Uint8Array(4);
       gl.readPixels(Math.round(p.x*roomCanvas.width/innerWidth),Math.round((innerHeight-p.y)*roomCanvas.height/innerHeight),1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixel);
       return [...pixel];
@@ -197,9 +199,9 @@ try {
   const lit=await sample();await shot('aura-after-1440');
   console.log('Surface RGB before / after',JSON.stringify({dark,lit}));
   assert.ok(lit.slice(0,4).some((pixel,j)=>pixel.slice(0,3).some((n,i)=>n>dark[j][i]+2)),'Aura lights affect the nearby floor');
-  assert.ok(lit[4].slice(0,3).some((n,i)=>n>dark[4][i]+2),'Aura lights affect nearby architecture');
+  assert.ok(lit[4].slice(0,3).some((n,i)=>n>dark[4][i]+2),'Aura lights affect the table nearby');
   const farDelta=lit[5].slice(0,3).reduce((s,n,i)=>s+Math.abs(n-dark[5][i]),0);
-  assert.ok(farDelta<8,'Distant architecture keeps its original lighting');
+  assert.ok(farDelta<8,'The distant floor by the window keeps its original lighting');
   const steady=await evaluate(`portalAura.stats`);await sleep(300);
   assert.equal((await evaluate(`portalAura.stats`)).frames,steady.frames,'Reduced motion freezes aura animation');
   if(!process.argv.includes('--preview-only')) {

@@ -19,17 +19,19 @@
   const radians = Math.PI / 180;
   const state = {camera, tableHeight: .46, fov: 72,
     leg: {from: 'entry', to: 'seated', progress: 1},
-    // Entry: standing far back in the room, over two and a half times the
-    // seat's distance from the table, a little right of its axis and turned
-    // toward the study nook in the left wall: the chair and table anchor the
-    // middle, the nook reads on the left, the window and the stair tower
-    // beyond, the beams and walls receding overhead. It looks at the floor
-    // between the table and the nook, a hair over the seat's 15 degrees down,
-    // so the walk in only ever tilts toward the seat's view.
-    // Portrait views are narrow, so they stand further back and turn further.
+    // Entry: standing just inside the door of the round chamber
+    // (room-scene.js, room-chamber.js), on the table's axis, about twice the
+    // seat's distance from it and looking straight across the room at the
+    // great window: the table is the large, central focal point, the study
+    // nook on the left, the tower's mouth on the right and the vault
+    // overhead. It looks at the floor before the window, a hair over the
+    // seat's 15 degrees down, so the walk in only ever tilts toward the
+    // seat's view. `anchor` sets where the table's centre sits in the frame
+    // (a share of the viewport's height; the seat's is `anchorY`'s): lower
+    // here, so the vault shows. Portrait views stand a little further back.
     entry: {
-      wide: {position: [.75, 1.7, 4.3], lookAt: [-.95, 0, -1.8]},
-      portrait: {position: [.7, 1.75, 5], lookAt: [-1.3, 0, -1.2]},
+      wide: {position: [0, 1.7, 3.4], lookAt: [0, 0, -2.93], anchor: .66},
+      portrait: {position: [0, 1.75, 3.75], lookAt: [0, 0, -2.77], anchor: .68},
     },
     // Final seated POV: the eye of someone sitting in the chair centred in
     // front of the table (seat 0.42 m; the table is knee height), looking
@@ -37,15 +39,16 @@
     // until the real tabletop's front edge spans at most `fit` of the
     // viewport width.
     seated: {eye: 1.18, distance: 1.6, tilt: 15, fit: {wide: .94, portrait: .8}},
-    // Shelf: standing square in front of the study nook, centred on it and
-    // looking straight at its back wall (heading 90 degrees) from a standing
-    // eye, a little down: the whole worktop seen from above, the shelf, the
-    // arch with the walls and beams around it, and the mist gathered at its
-    // foot. The table and the chair are behind and to the left. Portrait views
-    // are narrow, so they stand further back to keep the nook's whole width.
+    // Shelf: standing square in front of the study nook in the chamber's left
+    // bay, centred on it and looking straight at its back wall (heading 90
+    // degrees) from a standing eye, a little down: the whole worktop seen
+    // from above, the shelf with its objects, the arch with the columns either
+    // side, and the mist gathered at its foot. The table and the chair are
+    // behind and to the left. Portrait views are narrow; they stand a little
+    // further back, to keep the shelf's three objects.
     shelf: {
-      wide: {position: [-.55, 1.8, -1.55], lookAt: [-2.85, 1.1, -1.55]},
-      portrait: {position: [1, 1.8, -1.55], lookAt: [-2.85, 1.15, -1.55]},
+      wide: {position: [-2.25, 1.8, .3], lookAt: [-4.85, 1.1, .3]},
+      portrait: {position: [-1.6, 1.8, .3], lookAt: [-4.85, 1.15, .3]},
     },
     // The ways through the room, which the smoke on the floor draws
     // (room-scene.js) and the camera walks. [x, z], metres.
@@ -63,10 +66,10 @@
     // Sitting down draws it round to the middle of the table's front, square
     // to it, while the eye comes over it through `sit` into the seat.
     paths: {
-      trunk: [[.8, 6.9], [.78, 5.7], [.72, 4.6], [.66, 3.95], [.55, 3.45], [.43, 2.9], [.26, 2.32], [-.1, 1.78],
-        [-.66, 1.2], [-1.18, .62], [-1.45, -.3], [-1.1, -1.1], [-.62, -1.48], [-1.15, -1.66], [-1.75, -1.62], [-2.15, -1.55]],
+      trunk: [[0, 5.3], [0, 4.75], [-.02, 4.1], [-.06, 3.55], [-.12, 3.05], [-.3, 2.55], [-.62, 2.0],
+        [-1.05, 1.5], [-1.5, 1.05], [-1.9, .62], [-2.3, .3], [-2.85, .22], [-3.35, .28], [-3.7, .3]],
       fork: 4,
-      branch: [[.55, 3.08], [.78, 2.6], [1.05, 2.05], [1.18, 1.5]],
+      branch: [[.2, 2.75], [.62, 2.3], [.98, 1.88], [1.18, 1.5]],
       sit: [.55, 1.92],
       chair: [1.14, .64, 56],
     },
@@ -81,13 +84,15 @@
     pace: {walk: 1.1, sit: .6, ahead: 1.1, leave: 1.2, arrive: 2.2, drawn: {'entry>shelf': [3.5, 1], 'entry>seated': [3.5, 1], 'shelf>seated': [6.5, 3.5]}, down: 24},
     // At the shelf the view follows the pointer: a slight look round the
     // nook near the middle, turning progressively further toward either edge,
-    // up to `yaw` degrees at the very edge (landscape needs about 75 to bring
-    // the chair, about 100 degrees round from the nook, well into view), and
+    // up to `yaw` degrees at the very edge, and
     // `pitch` degrees up or down. It follows like a spring (`stiffness`, per
     // second) that never turns faster than `speed` degrees a second, and goes
     // back to the nook when the pointer does. None under reduced motion or on
     // touch, like the rest of the standing life.
-    look: {yaw: 75, slight: 4, from: .3, to: .95, pitch: 3, stiffness: 2.8, speed: 55},
+    // In the round chamber the nook stands level with the table, so the chair
+    // is almost straight behind the visitor (about 175 degrees round from the
+    // nook either way): `yaw` turns them far enough to see it at either edge.
+    look: {yaw: 150, slight: 4, from: .3, to: .95, pitch: 3, stiffness: 2.8, speed: 80},
     // The entry's quiet life, so the view never stands dead still: the
     // standing eye sways a little and leans toward the pointer. Metres and
     // degrees; none under reduced motion or on touch. The slow sway is
@@ -267,14 +272,15 @@
     };
     const anchorY = innerHeight * (portrait ? .60 : .54);
     // The lens's vertical shift. At the entry and the seat it keeps the table
-    // centre at one height on screen (the original composition). The shelf,
-    // where the table is out of view, takes no shift. A walk blends between
-    // its ends' shifts.
-    const anchored = p => anchorY - focal * (-p.up * units) / (p.depth * units);
+    // centre at a set height on screen: the seat's `anchorY` (the original
+    // composition), the entry's own `anchor`. The shelf, where the table is
+    // out of view, takes no shift. A walk blends between its ends' shifts.
+    const anchored = (p, at = anchorY) => at - focal * (-p.up * units) / (p.depth * units);
     const {leg} = state, t = leg.progress, name = leg.from + '>' + leg.to, route = way(name, format);
     for (const each of Object.keys(state.durations)) state.durations[each] = way(each, format).duration;
     const walk = route.at(t), now = pose(walk);
-    const lens = place => place === 'shelf' ? innerHeight / 2 : anchored(pose(aim(points[place])));
+    const lens = place => place === 'shelf' ? innerHeight / 2
+      : anchored(pose(aim(points[place])), points[place].anchor ? innerHeight * points[place].anchor : anchorY);
     const originY = lens(leg.from) + (lens(leg.to) - lens(leg.from)) * t;
     // Where the chair stands: pushed back and turned (see `paths`), drawn in
     // square to the table as the visitor settles into the seat.

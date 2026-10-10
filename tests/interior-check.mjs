@@ -120,7 +120,7 @@ if(!process.argv.includes('--timing-only')) {
     // The room's landmarks, from what the page exposes (scene coordinates).
     const room=await b.evaluate(`(()=>{const R=studyRoom,f=R.placement.forward,d=R.dimensions;
       const door=R.door?{x:R.door.x,z:R.door.z}:{x:.8,z:d.front};
-      const tower=R.tower?{x:R.tower.x,z:R.tower.z-f}:null,win=R.window?{x:R.window.x,z:(R.alcove?.back??d.back)-f}:null;
+      const tower=R.tower?{x:R.tower.x,z:R.tower.z-f}:null,win=R.window?{x:R.window.x,z:R.alcove?R.alcove.back-f:d.back}:null;
       return {dimensions:d,door,tower,window:win,table:{w:sceneCamera.tableWidthPx/sceneCamera.units,d:sceneCamera.tableDepthPx/sceneCamera.units}};})()`);
     console.log('room',JSON.stringify(room));
     const {door,tower,window:win,dimensions:d}=room;
@@ -151,7 +151,44 @@ if(!process.argv.includes('--timing-only')) {
     }
     await size(b.cdp,390,844,true);
     for(const [label,place] of [['entry-portrait','entry'],['seated-portrait','chair']]){await pose(label,place);await shot(label);}
-    await writeFile(resolve(out,'views.json'),JSON.stringify({room,stats,errors:b.errors,warnings:b.warnings},null,2));
+    // Clearance: on every walk, at both formats, how near the eye comes to
+    // anything solid in the room (walls, columns, vault, stair, lamps, the
+    // table): the nearest triangle to each eye position, every 2% of each
+    // leg. (Books stand in their niches and the floor lies below; both left out.)
+    const clearance={};
+    for(const [format,w,h,mobile] of [['wide',1440,900,false],['portrait',390,844,true]]) {
+      await size(b.cdp,w,h,mobile);await sleep(300);
+      clearance[format]=await b.evaluate(`(async()=>{
+        const THREE=await import('./vendor/three/three.module.js'),R=studyRoom,cam=sceneCamera;
+        cam.shelf=structuredClone(__shelfPose);R.scene.updateMatrixWorld(true);
+        const tris=[],m=new THREE.Matrix4(),im=new THREE.Matrix4(),v=new THREE.Vector3();
+        R.scene.traverse(o=>{
+          if(!(o.isMesh&&o.layers.isEnabled(0)&&o.visible)||['books','wooden plank floor'].includes(o.name)||(o.material.transparent&&!o.material.depthWrite))return;
+          const p=o.geometry.attributes.position,index=o.geometry.index,n=index?index.count:p.count;
+          for(let k=0;k<(o.isInstancedMesh?o.count:1);k++){
+            m.copy(o.matrixWorld);if(o.isInstancedMesh){o.getMatrixAt(k,im);m.multiply(im);}
+            for(let i=0;i<n;i+=3){const t=new THREE.Triangle();
+              for(const [j,c] of [[0,t.a],[1,t.b],[2,t.c]])c.fromBufferAttribute(p,index?index.getX(i+j):i+j).applyMatrix4(m);
+              const centre=t.getMidpoint(new THREE.Vector3());
+              tris.push({t,centre,r:Math.max(centre.distanceTo(t.a),centre.distanceTo(t.b),centre.distanceTo(t.c)),name:o.name});}
+          }
+        });
+        const eye=new THREE.Vector3(),near=new THREE.Vector3(),legs={};
+        for(const leg of ['entry>seated','entry>shelf','shelf>seated']) {
+          const [from,to]=leg.split('>');let worst={d:Infinity};
+          for(let p=0;p<=1.0001;p+=.02) {
+            cam.setLeg(from,to,p);eye.set(cam.x,cam.eyeHeight,cam.distance);
+            for(const x of tris){if(x.centre.distanceTo(eye)-x.r>Math.min(worst.d,1.2))continue;
+              const d=x.t.closestPointToPoint(eye,near).distanceTo(eye);
+              if(d<worst.d)worst={d:+d.toFixed(3),p:+p.toFixed(2),eye:eye.toArray().map(v=>+v.toFixed(2)),what:x.name};}
+          }
+          legs[leg]=worst;
+        }
+        cam.go('entry',{instant:true});cam.update();R.invalidate();
+        return {triangles:tris.length,...legs};})()`);
+    }
+    console.log('clearance',JSON.stringify(clearance));
+    await writeFile(resolve(out,'views.json'),JSON.stringify({room,stats,clearance,errors:b.errors,warnings:b.warnings},null,2));
     assert.deepEqual(b.errors,[],'Console/shader errors');
   } finally {await b.close();}
   // A contact sheet of every view.

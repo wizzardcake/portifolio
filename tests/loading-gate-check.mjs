@@ -133,8 +133,10 @@ try {
   await assertEntered('Desktop');
   const desk = await evaluate('loadingGate.stats');
   assert.equal(desk.portal, 'loading-portal', 'The exterior (loading-exterior.js) is what the gate shows');
-  assert.ok(await evaluate("!document.querySelector('.loading-exterior')"), 'The exterior is disposed with the gate');
-  assert.equal(desk.way, 'through', 'The way in goes through the doorway');
+  assert.ok(await evaluate("!document.querySelector('.loading-exterior') && !document.querySelector('.loading-exterior__live')"), 'The exterior and its 3D view are disposed with the gate');
+  // The real 3D view flies in through the entrance; where it could not come
+  // up in time (a software GPU), the still exterior zooms through it.
+  assert.ok(['flight', 'through'].includes(desk.way), 'The way in goes through the doorway: ' + desk.way);
   assert.ok(desk.frames.length > 10, 'The way in is animated over frames');
   await sleep(600); await shot('entered');
   await click(x, y);

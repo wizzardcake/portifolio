@@ -112,6 +112,8 @@ else {
     gate.setAttribute('aria-busy', 'false');
     // The portal finishes emerging before it answers (only on a very fast load).
     await mount.getAnimations().find(animation => animation.animationName === 'gate-appear')?.finished;
+    // A 3D portal kept asleep while the room was built wakes for the way in.
+    if (portal?.wake && !still.matches) await portal.wake();
     dispatchEvent(new CustomEvent('site-entering', {detail}));
 
     // Frame intervals while the gate moves.
@@ -127,6 +129,17 @@ else {
       if (still.matches) {
         unveil();
         await gate.animate([{opacity: 1}, {opacity: 0}], {duration: 450, easing: 'ease-in-out', fill: 'forwards'}).finished;
+      } else if (portal?.flies) {
+        // A portal in real 3D flies in through its own entrance: its energy
+        // rises, its view accelerates through the doorway, and the gate thins
+        // over the room as the far end of the entrance fills the screen.
+        stats.way = 'flight';
+        await mount.animate([{filter: 'brightness(1)'}, {filter: 'brightness(1.08)'}], {duration: 380, easing: 'ease-out', fill: 'forwards'}).finished;
+        const duration = 1250;
+        const flight = portal.fly(duration);
+        const thin = gate.animate([{opacity: 1}, {opacity: 0}], {duration: duration * .24, delay: duration * .76, easing: 'ease-in-out', fill: 'forwards'});
+        setTimeout(unveil, duration * .65);
+        await Promise.all([flight, thin.finished]);
       } else {
         // 1. It answers: its energy rises, a little (the exterior's glass
         // should stay dark; its entrance brightens through setApproach).

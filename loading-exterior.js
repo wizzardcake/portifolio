@@ -27,11 +27,11 @@ export function createLoadingPortal(container, {reducedMotion} = {}) {
   const element = document.createElement('div');
   element.className = 'loading-exterior';
   element.setAttribute('aria-hidden', 'true');
-  element.innerHTML = '<div class="loading-exterior__building"><div class="loading-exterior__halo"></div>'
+  element.innerHTML = '<div class="loading-exterior__building"><div class="loading-exterior__halo"></div><div class="loading-exterior__still">'
     + LAYERS.map((src, i) => `<img class="loading-exterior__layer loading-exterior__layer--${'abc'[i]}" src="${new URL(src, document.baseURI).href}" alt="" decoding="async" draggable="false">`).join('')
     + '<div class="loading-exterior__door"></div>'
     + `<div class="loading-exterior__fall" style="left:${(NECK.x - DROP_SIZE / 2) * 100}%;top:${(NECK.y - DROP_SIZE / 2) * 100}%;width:${DROP_SIZE * 100}%"><img src="${new URL(DROP, document.baseURI).href}" alt="" decoding="async" draggable="false"></div>`
-    + `<div class="loading-exterior__glint" style="left:${SPIRE.x * 100}%;top:${SPIRE.y * 100}%"></div></div>`;
+    + `<div class="loading-exterior__glint" style="left:${SPIRE.x * 100}%;top:${SPIRE.y * 100}%"></div></div></div>`;
   container.append(element);
   const building = element.querySelector('.loading-exterior__building');
   const base = element.querySelector('.loading-exterior__layer--a');

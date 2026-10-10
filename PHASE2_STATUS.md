@@ -386,6 +386,60 @@ user's review.
    - more of the drop: the neck and its bead, the drips, the heart sunk into
      the drop, and the falling drop.
 
+3. **Real 3D** (the user: "it could feel more 3D, like the orb — no, actually
+   3D"). The exterior is now a live 3D model, drawn in real time like the
+   orb:
+   - **`loading-exterior-3d-worker.js`** builds the building as geometry:
+     - the body (crown, dome, drum, lips, bowl, neck and bead) as one turned
+       profile;
+     - the tower (foot, shaft, swell, spire) as another;
+     - five runs of glass flowing down the bowl toward the neck, two ending
+       in beads;
+     - a real pointed tunnel through the drum, with the room's light at its
+       far end;
+     - a glass frame round the entrance.
+   - **Shading** is live, with the orb's material ported from
+     `portal-orb-material.js`: the inside turning in layers, the heart (and
+     its glow sunk into the drop), currents and mist, a Fresnel skin with a
+     thin film, edge light, and light through thin glass. The windows are
+     light in the glass, with soft glows.
+   - **It moves:** the camera drifts slowly round the building (real
+     parallax: the tower slides against the dome, highlights move); a drop
+     leaves the bead every 7.8 s and falls; the spire's tip glints.
+   - **The way in is a real flight.** The view accelerates toward the
+     entrance (equal steps of the distance's logarithm, easing in), swings
+     round to come in straight, fills the screen with the entrance at 0.8 of
+     the 1.25 s flight, and goes on down the tunnel to the room's light. The
+     gate thins from 0.76.
+   - **Off the main thread.** It is drawn in a worker on an OffscreenCanvas,
+     so it keeps moving while the page builds the room. The canvas covers
+     the gate (so the flight fills the screen), framed so the building
+     stands exactly where the still art stands.
+   - **While the room is being built** it draws lighter: 70 % resolution, 9
+     steps through the glass, at most 15 frames a second. Its pace also
+     follows each frame's measured GPU cost. The flight is full quality.
+   - **`loading-exterior-3d.js`:**
+     - shows the still art (`loading-exterior.js`) until the first 3D frame,
+       then crossfades;
+     - keeps the still art wherever 3D cannot run (no worker, no
+       OffscreenCanvas, no WebGL there, or a failure);
+     - under reduced motion, keeps the camera still and the gate fades.
+   - **The gate** (`loading-gate.js`) lets a portal that `flies` fly in
+     itself. It can `wake()` a 3D view kept asleep.
+   - **`data-live` on the mount chooses when the 3D comes alive:**
+     `loading` (the default) or `ready`. Measured over 8 interleaved cold
+     loads each, room readiness (median):
+
+     | Variant | Room ready | Paired difference vs. still |
+     |---|---|---|
+     | Still art | 7.89 s | – |
+     | 3D while loading | 8.37 s | +0.43 s |
+     | 3D from ready | 7.98 s | −0.11 s (noise) |
+
+     With 3D from ready, the still art (with its own compositor motion)
+     shows while the room is built, and the 3D view wakes for the drift and
+     the flight.
+
 ### Codex's state at takeover
 
 Codex stopped at its usage limit with no tracked file changed and nothing
@@ -503,6 +557,19 @@ page.
 
 All on mains power, on this laptop (headless Chrome, ANGLE D3D11).
 
+**Third round (real 3D):**
+- All 19 suite runs pass, including `exterior-entry-check` (input blocked
+  throughout, no console errors).
+- Looked at, with readiness held back:
+  - the live view at 1440×900 and 390×844, in three moments of its drift
+    (the tower moving against the dome);
+  - the flight through the entrance, filmed at a tenth of its speed with
+    the worker's clock slowed to match;
+  - the 3D-from-ready variant waking and flying in.
+- Reduced motion: the camera holds still and the gate fades. Without
+  OffscreenCanvas: the still exterior and its zoom (`data-view="still"`).
+- Room readiness: the table above (8 interleaved cold loads per variant).
+
 **Second round, suites:**
 - In the full run, 18 of 19 suite runs passed.
 - `portal-check.mjs` (main mode) failed once, on its card-drag timing check:
@@ -541,6 +608,17 @@ the display itself, so nothing on the loading screen can move through it
 (Phase 2B, limitation 1).
 
 ## Remaining for later passes
+
+- **The 3D view on phones** is untested on a real device. It is heavy
+  per pixel (the orb's volume through the glass). On a weak GPU,
+  `data-live="ready"` or a lower resolution may be needed.
+- **The still art and the first 3D frame** are close but not identical:
+  ray-marched versus geometry, with slightly different glass. The
+  crossfade between them is visible if looked for.
+- **The 3D glass** is lit and shaded live, but has no bloom pass (the soft
+  glows are sprites). The tower meets the dome with a plain intersection
+  rather than the still art's smooth blend; from the camera it is mostly
+  hidden.
 
 - **The user's visual review of this second round.** The drips' number and
   lengths, the falling drop's rhythm, the film's strength, the spire glint

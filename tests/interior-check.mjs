@@ -88,8 +88,10 @@ if(!process.argv.includes('--shots-only')) for(let run=0;run<runs;run++) {
       return {firstPaint:Math.round(paint),roomShown:Math.round(__interior.roomShown),ready:Math.round(ready),frames:g.length,
         fps:+(g.length*1000/(ready-(__interior.gaps[0]?.[0]??0))).toFixed(1),longestGap:Math.round(Math.max(...g)),over100:g.filter(x=>x>100).length,
         longTasks:[...__interior.longTasks].sort((a,b)=>b.ms-a.ms).slice(0,6)};})()`);
-    await b.until("!!document.querySelector('.loading-gate__continue:not([hidden])') && performance.now() >= (loadingGate.stats.listeningAt ?? 0)");
-    await b.evaluate("document.querySelector('.loading-gate__continue').click(),true");
+    // (The published gate asks the visitor to press; the living exterior,
+    // loading-living-worker.js, forms and goes in by itself.)
+    await b.until("document.documentElement?.dataset.siteEntered === 'yes' || (!!document.querySelector('.loading-gate__continue:not([hidden])') && performance.now() >= (loadingGate.stats.listeningAt ?? 0))",120000);
+    await b.evaluate("document.querySelector('.loading-gate__continue:not([hidden])')?.click(),true");
     await b.until("document.documentElement?.dataset.siteEntered === 'yes'");
     const entered=await b.evaluate("Math.round(__interior.events['site-entered'])");
     await sleep(1500);

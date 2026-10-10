@@ -1,4 +1,4 @@
-﻿/* Exterior lifecycle bridge. The worker owns formation, geometry and camera.
+/* Exterior lifecycle bridge. The worker owns formation, geometry and camera.
    No room resources are imported or disposed here. Gate readiness is separate. */
 export function createLoadingPortal(container,{reducedMotion,onPhase}={}){
  const media=matchMedia('(prefers-reduced-motion: reduce)');

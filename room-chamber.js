@@ -390,7 +390,7 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
     if (tower) {
       // In the tower: its round wall, wherever it lies beyond the mouth.
       const b = bay('tower'), along = x * b.out.x + z * b.out.z, u = x * b.right.x + z * b.right.z;
-      if (along > A - .02 && Math.abs(u) < hw + .3) {
+      if (along > A - .02 && Math.abs(u) < Math.max(hw + .3, tower.r)) {
         const dx = x - tower.x, dz = z - tower.z, d = Math.hypot(dx, dz) || 1;
         hit.p = d - tower.r; hit.nx = -dx / d; hit.nz = -dz / d; hit.id = sides; hit.t = Math.atan2(dz, dx) * tower.r;
       }

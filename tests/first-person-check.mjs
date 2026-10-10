@@ -164,7 +164,8 @@ try{
 
   const collision=await evaluate(`(()=>{
     const w=studyRoom.walk,c=firstPerson.walker,col=w.columns[0];
-    const d=.08*w.stair.step,phi=w.stair.from-d,r=(w.stair.inner+w.tower.r)/2;
+    // (turn: +1 if the flight climbs clockwise in plan, -1 if counterclockwise.)
+    const turn=w.stair.turn??1,d=.08*w.stair.step,phi=w.stair.from-turn*d,r=(w.stair.inner+w.tower.r)/2;
     const x=w.tower.x+r*Math.cos(phi),z=w.tower.z+r*Math.sin(phi)-w.forward;
     const height=(d/w.stair.step+1)*w.stair.rise;
     return {
@@ -174,7 +175,7 @@ try{
       column:firstPerson.floorAt(col[0],col[1]-w.forward,0),
       stair:firstPerson.floorAt(x,z,0),
       stairHeight:height,
-      stairPoint:{x,z,y:1.7,yaw:-phi*180/Math.PI,tilt:0}
+      stairPoint:{x,z,y:1.7,yaw:(turn>0?0:180)-phi*180/Math.PI,tilt:0}
     };
   })()`);
   assert.equal(collision.safeFloor,0);assert.equal(collision.table,null);
@@ -188,7 +189,7 @@ try{
     const stairMesh=studyRoom.shell.getObjectByName('spiral stair'),ray=new THREE.Raycaster(),out=[];
     studyRoom.scene.updateMatrixWorld(true);
     for(const k of [.5,3.5,7.5,11.5]){
-      const phi=w.stair.from-k*w.stair.step,rho=(w.stair.inner+w.tower.r)/2;
+      const phi=w.stair.from-(w.stair.turn??1)*k*w.stair.step,rho=(w.stair.inner+w.tower.r)/2;
       const x=w.tower.x+rho*Math.cos(phi),z=w.tower.z+rho*Math.sin(phi)-w.forward;
       ray.set(new THREE.Vector3(x,4,z),new THREE.Vector3(0,-1,0));
       const hit=ray.intersectObject(stairMesh)[0];
@@ -239,14 +240,16 @@ try{
   await until("firstPerson.mode==='game' && sceneCamera.navigation==='FREE'");
   if(!headless)await until("document.pointerLockElement===document.getElementById('roomCanvas')",12000);
   const beforeStair=await evaluate('firstPerson.walker.floor');
+  // Up the flight as a visitor would: looking a little ahead along its
+  // walking line (25 degrees on, 1.2 m from the axis).
+  const along=(ahead,rho)=>evaluate(`(()=>{const w=studyRoom.walk,p=firstPerson.walker,dir=-(w.stair.turn??1);
+    const a=Math.atan2(p.z+w.forward-w.tower.z,p.x-w.tower.x)+dir*${ahead}*Math.PI/180;
+    const tx=w.tower.x+${rho}*Math.cos(a),tz=w.tower.z+${rho}*Math.sin(a)-w.forward,yaw=Math.atan2(p.x-tx,p.z-tz)*180/Math.PI;
+    sceneCamera.lookBy(((yaw-p.yaw+540)%360)-180,0);return true;})()`);
   await key('KeyW',true);
-  for(let i=0;i<18;i++){
-    const walker=await evaluate('firstPerson.walker');
-    const targetYaw=await evaluate(`(()=>{const w=studyRoom.walk,p=firstPerson.walker;
-      return -Math.atan2(p.z+w.forward-w.tower.z,p.x-w.tower.x)*180/Math.PI;})()`);
-    const delta=((targetYaw-walker.yaw+540)%360)-180;
-    await evaluate(`sceneCamera.lookBy(${delta},0)`);
-    await sleep(160);
+  for(let i=0;i<40;i++){
+    await along(25,1.2);
+    await sleep(150);
     if(await evaluate('firstPerson.walker.floor>=studyRoom.walk.stair.count*studyRoom.walk.stair.rise-.1'))break;
   }
   await key('KeyW',false);await sleep(180);
@@ -255,14 +258,17 @@ try{
   assert.ok(afterStair.floor>=await evaluate('studyRoom.walk.stair.count*studyRoom.walk.stair.rise-.1'),
     'W traversal reaches the upper stair landing');
   checks.stairs={before:beforeStair,after:afterStair.floor,position:{x:afterStair.x,z:afterStair.z}};
-  // From the landing out through the tower's mouth onto the gallery, toward
-  // the chamber's middle: the balustrade stops the walker on the gallery.
-  // (First toward the middle of the mouth, round the column by the landing.)
+  // From the landing round the tower's upper floor (a ring round the open
+  // shaft) to its mouth, out onto the gallery and toward the chamber's middle:
+  // the balustrade stops the walker on the gallery.
   const aimAt=(x,z)=>evaluate(`(()=>{const p=firstPerson.walker,yaw=Math.atan2(p.x-(${x}),p.z-(${z}))*180/Math.PI;
     sceneCamera.lookBy(((yaw-p.yaw+540)%360)-180,0);return true;})()`);
   const mouth=await evaluate(`(()=>{const w=studyRoom.walk,b=w.bays.find(b=>b.kind==='tower');return {x:b.cos*(w.apothem-.1),z:b.sin*(w.apothem-.1)-w.forward};})()`);
+  const nearMouth=`(()=>{const w=studyRoom.walk,p=firstPerson.walker,b=w.bays.find(b=>b.kind==='tower');
+    const a=Math.atan2(p.z+w.forward-w.tower.z,p.x-w.tower.x),m=Math.atan2(-b.sin,-b.cos);return Math.abs(Math.atan2(Math.sin(a-m),Math.cos(a-m)))<.35;})()`;
   await key('KeyW',true);
-  for(let i=0;i<14;i++){await aimAt(mouth.x,mouth.z);await sleep(150);}
+  for(let i=0;i<24&&!await evaluate(nearMouth);i++){await along(25,1.25);await sleep(150);}
+  for(let i=0;i<10;i++){await aimAt(mouth.x,mouth.z);await sleep(150);}
   for(let i=0;i<16;i++){await aimAt(0,-await evaluate('studyRoom.walk.forward'));await sleep(150);}
   await key('KeyW',false);await sleep(200);
   const gallery=await evaluate(`(()=>{const p=firstPerson.walker,w=studyRoom.walk,px=p.x,pz=p.z+w.forward;

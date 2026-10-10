@@ -101,21 +101,39 @@ export function createFirstPerson({camera, room, reducedMotion}) {
   const W = room.walk, R = .26, EYE = 1.7, step = .4;
   const toPlan = (x, z) => [x, z + W.forward];
   const wrap = a => a - 2 * Math.PI * Math.floor(a / (2 * Math.PI));
+  // The flight: its height under a point (the line through its nosings, a
+  // smooth ramp), or null off it. On it a body keeps clear of the handrail
+  // and of the wall (BLOCKED between them and either): never across the rail
+  // into the shaft, never into the wall, never off the edge.
+  const BLOCKED = -1;
+  // How far round the flight a plan angle lies from its foot, the way it climbs.
+  const fromFoot = a => wrap((W.stair.turn ?? 1) * (W.stair.from - a));
   function stairAt(px, pz) {
     const qx = px - W.tower.x, qz = pz - W.tower.z, rho = Math.hypot(qx, qz);
-    if (rho < W.stair.inner - .05 || rho > W.tower.r) return null;
-    const d = wrap(W.stair.from - Math.atan2(qz, qx));
+    if (rho < W.stair.inner - .05 || rho > W.tower.r + .05) return null;
+    const d = fromFoot(Math.atan2(qz, qx));
     if (d > W.stair.count * W.stair.step) return null;
+    if (rho < W.stair.rail + R || rho > W.tower.r - R) return BLOCKED;
     return (d / W.stair.step + 1) * W.stair.rise;
   }
-  const inTower = (px, pz, margin) => Math.hypot(px - W.tower.x, pz - W.tower.z) < W.tower.r - margin;
-  // The tower's bay is open between its columns (its mouth): there the
-  // chamber's floor (and the gallery's) runs on to the bay's plane, and
-  // beyond it the tower's own floor begins, a body's width from its wall.
+  // The tower: its round drum beyond the bay's inner face, and the passage
+  // through the bay's wall (its mouth), a body's width (margin) from their
+  // walls. Across the bay: along, out from the chamber's centre; u, across it.
   const towerBay = W.bays.find(b => b.kind === 'tower');
   const throughMouth = (px, pz) => {
     const along = px * towerBay.cos + pz * towerBay.sin, u = -px * towerBay.sin + pz * towerBay.cos;
-    return {along, inMouth: Math.abs(u) < W.bayHalf};
+    return {along, u, inMouth: Math.abs(u) < W.bayHalf};
+  };
+  const inDrum = (px, pz, margin) => Math.hypot(px - W.tower.x, pz - W.tower.z) < W.tower.r - margin;
+  function inTower(px, pz, margin) {
+    const {along, u} = throughMouth(px, pz);
+    if (along < W.apothem - .05) return false;
+    return inDrum(px, pz, margin) || (along < W.apothem + W.tower.mouth.depth + .15 && Math.abs(u) < W.tower.mouth.half - margin);
+  }
+  // Past the bay's inner face, within the bay or the drum: the tower's to decide.
+  const towerZone = (px, pz) => {
+    const {along, u} = throughMouth(px, pz);
+    return along > W.apothem + .05 && (Math.abs(u) < W.bayHalf || inDrum(px, pz, -.4));
   };
   const clearOfColumns = (px, pz) => W.columns.every(([cx, cz]) => Math.hypot(px - cx, pz - cz) > W.column + R);
   function bayOf(px, pz) {
@@ -125,15 +143,16 @@ export function createFirstPerson({camera, room, reducedMotion}) {
   }
   function ground(x, z) {
     const [px, pz] = toPlan(x, z);
+    if (!clearOfColumns(px, pz)) return false;
+    // The tower's floor, round the carved post at the foot of the handrail.
+    if (towerZone(px, pz)) return inTower(px, pz, R) && Math.hypot(px - W.newel[0], pz - W.newel[1]) > .09 + R;
     for (const b of W.bays) {
       const along = px * b.cos + pz * b.sin, u = -px * b.sin + pz * b.cos;
       let limit = W.apothem - R;
       if (b.kind === 'door' && Math.abs(u) < b.halfWidth - R) limit = W.apothem + b.depth - .12;
-      if (b.kind === 'tower' && Math.abs(u) < W.bayHalf) limit = Infinity;
+      if (b.kind === 'tower' && Math.abs(u) < W.tower.mouth.half - R) limit = W.apothem + .05;
       if (along > limit) return false;
-      if (b.kind === 'tower' && Math.abs(u) < W.bayHalf && along > W.apothem + .05 && !inTower(px, pz, R)) return false;
     }
-    if (!clearOfColumns(px, pz)) return false;
     // The table, and the chair where it stands.
     if (Math.hypot(x, z) < W.table + R) return false;
     const chair = camera.chairPose;
@@ -142,24 +161,30 @@ export function createFirstPerson({camera, room, reducedMotion}) {
   function upper(x, z) {
     const [px, pz] = toPlan(x, z), G = W.gallery;
     if (!clearOfColumns(px, pz)) return false;
-    const {along: alongTower, inMouth} = throughMouth(px, pz);
-    if (inMouth && alongTower > W.apothem + .05) {
-      // Beyond the mouth: the tower's upper floor, but not over its stairwell.
+    const {u: uTower} = throughMouth(px, pz);
+    if (towerZone(px, pz)) {
+      // The tower's upper floor: a ring round the open shaft (its balustrade
+      // at the shaft's edge), not over the stairwell; open where the stair
+      // arrives at its top.
       if (!inTower(px, pz, R)) return false;
-      const qx = px - W.tower.x, qz = pz - W.tower.z, rho = Math.hypot(qx, qz), d = wrap(W.stair.from - Math.atan2(qz, qx));
-      return !(rho > W.stair.inner - .1 - R && d > W.well[0] && d < W.well[1]);
+      const qx = px - W.tower.x, qz = pz - W.tower.z, rho = Math.hypot(qx, qz), d = fromFoot(Math.atan2(qz, qx));
+      if (rho < W.tower.shaft + R) return false;
+      return !(d > W.well[0] - R / rho && d < W.well[1]);
     }
     // The gallery: from its balustrade to the wall, or in the tower's bay
     // on to the mouth's plane, where the tower's floor meets it.
     const b = bayOf(px, pz), along = px * b.cos + pz * b.sin;
     if (b.kind === 'window') return false;
-    const outer = b.kind === 'tower' && inMouth ? W.apothem + .05 : W.apothem - R;
+    const outer = b.kind === 'tower' && Math.abs(uTower) < W.tower.mouth.half - R ? W.apothem + .05 : W.apothem - R;
     return along >= W.apothem - G.depth + .05 + R && along <= outer;
   }
+  // On the flight its own height, if within a step of the feet. Below, the
+  // floor, but never under the flight; above, the upper floor, which runs on
+  // over the flight's first steps.
   function floorAt(x, z, y) {
     const [px, pz] = toPlan(x, z), stair = stairAt(px, pz);
-    if (stair !== null) return Math.abs(stair - y) <= step ? stair : null;
-    if (y < 1.4) return ground(x, z) ? 0 : null;
+    if (stair !== null && stair !== BLOCKED && Math.abs(stair - y) <= step) return stair;
+    if (y < 1.4) return stair === null && ground(x, z) ? 0 : null;
     return upper(x, z) ? W.gallery.floor : null;
   }
 
@@ -357,10 +382,9 @@ export function createFirstPerson({camera, room, reducedMotion}) {
   const onChamberFloor = () => {
     const f = camera.free;
     if (!f) return true;
-    // (In the tower: within its circle and beyond the mouth's plane; the
-    // circle alone bulges into the chamber before the mouth.)
-    const [px, pz] = toPlan(f.x, f.z), {along} = throughMouth(px, pz);
-    return f.y < 2.5 && !(inTower(px, pz, -.05) && along > W.apothem - .05) && stairAt(px, pz) === null;
+    // (In the tower: its drum or the passage through the mouth.)
+    const [px, pz] = toPlan(f.x, f.z);
+    return f.y < 2.5 && !towerZone(px, pz) && stairAt(px, pz) === null;
   };
   const go = camera.go;
   camera.go = (place, options = {}) => {

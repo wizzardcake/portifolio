@@ -57,6 +57,9 @@ Commits since `926adf8`, oldest first:
 after Copilot's integration, and fixed. See "Phase 3" below. It is
 committed after `71b78cb`.
 
+**The stair tower** was enlarged outward after Phase 3, for climbing in
+first person: see "The stair tower, enlarged outward".
+
 **Ownership.** Codex Astra owns the exterior and the loading screen. None of
 their files are touched (`loading-*`, `dev/exterior-*`, `assets/loading/`).
 
@@ -1118,10 +1121,233 @@ D3D11. Baseline `926adf8` against this branch. Medians, with ranges.
 - **The door lantern's chain** hangs just inside the balustrade above the
   door. From the gallery it passes close by.
 
+## The stair tower, enlarged outward (after Phase 3)
+
+**Why.** The stair was too cramped to walk in first person.
+
+- Its treads were 0.55 m wide, from 0.60 m from the axis to the wall at
+  1.15 m.
+- At 10° a step, each step was 0.10 to 0.20 m deep: nearly a ladder.
+
+The user asked for the tower and the stair to grow outward, away from the
+hall, and for the zone around them to be set right so it looks intended.
+
+### Geometry
+
+**`room-tower.js` (new).** It holds the tower's plan: the drum, the stair,
+the stairwell and the lancets. `room-scene.js` builds the tower from it, the
+walk plan keeps to it, and `architecture-check` tests it. The old corner's
+coordinates (`turned`, `fromOld`, `tower.was/turn/scale`) are gone.
+
+**The drum.**
+
+- The inside radius is 1.70 m (was 1.15).
+- The circle meets the chamber 0.1 m beyond the bay's outer corners (before,
+  it ran through the bay's columns).
+- Its centre moves out from 4.42 to 5.69 m from the hall's centre.
+- It reaches 0.01 m into the hall (before: 0.73 m). The far wall stands
+  7.7 m out (was 5.9).
+- The wall stays clear of the bookshelf niche at 0° and the blind arch at
+  −60° on either side. Both are recessed almost through their walls.
+
+**The stair.**
+
+| | Before | Now |
+| --- | --- | --- |
+| Tread width | 0.55 m | 1.0 m (0.70 m from the axis to the wall) |
+| Angle per step | 10° | 13° |
+| Step depth at the walking line (1.2 m out) | 0.10–0.20 m | 0.27 m |
+| Step depth beside the handrail | – | 0.23 m |
+| Sweep | 140° | 182° |
+| Steps, rise | 14 × 0.19 m | unchanged (2.85 m, the gallery's floor) |
+
+- With 2R + G at 0.65 m, it is an ordinary staircase's pitch.
+- **It climbs the other way round.**
+  - It now starts just inside the mouth on the left (as seen from the hall)
+    and climbs counterclockwise round the back wall.
+  - With the old handedness, the entry saw only the top of the flight. Now
+    the middle of the flight rises across the mouth, as the old tower's did.
+  - In the layout the step is negative. The step faces turn with it, and
+    the skirting is built in sorted order.
+
+**The upper floor.**
+
+- It is now a ring round an open shaft (before: a floor with a hole over
+  the flight).
+- It runs from the landing round past the mouth, where it meets the gallery
+  across the bay's wall, and on over the first three steps.
+- It is open over the flight from the fourth step, which leaves 0.27 m over
+  the eye under its edge, and over the shaft.
+- A balustrade in the gallery's language runs along the shaft's edge and
+  across the stairwell's edge: top and bottom rail, slim balusters, a
+  bronze cap, a fascia under the edge. It is merged into the existing
+  meshes, so it adds no draw call.
+
+**The rest of the zone.**
+
+- **The lancets.** The same three, over steps 4.2, 7.4 and 10.6; their
+  sills step up with the treads.
+- **The floor.** The substrate reaches the tower's far side.
+- **The lamps.** The same 14 mosaic lamps, with the same glass, colours,
+  shapes and pulse, hung anew:
+  - eight down the open shaft from the roof, a slow spiral from 2.25 to
+    5.75 m;
+  - three from the handrail's posts 8, 10 and 12, just inside the rail;
+  - two in the mouth under the gallery, at 2.35 and 2.45 m;
+  - the jade source by the shaft over the top of the flight.
+  - Wherever a visitor can walk beneath one, its foot hangs at least 0.3 m
+    above their eye.
+- **The lights.**
+  - The tower's light hangs in the third lamp, halfway up the shaft. Its
+    reach grows from 2.2 to 3.6 m and its intensity from 2.4 to 3.4.
+  - The lancets' fill goes from 1.5 to 2.2, its reach from 3 to 4.4 m.
+  - The green stairwell spot shines from beside the jade lamp onto the floor
+    just inside the mouth (`portal-check`'s "above the landing, into the
+    stairwell" still holds).
+  - The upper floor's glow sits on the ring by the landing. The floor
+    bounce lights the flight's middle from below. The green shafts fall
+    from the jade lamp to the floor in the mouth.
+- **The cloth's flight** follows the new spiral over its walking line, then
+  rises up the shaft.
+- **`chamber.beyond`** (the cloth's wall reaction) now covers the whole
+  drum, not only the bay's width.
+
+### Navigation and collision
+
+**`studyRoom.walk`:**
+
+- `tower` gains `shaft` (0.64 m) and `mouth` (`half` 0.93, `depth` 0.35).
+- `stair` gains `turn` (−1: it climbs counterclockwise) and `rail` (0.73).
+  `step` is exported positive.
+- `newel` is the carved post at the foot of the handrail.
+
+**`first-person.js`:**
+
+- **The tower.** It is the whole drum plus the passage through the mouth.
+  Before, it was limited to the bay's width, which in the new drum would
+  have blocked everything wider than the mouth.
+- **On the flight.** A body keeps 0.26 m from the handrail and from the
+  wall. Between them and either it is blocked, so a visitor never crosses
+  the rail into the shaft, never walks into the wall, and never steps off
+  the edge.
+- **Below.** Never under the flight.
+- **Above.** The ring, which also runs over the first steps; never over the
+  stairwell or the shaft.
+- **The newel post** is an obstacle.
+- **The climb direction** comes from `turn`. `first-person-check` reads it
+  too: it climbs looking 25° ahead along the walking line, and walks from
+  the landing round the ring to the mouth.
+
+### Verification
+
+**A walking harness in game mode** (scratchpad `stairwalk.mjs`):
+
+| Stretch | Result |
+| --- | --- |
+| Hall → foot of the stair | 2.9 s |
+| Up to the landing | 4.0 s; the height rises evenly 0 → 2.85 m; no stops |
+| Landing → round the ring → mouth → gallery | arrives on the gallery and stops at its balustrade |
+| Back and down | 3.5 s |
+
+**The camera's clearance** to anything solid was measured by rays in 17
+directions from the eye, against every opaque mesh:
+
+- at least 0.21 m, at the stairwell's edge under the ring;
+- more than 0.3 m everywhere else.
+
+That first point was 0.13 m until the stairwell was opened from the
+fourth step instead of 3.6 steps.
+
+**`first-person-check`** passes with the new tower, in the regression and
+alone. It climbs from 0.2 to 2.81 m, then walks round the ring to the
+gallery. The walked stair registers against the drawn treads within
+0.1 m.
+
+**`architecture-check`** passes, with new assertions that the stair is
+climbable:
+
+- the tower is outside the chamber;
+- its radius is at least 1.6 m;
+- the treads are about a metre wide;
+- each step is 0.25–0.32 m deep at the walking line;
+- 2R + G is 0.60–0.68 m;
+- each step is at least 0.20 m deep beside the rail;
+- the flight arrives at 2.85 m.
+
+**Regression** (2026-10-10, mains power, 22 runs). 20 passed on the first
+pass. The other two:
+
+- **`lighting-check`** failed on the door's threshold (0.499 against 0.5).
+  - The cause was not the light: the opening, the jambs and the reveal
+    read the same to the last digit.
+  - The floorboards' random tints came from one shared sequence, drawn after
+    all the boards' lengths. The tower's larger floor has more boards, so
+    every board's tint shifted, the threshold's too.
+  - Each board's tint now follows from where it lies, so a change in one
+    part of the floor never reshuffles the rest.
+  - It then read 0.506 and passed. That is still close to the bar, as noted
+    before.
+- **`loading-gate-check`** hit Codex's known race (`continuedBy:
+  pointerdown`). Alone it passed 1 run of 2.
+
+**Performance.** The machine was slower than earlier in the day (it was
+charging from 1 %); both versions walked at 46–49 fps in game mode, against
+59 earlier. So the comparison that counts is within one run: before and
+after the tower, interleaved, three cold loads each.
+
+| | Before the tower (`7e83b86`) | After |
+| --- | --- | --- |
+| Entry | 57.2 fps | 58.1 fps |
+| Chair | 60.3 fps | 60.2 fps |
+| Shelf | 59.7 fps | 59.9 fps |
+| Website walk, entry → chair | 27.1 fps | 30.7 fps |
+| Game mode, standing | 60.2 fps | 60.2 fps |
+| Game mode, walking | 46.1 fps | 48.6 fps |
+| Room draw calls, triangles (entry) | 36, 41.8 k | 37, 43.4 k |
+| Shader programs | 28 | 28 |
+
+- The tower costs nothing measurable.
+- The extra draw call is a part of the tower now in view from the entry.
+  Its new parts are merged into existing meshes.
+- In the four-round A/B against the published baseline, run the same
+  evening, the site was ready at 13.5 s on this branch against 13.8 s on the
+  baseline.
+
+**Screenshots:** `verification/tower/shots/` with `sheet.html`. They show:
+
+- from the entry;
+- before the mouth;
+- the foot of the stair;
+- halfway up, twice;
+- the landing;
+- the ring and the shaft;
+- toward the gallery;
+- up the shaft;
+- from the gallery into the tower.
+
+### Exterior (for Codex)
+
+The exterior's tower no longer matches the interior's. The interior's drum
+is wider (1.70 m inside, plus a 0.35 m wall), and its centre stands 5.69 m
+out from the chamber's centre, at −30°. The exterior's files are Codex's
+and are not touched.
+
+### For visual review
+
+- The view through the mouth from the entry, where the flight rises across
+  it.
+- The open shaft with its spiral of lamps, from below and from the ring.
+- The ring's balustrade, from the gallery.
+- How dark the drum is at the bottom by the foot, as against the green-lit
+  flight.
+- The handedness: the old stair climbed the other way.
+
 ## Open, for the user or later
 
-- **Exterior fit, for Codex.** The tower is wider, and the vault taller
-  near its springing, than the exterior shows (see "Exterior fit").
+- **Exterior fit, for Codex.** The vault is taller near its springing
+  than the exterior shows (see "Exterior fit"). The stair tower is now
+  much wider and further out: inside radius 1.70 m, its centre 5.69 m from
+  the chamber's centre at −30° (see "The stair tower, enlarged outward").
 - **`lighting-check`'s threshold ratio** passes at about 0.51 against 0.5.
   A later lighting change near the door could tip it.
 - **The second floor** (the gallery) is empty, as asked. Its walls above

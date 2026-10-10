@@ -82,31 +82,37 @@ export const lampTuning = {
     ],
     halo: .22, haloSize: .62,
   },
-  // The stair tower: mosaic lamps hung from the underside of the upper floor
-  // (slab), from the tower's ceiling down through the stairwell (ceiling),
-  // from the handrail (rail: a post index) and from the ring beam over the
-  // tower's mouth (beam). angle: plan degrees about the tower's axis
-  // (0 = +X, 90 = toward the viewer); radius from the axis; top: height of
-  // the lamp's cap. level: glass brightness. breath: phase, rate, depth.
+  // The stair tower (room-tower.js): mosaic lamps hung from its roof down the
+  // open shaft inside the spiral (ceiling), from the handrail's posts over the
+  // shaft (rail: a post index; they hang just inside it, below the rail),
+  // and from the gallery's underside in the tower's mouth (beam). angle: plan
+  // degrees about the tower's axis (0 = +X, 90 = toward the viewer; the mouth
+  // faces 150); radius from the axis; top: height of the lamp's cap. level:
+  // glass brightness. breath: phase, rate, depth. Wherever a visitor can walk
+  // beneath one, its foot hangs at least 0.3 m above their eye.
+  // The shaft's lamps climb it as a slow spiral, turning against the stair.
   stair: {
-    light: 2.4, reach: 2.2, lightColor: '#3fd3bf', lightAt: 0,
+    // The tower's light hangs in the third lamp, halfway up the shaft, so it
+    // reaches the floor, the whole flight and the walls 1.7 m out.
+    light: 3.4, reach: 3.6, lightColor: '#3fd3bf', lightAt: 2,
     halo: .24, haloSize: .46,
     lamps: [
-      {hue: 'teal', shape: 'globe', anchor: 'slab', angle: 140, radius: .30, top: 1.62, scale: 1.14, level: 1.34, breath: [.3, .27, .1]},
-      {hue: 'green', shape: 'onion', anchor: 'slab', angle: -20, radius: .42, top: 2.12, scale: 0.88, level: 1.19, breath: [1.9, .33, .11]},
-      {hue: 'teal', shape: 'drop', anchor: 'slab', angle: 60, radius: .46, top: 2.42, scale: 0.75, level: 1.12, breath: [3.6, .41, .12]},
-      {hue: 'jade', shape: 'globe', anchor: 'slab', angle: -110, radius: .35, top: 1.95, scale: 0.92, level: 1.27, breath: [5.2, .24, .09]},
-      {hue: 'purple', shape: 'globe', anchor: 'slab', angle: 200, radius: .50, top: 2.55, scale: 0.69, level: 1, breath: [.8, .37, .13]},
-      {hue: 'green', shape: 'drop', anchor: 'ceiling', angle: -75, radius: .67, top: 2.62, scale: 0.84, level: 1.19, breath: [2.7, .29, .1]},
-      {hue: 'teal', shape: 'globe', anchor: 'ceiling', angle: -125, radius: .67, top: 2.86, scale: 0.7, level: 1.08, breath: [4.4, .35, .12]},
-      {hue: 'purple', shape: 'onion', anchor: 'ceiling', angle: -95, radius: .66, top: 3.35, scale: 0.84, level: 0.97, breath: [1.4, .22, .1]},
-      {hue: 'green', shape: 'globe', anchor: 'rail', post: 1, angle: -22, radius: .58, top: 1.1, scale: 0.62, level: 1.04, breath: [3.1, .43, .14]},
-      {hue: 'teal', shape: 'drop', anchor: 'rail', post: 5, angle: -62, radius: .58, top: 1.84, scale: 0.7, level: 1.12, breath: [.2, .31, .12]},
-      {hue: 'amber', shape: 'onion', anchor: 'rail', post: 8, angle: -92, radius: .58, top: 2.42, scale: 0.66, level: 1.04, breath: [5.9, .26, .08]},
-      {hue: 'green', shape: 'onion', anchor: 'beam', angle: 128, radius: 1.30, top: 1.98, scale: 1.06, level: 1.15, breath: [2.4, .2, .09]},
-      {hue: 'purple', shape: 'drop', anchor: 'beam', angle: 104, radius: 1.28, top: 2.08, scale: 0.84, level: 0.97, breath: [4.9, .34, .11]},
-      // The upper floor's green source, the stairwell light's own lamp.
-      {hue: 'jade', shape: 'globe', anchor: 'ceiling', angle: -66, radius: .94, top: 3.42, scale: 1.1, level: 1.42, breath: [.9, .18, .07]},
+      {hue: 'teal', shape: 'globe', anchor: 'ceiling', angle: 150, radius: .30, top: 2.25, scale: 1.14, level: 1.34, breath: [.3, .27, .1]},
+      {hue: 'green', shape: 'onion', anchor: 'ceiling', angle: 55, radius: .42, top: 2.70, scale: 0.88, level: 1.19, breath: [1.9, .33, .11]},
+      {hue: 'teal', shape: 'drop', anchor: 'ceiling', angle: -40, radius: .36, top: 3.10, scale: 0.75, level: 1.12, breath: [3.6, .41, .12]},
+      {hue: 'jade', shape: 'globe', anchor: 'ceiling', angle: 230, radius: .40, top: 3.95, scale: 0.92, level: 1.27, breath: [5.2, .24, .09]},
+      {hue: 'purple', shape: 'globe', anchor: 'ceiling', angle: 120, radius: .34, top: 4.40, scale: 0.69, level: 1, breath: [.8, .37, .13]},
+      {hue: 'green', shape: 'drop', anchor: 'ceiling', angle: 20, radius: .40, top: 4.85, scale: 0.84, level: 1.19, breath: [2.7, .29, .1]},
+      {hue: 'teal', shape: 'globe', anchor: 'ceiling', angle: -75, radius: .30, top: 5.30, scale: 0.7, level: 1.08, breath: [4.4, .35, .12]},
+      {hue: 'purple', shape: 'onion', anchor: 'ceiling', angle: 200, radius: .38, top: 5.75, scale: 0.84, level: 0.97, breath: [1.4, .22, .1]},
+      {hue: 'green', shape: 'globe', anchor: 'rail', post: 8, scale: 0.62, level: 1.04, breath: [3.1, .43, .14]},
+      {hue: 'teal', shape: 'drop', anchor: 'rail', post: 10, scale: 0.7, level: 1.12, breath: [.2, .31, .12]},
+      {hue: 'amber', shape: 'onion', anchor: 'rail', post: 12, scale: 0.66, level: 1.04, breath: [5.9, .26, .08]},
+      {hue: 'green', shape: 'onion', anchor: 'beam', angle: 172, radius: 1.50, top: 2.35, scale: 1.06, level: 1.15, breath: [2.4, .2, .09]},
+      {hue: 'purple', shape: 'drop', anchor: 'beam', angle: 128, radius: 1.50, top: 2.45, scale: 0.84, level: 0.97, breath: [4.9, .34, .11]},
+      // The upper floor's green source, the stairwell light's own lamp: by the
+      // shaft's edge over the top of the flight (room-scene.js aims its light).
+      {hue: 'jade', shape: 'globe', anchor: 'ceiling', angle: 10, radius: .52, top: 3.55, scale: 1.1, level: 1.42, breath: [.9, .18, .07], source: true},
     ],
   },
 };
@@ -482,7 +488,10 @@ export function createRoomLamps(THREE, {tower, stair, height, slab, ringBeam, an
   const railAt = post => at(stair.from * 180 / Math.PI - post * stair.step * 180 / Math.PI, stair.inner + .03, tread(post) + .86);
   stairLamps.forEach((lamp, i) => {
     const profile = shapes[lamp.shape], s = lamp.scale, depth = -profile[profile.length - 1][1] * s;
-    const top = around(lamp.angle, lamp.radius, lamp.top);
+    // A rail lamp hangs at its post, just inside the rail, a little below it.
+    const top = lamp.anchor === 'rail' && lamp.angle === undefined
+      ? at(stair.from * 180 / Math.PI - lamp.post * stair.step * 180 / Math.PI, stair.inner - .1, tread(lamp.post) + .86 - .14)
+      : around(lamp.angle, lamp.radius, lamp.top);
     const body = intoCell(lathe(profile, s, 14), i).translate(top.x, top.y - .012 * s, top.z);
     glassParts.add(body, {glow: pulse(lamp.level, lamp.breath)});
     // Brass: a domed cap with a collar, a drop finial below.

@@ -9,6 +9,7 @@ import {createRoomLamps,lampTuning} from './room-lamps.js';
 import {createFigmaObject,createGrimoireObject,createCrystalBallObject} from './tools-shelf.js';
 import {createShelfSound} from './tools-sound.js';
 import {createFirstPerson} from './first-person.js';
+import {towerLayout} from './room-tower.js';
 
 // Architecture and physical furniture. Portal, orb and HTML reader stay in their
 // own renderers; scene-camera.js gives both branches the same projection.
@@ -27,41 +28,19 @@ const {apothem, sides} = chamberTuning;
 // negative, behind it toward the window, so more floor lies before the door.
 // The whole architecture is shifted by it.
 const placement = {forward:-.3};
-// The stair tower: the circle through the two columns of the bay at -30
-// degrees, so its wall begins behind them and the whole bay opens into it.
-// It rises far above the vault's springing; its stair leads up out of view.
-// Its stair, lamps and lights keep the design they had in the rectangular
-// room's back corner (`was`), turned by `turn` degrees and scaled by `scale`
-// about its axis (fromOld, turned).
-const towerBay = -Math.PI / 6, bayHalf = apothem * Math.tan(Math.PI / sides);
-const tower = {r:1.15, height:7, was:{x:2.05, z:-2.0, r:1.35}, turn:15};
-const towerOut = apothem + Math.sqrt(tower.r ** 2 - bayHalf ** 2);
-Object.assign(tower, {x:towerOut * Math.cos(towerBay), z:towerOut * Math.sin(towerBay), scale:tower.r / tower.was.r});
-// Its wall runs from one of the bay's columns round the back to the other.
-const mouthWidth = Math.atan2(bayHalf, towerOut - apothem), mouthDirection = towerBay + Math.PI;
-tower.wallFrom = mouthDirection + mouthWidth; tower.wallTo = mouthDirection - mouthWidth + 2 * Math.PI;
-const turned = degrees => (degrees + tower.turn) * Math.PI / 180;
-function fromOld(x, z) {
-  const a = tower.turn * Math.PI / 180, dx = (x - tower.was.x) * tower.scale, dz = (z - tower.was.z) * tower.scale;
-  return [tower.x + dx * Math.cos(a) - dz * Math.sin(a), tower.z + dx * Math.sin(a) + dz * Math.cos(a)];
-}
-// Spiral stair along the tower wall. Step i spans plan angles
-// from - (i+1)*step .. from - i*step, so it starts on the right of the tower
-// (as seen from the table) and climbs leftward across its back wall.
-// soffit: thickness of the flight under the line through the nosings, square
-// to its slope; joint: how far each stone's underside is tucked up at the
-// next one; cap/nosing: each nosing's thickness and how far it overhangs the riser.
-const stair = {from:turned(-12), step:10 * Math.PI / 180, rise:.19, inner:.70 * tower.scale, count:14,
-  soffit:.15, joint:.018, cap:.045, nosing:.028};
-const tread = i => (i + 1) * stair.rise;
-// Tall, narrow lancets stepped up with the stair: each sill clears the highest
-// tread beneath its opening. They sit where the stair is still low, so its
-// higher flight never covers them from the table.
-const lancets = [-25, -50, -75].map(degrees => {
-  const at = turned(degrees), halfWidth = .18;
-  const sill = Math.round((tread(Math.floor((stair.from - at + halfWidth / tower.r) / stair.step)) + .18) * 100) / 100;
-  return {at, halfWidth, sill, shoulder:sill + 1.5, peak:sill + 1.85};
-});
+// The stair tower (room-tower.js): a round drum outside the bay at -30
+// degrees, back right, opening into the chamber through the whole bay. It
+// rises far above the vault's springing; its spiral stair, round an open
+// shaft, climbs to its upper floor, level with the gallery.
+const {tower, stair, well, lancets, tread} = towerLayout(chamberTuning);
+// A point in the tower: plan angle (radians) and distance from its axis.
+const radialAt = (at, rho) => [tower.x + rho * Math.cos(at), tower.z + rho * Math.sin(at)];
+// On the flight: f of the way up (0 at the foot's front edge, 1 at the
+// landing), rho from the axis, `above` the line through the nosings.
+const onFlight = (f, rho, above = 0) => {
+  const phi = stair.from - f * stair.count * stair.step, [x, z] = radialAt(phi, rho);
+  return [x, (f * stair.count + 1) * stair.rise + above, z];
+};
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#16181d');
 // Architecture and its lights, placed relative to the table. Pieces bound to
@@ -281,7 +260,7 @@ if (renderer) {
   // Floor extent along Z at plan position x: the chamber with its recesses
   // and the door's passage, and the tower's circle.
   const footprint=x=>chamber.footprint(x,tower);
-  const east=tower.x+tower.r+T,west=nook.back-T,south=-apothem-T,north=door.z+door.depth+.05;
+  const east=tower.x+tower.r+T,west=nook.back-T,south=Math.min(-apothem-T,tower.z-tower.r-T),north=door.z+door.depth+.05;
   // Beneath the boards; in the door's passage it is the floor and the walls
   // themselves, dark slate.
   mesh('floor substrate',merge([block(east-west+T*2,.07,north-south+T*2,(west+east)/2,-.06,(north+south)/2),chamber.passageFloor,...chamber.passage]),
@@ -306,9 +285,12 @@ if (renderer) {
   const boards=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2),wood,planks.length);
   boards.name='wooden plank floor';boards.receiveShadow=true;
   const dummy=new THREE.Object3D();
+  // Each board's tint follows from where it lies, so a change to the floor
+  // in one place (the tower's, say) never reshuffles the boards elsewhere.
+  const tint=(x,z)=>{const s=Math.sin(x*127.1+z*311.7)*43758.5453;return s-Math.floor(s);};
   planks.forEach((p,i)=>{
     dummy.position.set(p.x,0,p.z);dummy.scale.set(p.w,1,p.length);dummy.updateMatrix();
-    boards.setMatrixAt(i,dummy.matrix);boards.setColorAt(i,new THREE.Color().setScalar(.70+random()*.28));
+    boards.setMatrixAt(i,dummy.matrix);boards.setColorAt(i,new THREE.Color().setScalar(.70+tint(p.x,p.z)*.28));
   });
   boards.instanceMatrix.needsUpdate=true;shell.add(boards);
   // Stone shell: the chamber's bays, and the tower's round wall from one of
@@ -324,10 +306,45 @@ if (renderer) {
   // Shared carved profiles for the door, the window's reveals and the
   // curved tower lancets. The same pointed tracery is carried into the stair
   // rail; the chamber's boss and lantern share the bronze.
-  const radialAt=(at,rho)=>[tower.x+rho*Math.cos(at),tower.z+rho*Math.sin(at)];
+  // The tower's upper floor: a ring round the open shaft, from the top of the
+  // stair round the back to the mouth, where it meets the gallery, and on over
+  // the stair's first steps; open over the rest of the flight. A balustrade
+  // like the gallery's runs along its edge over the shaft and the stairwell.
+  // (It runs counterclockwise from start to end, past the mouth: from the
+  // landing to the stairwell's edge, or the other way, as the flight turns.)
+  const around=(a,lo)=>a-2*Math.PI*Math.floor((a-lo)/(2*Math.PI));
+  const ring={y:tread(stair.count),edge:well.inner+.05,
+    start:around(stair.step>0?well.to:well.from,tower.wallTo-4*Math.PI),end:around(stair.step>0?well.from:well.to,tower.wallFrom)};
+  const towerRail={timber:[],metal:[]};
+  {
+    const G=chamberTuning.gallery,y=ring.y;
+    // A straight run of balustrade from a to b (plan [x, z]).
+    const run=(a,b,posts=true)=>{
+      const length=Math.hypot(b[0]-a[0],b[1]-a[1]),angle=Math.atan2(b[0]-a[0],b[1]-a[1]),mx=(a[0]+b[0])/2,mz=(a[1]+b[1])/2;
+      const bar=(height,width,at)=>new THREE.BoxGeometry(width,height,length+.02).rotateY(angle).translate(mx,at,mz);
+      towerRail.timber.push(bar(.06,.07,y+G.rail-.03),bar(.05,.07,y+.1));
+      towerRail.metal.push(bar(.012,.075,y+G.rail+.006));
+      if(posts) for(let i=1,n=Math.max(1,Math.round(length/.22));i<=n;i++) {
+        const t=i/n,x=a[0]+(b[0]-a[0])*t,z=a[1]+(b[1]-a[1])*t;
+        towerRail.timber.push(new THREE.CylinderGeometry(.018,.022,G.rail-.14,6).translate(x,y+.07+(G.rail-.14)/2,z));
+      }
+    };
+    // Round the shaft, in short straight runs, with a fascia under the edge.
+    const segments=16;
+    for(let i=0;i<segments;i++) {
+      const a=ring.start+(ring.end-ring.start)*i/segments,b=ring.start+(ring.end-ring.start)*(i+1)/segments;
+      const p=radialAt(a,ring.edge),q=radialAt(b,ring.edge);
+      run(p,q);
+      const fp=radialAt(a,well.inner+.01),fq=radialAt(b,well.inner+.01),length=Math.hypot(fq[0]-fp[0],fq[1]-fp[1]);
+      towerRail.timber.push(new THREE.BoxGeometry(.05,.2,length+.02).rotateY(Math.atan2(fq[0]-fp[0],fq[1]-fp[1]))
+        .translate((fp[0]+fq[0])/2,y-.12-.1,(fp[1]+fq[1])/2));
+    }
+    // Across the ring where the stairwell opens, from the shaft to the wall.
+    run(radialAt(well.to,ring.edge),radialAt(well.to,tower.r-.02));
+  }
   const architecture=createRoomArchitecture(THREE,{aperture,windowMap:aperture.map,door,doorMap:door.map,tower,lancets,stair});
   mesh('stone trim',architecture.stone,trim);
-  mesh('gothic bronze tracery',merge([architecture.metal,...chamber.parts.metal]),architecturalMetal);
+  mesh('gothic bronze tracery',merge([architecture.metal,...chamber.parts.metal,...towerRail.metal]),architecturalMetal);
 
   // The spiral stair, in its own dressed stone. Each step is one solid from the
   // stair's open inner edge into the wall, its profile carrying a nosing that
@@ -354,7 +371,9 @@ if (renderer) {
     const {from:a,to:b}=stepAt(i),top=tread(i),lip=top-stair.cap,wall=wallRadius;
     const at=(phi,rho,y)=>new THREE.Vector3(tower.x+rho*Math.cos(phi),y,tower.z+rho*Math.sin(phi));
     // Toward the step below; the nosing stands a constant distance out that way.
-    const front=new THREE.Vector3(-Math.sin(b),0,Math.cos(b)),nose=v=>v.addScaledVector(front,stair.nosing);
+    // (The flight may climb either way round: turn is the step's sign.)
+    const turn=Math.sign(stair.step);
+    const front=new THREE.Vector3(-Math.sin(b),0,Math.cos(b)).multiplyScalar(turn),nose=v=>v.addScaledVector(front,stair.nosing);
     const up=new THREE.Vector3(0,1,0),down=new THREE.Vector3(0,-1,0);
     // The soffit's own (helicoid) normal, so the underside shades as one surface.
     const under=(phi,rho)=>soffit(phi,rho)>0?new THREE.Vector3(flightLean*Math.sin(phi)+rho*across*Math.cos(phi),-rho,
@@ -378,7 +397,7 @@ if (renderer) {
     quad([i1,i2,w2,w1],front);quad([i2,i3,w3,w2],down);quad([i3,i4,w4,w3],front);quad([i4,i5,w5,w4],up);
     // The top step's back meets the landing; every other one hides under the
     // next step except for the thin strip its tucked joint leaves showing.
-    const back=new THREE.Vector3(Math.sin(a),0,-Math.cos(a));
+    const back=new THREE.Vector3(Math.sin(a),0,-Math.cos(a)).multiplyScalar(turn);
     if(i===stair.count-1) quad([i5,i0,w0,w5],back);
     else if(tuck(a,stair.inner)>0) quad([i0,at(a,stair.inner,i0.y+tuck(a,stair.inner)),at(a,wall,w0.y+tuck(a,wall)),w0],back);
     // The open edge: the step's face and its nosing lip. The wall end stays buried.
@@ -392,8 +411,8 @@ if (renderer) {
   }
   mesh('spiral stair',merge([
     ...Array.from({length:stair.count},(_,i)=>step(i)),
-    ...Array.from({length:stair.count},(_,i)=>arcWall({...tower,...stepAt(i),r:tower.r-proud,
-      t:proud+.02,y0:tread(i),y1:tread(i)+plinth,steps:1})),
+    ...Array.from({length:stair.count},(_,i)=>{const {from:a,to:b}=stepAt(i);
+      return arcWall({...tower,from:Math.min(a,b),to:Math.max(a,b),r:tower.r-proud,t:proud+.02,y0:tread(i),y1:tread(i)+plinth,steps:1});}),
   ]),stepStone);
   // Dressed stone: a low plinth where the chamber's walls meet the floor.
   mesh('dressed stone',merge(chamber.parts.plinth),stairStone);
@@ -410,20 +429,26 @@ if (renderer) {
   // The warm handrail follows the same helix; its stone foot and open bronze
   // pointed bays are batched with the matching window dressings above.
   beamParts.push(architecture.handrail);
-  // Upper floor inside the tower, one riser above the last step. Its stairwell
-  // keeps headroom over the flight and clears the tall lancets, so the stair
-  // visibly arrives at another level instead of ending in the wall. It stops
-  // at the mouth's plane, so it never reaches out into the chamber.
-  const well={from:stair.from-stair.count*stair.step,to:turned(-40),inner:stair.inner-.06};
-  const upper=new THREE.Shape().moveTo(tower.r*Math.cos(well.to),tower.r*Math.sin(well.to));
-  upper.absarc(0,0,tower.r,well.to,tower.wallTo,false);
-  upper.lineTo(tower.r*Math.cos(tower.wallFrom),tower.r*Math.sin(tower.wallFrom));
-  upper.absarc(0,0,tower.r,tower.wallFrom,well.from+2*Math.PI,false);
-  upper.lineTo(well.inner*Math.cos(well.from),well.inner*Math.sin(well.from));
-  upper.absarc(0,0,well.inner,well.from,well.to,false);
-  upper.closePath();
-  beamParts.push(new THREE.ExtrudeGeometry(upper,{depth:.12,bevelEnabled:false,curveSegments:24})
-    .rotateX(Math.PI/2).translate(tower.x,tread(stair.count),tower.z));
+  // The upper floor (the ring above), one riser above the last step. Over
+  // the flight it is open from where a head would meet it, so the stair
+  // visibly arrives at another level; through the mouth it reaches the
+  // gallery, across the bay's wall, and never on into the chamber.
+  {
+    // Across the bay: s out from the chamber's centre, u to the right.
+    const local=(s,u)=>[s*Math.cos(tower.bay)-u*Math.sin(tower.bay)-tower.x,s*Math.sin(tower.bay)+u*Math.cos(tower.bay)-tower.z];
+    const open=chamber.bays.find(b=>b.kind==='tower').open.halfWidth;
+    const upper=new THREE.Shape().moveTo(tower.r*Math.cos(ring.start),tower.r*Math.sin(ring.start));
+    upper.absarc(0,0,tower.r,ring.start,tower.wallTo-2*Math.PI,false);
+    upper.lineTo(...local(apothem,open));upper.lineTo(...local(apothem,-open));
+    upper.lineTo(tower.r*Math.cos(tower.wallFrom),tower.r*Math.sin(tower.wallFrom));
+    upper.absarc(0,0,tower.r,tower.wallFrom,ring.end,false);
+    upper.lineTo(well.inner*Math.cos(ring.end),well.inner*Math.sin(ring.end));
+    upper.absarc(0,0,well.inner,ring.end,ring.start,true);
+    upper.closePath();
+    beamParts.push(new THREE.ExtrudeGeometry(upper,{depth:.12,bevelEnabled:false,curveSegments:32})
+      .rotateX(Math.PI/2).translate(tower.x,ring.y,tower.z));
+  }
+  beamParts.push(...towerRail.timber);
   mesh('timber beams',merge(beamParts),timber);
   // The outer door at the end of the passage: old, dark, ironbound oak.
   mesh('outer door',merge([chamber.parts.doorLeaf]),new THREE.MeshStandardMaterial({color:'#4c3828',map:woodMap,roughness:.9}),false);
@@ -549,13 +574,12 @@ if (renderer) {
   // lantern's pattern softer the further it is from it.
   // In the chamber the door's lantern hangs as it did, 0.65 m to the right of
   // the doorway (seen from inside) and a little behind the entry; the
-  // droplets as far in front of the nook as before; the tower's lamps turned
-  // and scaled with the tower. Their rods reach up to the vault.
+  // droplets as far in front of the nook as before; the tower's lamps where
+  // room-lamps.js hangs them round its open shaft. Their rods reach up to the vault.
   const lamps=createRoomLamps(THREE,{tower,stair,height:H,slab:tread(stair.count)-.12,ringBeam:H-.2,
     anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy()),place:{
       door:{at:[door.x-.65,door.z-1.2],aim:[door.x,.8,door.z-.15]},
       shelf:{shift:[nook.x+2.4,nook.z+.25]},
-      stair:{turn:tower.turn,scale:tower.scale},
       mouth:top=>new THREE.Vector3(top.x,chamber.ceilingAt(top.x,top.z)+.04,top.z),
       ceilingAt:chamber.ceilingAt}});
   shell.add(lamps.group,...Object.values(lamps.lights),...lamps.targets);
@@ -636,7 +660,7 @@ if (renderer) {
   const windowBounce=new THREE.PointLight('#91acd7',3.4,4.2,2);
   windowBounce.position.set(aperture.x,aperture.sill+.62,aperture.z+.24);shell.add(windowBounce);
   // The same cool window light inside the tower, so its lancets read at night.
-  const towerBounce=new THREE.PointLight('#91acd7',2.2,3,2),[bounceX,bounceZ]=radialAt(lancets[1].at,.75*tower.scale);
+  const towerBounce=new THREE.PointLight('#91acd7',2.2,3,2),[bounceX,bounceZ]=radialAt(lancets[1].at,.9);
   towerBounce.position.set(bounceX,lancets[1].sill+.3,bounceZ);shell.add(towerBounce);
   // The viewer's end of the room takes its light from the lantern by the
   // door (room-lamps.js): its patterned spot on the doorway, the wall and the
@@ -693,27 +717,30 @@ if (renderer) {
   windowBounce.color.set('#b6b4f6');towerBounce.color.set('#b6b4f6');
   // Inside the tower the lancets' fill stays under the green from above, so
   // the stair is lit from its landing and the sky only tints its lower walls.
-  towerBounce.intensity=1.5;
+  towerBounce.intensity=2.2;towerBounce.distance=4.4;
   // The upper floor's light falling through the stairwell: over the upper
   // flight, down the wall beneath it and softly onto the tower floor.
-  const [wellX,wellZ]=radialAt(turned(-66),.94*tower.scale),wellY=tread(stair.count);
+  // (By the shaft's edge above the top of the flight, where the upper floor's
+  // jade lamp hangs: room-lamps.js.)
+  const deg=Math.PI/180,towerLight=lampTuning.stair.lamps.find(lamp=>lamp.source);
+  const [wellX,wellZ]=radialAt(towerLight.angle*deg,towerLight.radius),wellY=ring.y;
   const presence=new THREE.SpotLight(upperGreen,architectureTuning.greenIntensity,5,architectureTuning.greenAngle,.68,2);presence.name='stairwell light';
   // Aimed a little toward the tower's mouth: its pool lands where the chair
   // can see it, on the floor just inside the opening.
-  presence.position.set(wellX,wellY+.45,wellZ);{const [x,z]=fromOld(2.02,-1.5);presence.target.position.set(x,.1,z);}
+  presence.position.set(wellX,wellY+.45,wellZ);{const [x,z]=radialAt(tower.mouthDirection,.9);presence.target.position.set(x,.1,z);}
   shell.add(presence,presence.target);
   // Its source, up in the tower room just above the well, stays out of view.
   // The seated eye sees it as the wall at the top of the stair: brightest just
   // under the landing, fading down the flight.
-  const upstairs=new THREE.PointLight(upperGreen,architectureTuning.upperBounce,architectureTuning.upperReach,2),[upX,upZ]=radialAt(turned(-118),.85*tower.scale);
+  const upstairs=new THREE.PointLight(upperGreen,architectureTuning.upperBounce,architectureTuning.upperReach,2),[upX,upZ]=radialAt(well.from-Math.sign(stair.step)*35*deg,1.2);
   upstairs.name='upper floor glow';upstairs.position.set(upX,wellY+.23,upZ);shell.add(upstairs);
   // Where the green lands on the tower floor it gives a little back: a faint
   // fill from the floor that only shines upward, onto the middle of the
   // flight's underside, so the sweep shades as one curved surface instead of
   // a flat black silhouette. The floor and the newel stay out of its cone.
-  const [underX,underZ]=radialAt(turned(-100),tower.scale);
+  const midFlight=stair.from-stair.count*stair.step/2,[underX,underZ]=radialAt(midFlight,1.2);
   const floorBounce=new THREE.SpotLight(upperGreen,5,3.4,.85,1,2);floorBounce.name='stairwell floor bounce';
-  {const [x,z]=fromOld(2.18,-1.96);floorBounce.position.set(x,.04,z);}floorBounce.target.position.set(underX,1.9,underZ);
+  {const [x,z]=radialAt(midFlight,.3);floorBounce.position.set(x,.04,z);}floorBounce.target.position.set(underX,1.35,underZ);
   shell.add(floorBounce,floorBounce.target);
   // Shafts of light, from their source to where they fade out: open cones,
   // brightest along their axis as seen from any angle, fading at both ends.
@@ -736,9 +763,10 @@ if (renderer) {
   // room they emerge from behind the ring beam, brightest at the top. They fall
   // past the lower flight, the only part of the stair seen from above the
   // treads; over the upper flight's soffit they would read as pale columns.
-  // (Angles, radii and landing points as designed in the old corner: fromOld.)
-  const fall=(degrees,rho,above,to)=>{const [x,z]=radialAt(turned(degrees),rho*tower.scale),[tx,tz]=fromOld(to[0],to[2]);
-    return {from:[x,wellY+above,z],to:[tx,to[1],tz]};};
+  // (From beside the shaft over the top of the flight, down the shaft to the
+  // floor just inside the mouth: degrees and radii about the tower's axis.)
+  const fall=(degrees,rho,above,[toDegrees,toRho,toY])=>{const [x,z]=radialAt(degrees*deg,rho),[tx,tz]=radialAt(toDegrees*deg,toRho);
+    return {from:[x,wellY+above,z],to:[tx,toY,tz]};};
   // Slit-like shafts emerge together from the upper well, not from the
   // windows. Shorter/finer falloff keeps their mint core distinct from the
   // untouched lavender moonlight. Reuse the existing batch and dust count.
@@ -746,9 +774,9 @@ if (renderer) {
     ...fall(degrees,rho,.45,to),r0:r0*architectureTuning.shaftWidth,r1:r1*architectureTuning.shaftWidth,
     color:upperGreen,strength:strength*architectureTuning.shaftStrength,motes,dustGlow:.32,dustSize:.65});
   const beams=[
-    greenShaft(-66,.94,[2.28,.18,-1.90],.027,.14,.21,70),
-    greenShaft(-57,1.02,[2.46,.40,-1.78],.019,.085,.13,22),
-    greenShaft(-77,.84,[2.08,.85,-2.02],.015,.060,.08,14),
+    greenShaft(towerLight.angle,towerLight.radius,[150,.9,.18],.027,.14,.21,70),
+    greenShaft(towerLight.angle+14,towerLight.radius+.08,[134,1.1,.40],.019,.085,.13,22),
+    greenShaft(towerLight.angle-12,towerLight.radius-.05,[166,.7,.85],.015,.060,.08,14),
     // The lancets face away from the moon: only the sky's softer glow comes
     // in there, wide and faint.
     {...inward(lancets[1],.55,2.5),r0:.1,r1:.34,color:skyLight,strength:.18,motes:30,moonlit:true},
@@ -1158,17 +1186,14 @@ if (renderer) {
   // above the nosing line (low enough to stay in view across the back of the
   // tower) and out through the stairwell.
   const plan=(x,y,z)=>new THREE.Vector3(x,y,z-placement.forward);
-  // In the chamber: in front of the tower's mouth, then up the turned stair
-  // (its angles and radii as designed in the old corner).
+  // In the chamber: in front of the tower's mouth, then up the flight over
+  // its walking line, and up the open shaft.
   const out=chamber.mouth.out,towerApproach=plan(out.x*(apothem-.9),1.15,out.z*(apothem-.9));
   function stairRoute(start,heading) {
-    const spiral=(degrees,rho,above)=>{
-      const phi=turned(degrees),line=((stair.from-phi)/stair.step+1)*stair.rise;
-      return plan(tower.x+rho*tower.scale*Math.cos(phi),line+above,tower.z+rho*tower.scale*Math.sin(phi));
-    };
+    const spiral=(f,rho,above)=>plan(...onFlight(f,rho,above));
     return new THREE.CatmullRomCurve3([start,start.clone().addScaledVector(heading,.8).add(new THREE.Vector3(0,.3,0)),
-      towerApproach,...[-25,-50,-75,-100,-125,-150].map(d=>spiral(d,.95,.75)),
-      spiral(-170,.8,.75),plan(tower.x,5.6,tower.z)],false,'centripetal');
+      towerApproach,...[.08,.24,.4,.56,.72,.88].map(f=>spiral(f,1.1,.75)),
+      spiral(1,.9,.75),plan(tower.x,5.6,tower.z)],false,'centripetal');
   }
   // The waking portal's grip on the cloth, as release begins. The fabric lying
   // over the opening is drawn down into it (tug.depth at the centre of the
@@ -1672,18 +1697,25 @@ if (renderer) {
   // coordinates are the scene's with z + placement.forward (the shell sits at
   // -placement.forward). well: the stair's angles (from its foot, radians)
   // over which the tower's upper floor is open to the flight below.
-  const fromFoot=a=>((stair.from-a)%(2*Math.PI)+2*Math.PI)%(2*Math.PI);
+  // tower.shaft: the open shaft's radius at the upper floor (its edge, under
+  // the balustrade); tower.mouth: the bay's opening into it (half its width,
+  // the wall's depth). stair.rail: the handrail's radius; newel: the carved
+  // post at the foot of the rail (plan [x, z]).
+  const turn=Math.sign(stair.step),fromFoot=a=>((turn*(stair.from-a))%(2*Math.PI)+2*Math.PI)%(2*Math.PI);
+  const towerOpen=chamber.bays.find(b=>b.kind==='tower').open;
   const walk={forward:placement.forward,apothem,bayHalf:chamber.hw,
     bays:chamber.bays.map(({kind,theta,open})=>({kind,cos:Math.cos(theta),sin:Math.sin(theta),
       halfWidth:open.halfWidth,depth:open.depth??0})),
-    tower:{x:tower.x,z:tower.z,r:tower.r},
-    stair:{from:stair.from,step:stair.step,rise:stair.rise,inner:stair.inner,count:stair.count},
+    tower:{x:tower.x,z:tower.z,r:tower.r,shaft:well.inner,mouth:{half:towerOpen.halfWidth,depth:T}},
+    // (step: the angle per step; turn: +1 if the flight climbs clockwise in plan, -1 if counterclockwise.)
+    stair:{from:stair.from,step:Math.abs(stair.step),turn,rise:stair.rise,inner:stair.inner,count:stair.count,rail:stair.inner+.03},
+    newel:radialAt(stair.from,stair.inner+.03),
     columns:Array.from({length:sides},(_,i)=>{
       const at=chamberTuning.apothem/Math.cos(Math.PI/sides)-.07,angle=-Math.PI/2-Math.PI/sides+i*2*Math.PI/sides;
       return [at*Math.cos(angle),at*Math.sin(angle)];
     }),
     column:.23,table:Math.max(view.tableWidthPx,view.tableDepthPx)/(2*view.units),
-    gallery:chamberTuning.gallery,well:[fromFoot(well.to),stair.count*stair.step]};
+    gallery:chamberTuning.gallery,well:[fromFoot(well.to),stair.count*Math.abs(stair.step)]};
   window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,table:artifact,smoke,hoverMark,auraLights,walk,
     shelfHover:()=>shelfHover,
     aimCentre(enabled){

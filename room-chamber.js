@@ -23,12 +23,18 @@
 
 export const chamberTuning = {
   sides: 12, apothem: 4.0, wall: .35,
-  spring: 3.3,     // the columns' capitals: where every rib springs
+  spring: 3.9,     // the columns' capitals: where every rib springs
   formeret: 1.35,  // how far each bay's wall arch rises above the springing
-  apex: 6.4,       // the vault's crown, under the boss
+  apex: 6.9,       // the vault's crown, under the boss
   boss: .34,       // radius of the ring the ribs meet in
   rib: .09, wallRib: .065,
   passage: 1.0,    // the dark passage behind the door
+  // The gallery: a second floor round the chamber, the twelve-sided plan's
+  // own outline, open in the middle under the dome. Its floor (top) is level
+  // with the tower's upper floor, where the spiral stair arrives; depth from
+  // the wall; slab thickness; the balustrade's height. It breaks off at the
+  // great window, which rises through it.
+  gallery: {floor: 2.85, depth: 1.0, slab: .15, rail: .95},
   // The lantern under the boss: how far below the crown it hangs, its glass.
   lantern: {drop: 1.6, height: .56, radius: .2},
 };
@@ -82,15 +88,17 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
   // face, T at the outside). map(u, y, depth) is room-architecture.js's
   // convention: u to the right as seen from the room, depth toward it.
   const OPEN = {
-    window: {halfWidth: .82, sill: .8, shoulder: 3.05, peak: 4.3},
+    window: {halfWidth: .82, sill: .8, shoulder: 3.6, peak: 4.9},
     // The whole bay open between its columns, into the tower.
-    tower: {halfWidth: hw - .14, sill: 0, shoulder: 3.0, peak: 4.25},
+    tower: {halfWidth: hw - .14, sill: 0, shoulder: 3.6, peak: 4.85},
     // The outside's entrance: an equilateral pointed arch, its jambs 1.7
     // half-widths high, its rise 1.73 (DOOR in the exterior's worker).
-    door: {halfWidth: .8, sill: 0, shoulder: 1.36, peak: 1.36 + 1.39, depth: T + tuning.passage},
-    nook: {halfWidth: .98, sill: 0, shoulder: 2.25, peak: 3.0, depth: .6},
-    shelves: {halfWidth: .86, sill: 0, shoulder: 2.3, peak: 3.05, depth: .3},
-    blind: {halfWidth: .8, sill: .62, shoulder: 2.3, peak: 3.0, depth: .07},
+    // (Its crown and frame stay under the gallery's slab.)
+    door: {halfWidth: .74, sill: 0, shoulder: 1.26, peak: 1.26 + 1.28, depth: T + tuning.passage},
+    // The niches stay under the gallery too.
+    nook: {halfWidth: .98, sill: 0, shoulder: 2.0, peak: 2.6, depth: .6},
+    shelves: {halfWidth: .86, sill: 0, shoulder: 1.95, peak: 2.6, depth: .3},
+    blind: {halfWidth: .8, sill: .62, shoulder: 1.95, peak: 2.6, depth: .07},
   };
   const bays = KINDS.map((kind, k) => {
     const theta = angleOf(k), c = Math.cos(theta), s = Math.sin(theta);
@@ -162,21 +170,21 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
 
   // ---- What the bays hold.
   // The study nook: a worktop at desk height with a thin apron, the shelf the
-  // tools stand on (its top at 1.4375 m, as before) and two more above.
+  // tools stand on (its top at 1.4375 m, as before) and one more above.
   const nook = bay('nook'), nookOpen = nook.open, nookWidth = 2 * nookOpen.halfWidth - .02;
   const nookDesk = .74, nookShelf = 1.42;
   timber.push(
     place(box(nookWidth, .045, nookOpen.depth + .07, 0, nookDesk - .0225, nookOpen.depth / 2 - .035), nook),
     place(box(nookWidth, .09, .03, 0, nookDesk - .09, -.055), nook),
     place(box(nookWidth, .035, .26, 0, nookShelf, nookOpen.depth - .13), nook),
-    ...[1.98, 2.5].map(y => place(box(2 * archHalfAt(nookOpen, y + .04) - .03, .035, .24, 0, y, nookOpen.depth - .12), nook)));
+    place(box(2 * archHalfAt(nookOpen, 2.02) - .03, .035, .24, 0, 1.98, nookOpen.depth - .12), nook));
   // Shelving niches: a closed cabinet below, open shelves up into the arch.
   for (const b of bays.filter(b => b.kind === 'shelves')) {
     const w = b.open, width = 2 * w.halfWidth - .02;
     timber.push(place(box(width, .86, .03, 0, .43, .045), b), place(box(width, .04, w.depth - .02, 0, .88, w.depth / 2), b));
-    for (const y of [1.34, 1.8, 2.26]) timber.push(place(box(width, .035, w.depth - .03, 0, y, w.depth / 2 + .01), b));
+    for (const y of [1.34, 1.8]) timber.push(place(box(width, .035, w.depth - .03, 0, y, w.depth / 2 + .01), b));
     // The top shelf meets the arch where it narrows.
-    const y = 2.68;
+    const y = 2.22;
     timber.push(place(box(2 * archHalfAt(w, y + .04) - .03, .035, w.depth - .03, 0, y, w.depth / 2 + .01), b));
   }
 
@@ -191,6 +199,49 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
     const floorGap = w.sill === 0 ? w.halfWidth : 0;
     for (const [a, z] of floorGap ? [[-hw, -floorGap], [floorGap, hw]] : [[-hw, hw]]) if (z - a > .05)
       plinth.push(place(box(z - a, .14, .035, (a + z) / 2, .07, -.0175), b));
+  }
+
+  // ---- The gallery. Over every bay but the window's: a timber floor from
+  // the wall to the inner outline (its sides on the lines to the corners, so
+  // neighbouring bays meet), a fascia, and a balustrade of slim balusters
+  // between rails along its open edge, returning to the wall either side of
+  // the window. Beams under it at every column belong to the frame below.
+  const G = tuning.gallery, inner = A - G.depth, innerHalf = hw - G.depth * Math.tan(half);
+  // The floor's outline in a bay, across (x) and in from the wall (d).
+  const galleryFloor = () => {
+    const shape = new THREE.Shape().moveTo(-hw, 0);
+    shape.lineTo(hw, 0); shape.lineTo(innerHalf, G.depth); shape.lineTo(-innerHalf, G.depth); shape.closePath();
+    // Shape (x, d) extruded upward: d runs into the room (local -z).
+    return new THREE.ExtrudeGeometry(shape, {depth: G.slab, bevelEnabled: false})
+      .applyMatrix4(new THREE.Matrix4().makeBasis(v3(1, 0, 0), v3(0, 0, -1), v3(0, 1, 0))).translate(0, G.floor - G.slab, 0);
+  };
+  const rail = (length, height, y, d) => box(length, height, .07, 0, y, -d);
+  for (const b of bays) {
+    if (b.kind === 'window') continue;
+    timber.push(place(galleryFloor(), b));
+    // Along the open edge: the fascia under it, the rails and balusters on it.
+    timber.push(place(rail(2 * innerHalf, .2, G.floor - G.slab - .02, G.depth - .02), b),
+      place(rail(2 * innerHalf + .02, .06, G.floor + G.rail - .03, G.depth - .05), b),
+      place(rail(2 * innerHalf, .05, G.floor + .1, G.depth - .05), b));
+    const posts = Math.max(3, Math.round(2 * innerHalf / .22));
+    for (let i = 0; i <= posts; i++) {
+      const x = -innerHalf + 2 * innerHalf * i / posts;
+      timber.push(place(new THREE.CylinderGeometry(.018, .022, G.rail - .14, 6).translate(x, G.floor + .07 + (G.rail - .14) / 2, -(G.depth - .05)), b));
+    }
+    metal.push(place(box(2 * innerHalf + .02, .012, .075, 0, G.floor + G.rail + .006, -(G.depth - .05)), b));
+    // Beside the window the balustrade turns back to the wall.
+    const next = bays[(b.k + 1) % sides], previous = bays[(b.k + sides - 1) % sides];
+    for (const [side, neighbour] of [[-1, next], [1, previous]]) if (neighbour.kind === 'window') {
+      // Along the corner line, from the open edge to the wall.
+      const from = v3(side * innerHalf, 0, -(G.depth - .05)), to = v3(side * hw, 0, 0), length = from.distanceTo(to);
+      const angle = Math.atan2(to.x - from.x, to.z - from.z), mid = from.clone().add(to).multiplyScalar(.5);
+      for (const [height, y] of [[.06, G.floor + G.rail - .03], [.05, G.floor + .1]])
+        timber.push(place(new THREE.BoxGeometry(.07, height, length).rotateY(angle).translate(mid.x, y, mid.z), b));
+      for (let i = 1; i < 5; i++) {
+        const p = from.clone().lerp(to, i / 5);
+        timber.push(place(new THREE.CylinderGeometry(.018, .022, G.rail - .14, 6).translate(p.x, G.floor + .07 + (G.rail - .14) / 2, p.z), b));
+      }
+    }
   }
 
   // ---- One bay's frame, repeated round the room: the clustered column at
@@ -224,6 +275,13 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
     return b0.map(u, archTop(formeret, u), .04);
   }));
   frame.push(new THREE.TubeGeometry(wallRib, 24, tuning.wallRib, 5, false));
+  // The beam under the gallery at this corner, from the wall to its open
+  // edge, along the line between the bays.
+  {
+    const along = Rc - (Rc - inner / Math.cos(half)) / 2, length = Rc - inner / Math.cos(half);
+    frame.push(new THREE.BoxGeometry(.16, .22, length).rotateY(Math.atan2(cc, cs))
+      .translate(cc * along, G.floor - G.slab - .11, cs * along));
+  }
   const instances = Array.from({length: sides}, (_, k) => new THREE.Matrix4().makeRotationY(-k * step));
 
   // ---- The vault: one cell over each bay, from its wall rib up to the boss.
@@ -355,11 +413,13 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
     }
     return [back, front];
   }
-  // The vault's height over a plan point (near enough to hang lamps from).
+  // What is overhead at a plan point (near enough to hang lamps from): the
+  // gallery's underside within its band, else the vault.
   function ceilingAt(x, z) {
     const angle = Math.atan2(z, x), k = ((Math.round((angle - angleOf(0)) / step) % sides) + sides) % sides, b = bays[k];
     const off = Math.atan2(Math.sin(angle - b.theta), Math.cos(angle - b.theta)), t = Math.tan(off) / Math.tan(half);
     const wallR = A / Math.cos(off), r = Math.hypot(x, z);
+    if (b.kind !== 'window' && x * b.out.x + z * b.out.z >= inner) return G.floor - G.slab;
     if (r >= wallR) return Hs + lift(t);
     const c = Math.min(1, Math.max(0, (r - rb) / (wallR - rb))), s = Math.acos(c) * 2 / Math.PI;
     return Hs + (Ha - Hs) * Math.sin(s * Math.PI / 2) + lift(t) * (1 - s) ** 2;
@@ -378,7 +438,7 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), z = new THREE.Vector3(0, 0, 1);
     for (const b of bays.filter(b => b.kind === 'shelves')) {
       const w = b.open;
-      for (const [y, room] of [[1.3575, .42], [1.8175, .42], [2.2775, .38], [2.6975, .3]]) {
+      for (const [y, room] of [[1.3575, .42], [1.8175, .38], [2.2375, .3]]) {
         const half = archHalfAt(w, y + .25) - .05;
         let x = -half;
         while (x < half) {

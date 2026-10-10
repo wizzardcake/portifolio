@@ -473,19 +473,20 @@ if (renderer) {
     });
     mesh('banners',merge(banners.map(b=>new THREE.PlaneGeometry(b.width,b.height).rotateY(Math.PI).applyMatrix4(b.matrix))),
       new THREE.MeshStandardMaterial({map:bannerMap,roughness:.92}),false);
-    // The rug: plum ground, a gilt and teal border, rings of small motifs and
-    // a medallion at its heart, under the table where the portal glows.
+    // The rug: a worn, dark plum ground whose edge fades toward the boards'
+    // brown, faint gilt and teal rings and small motifs: it frames the table
+    // without competing with it.
     const rugMap=canvas(512,512,(g,w)=>{
       const c=w/2,ring=(r,width,colour)=>{g.strokeStyle=colour;g.lineWidth=width;g.beginPath();g.arc(c,c,r,0,Math.PI*2);g.stroke();};
-      const ground=g.createRadialGradient(c,c,20,c,c,c);ground.addColorStop(0,'#3a1630');ground.addColorStop(.85,'#2a0f24');ground.addColorStop(1,'#1d0a19');
-      g.fillStyle='#000';g.fillRect(0,0,w,w);g.fillStyle=ground;g.beginPath();g.arc(c,c,c-2,0,Math.PI*2);g.fill();
-      ring(c-10,8,'#8a6a34');ring(c-24,3,'#1f5a55');ring(c-36,2,'#8a6a34');ring(c*.55,3,'#8a6a34');ring(c*.3,2,'#1f5a55');
-      for(const [r,n,size,colour] of [[c-30,48,5,'#b08a48'],[c*.75,32,8,'#245f58'],[c*.42,16,10,'#b08a48']])
+      const ground=g.createRadialGradient(c,c,20,c,c,c);ground.addColorStop(0,'#2a1620');ground.addColorStop(.8,'#21121a');ground.addColorStop(.97,'#251812');ground.addColorStop(1,'#2a1c12');
+      g.fillStyle='#2a1c12';g.fillRect(0,0,w,w);g.fillStyle=ground;g.beginPath();g.arc(c,c,c-1,0,Math.PI*2);g.fill();
+      ring(c-12,5,'#4f3e26');ring(c-24,2,'#173431');ring(c-34,1.5,'#4f3e26');ring(c*.55,2,'#4f3e26');ring(c*.3,1.5,'#173431');
+      for(const [r,n,size,colour] of [[c-29,48,3,'#5a4729'],[c*.75,32,5,'#183c38'],[c*.42,16,6,'#5a4729']])
         for(let k=0;k<n;k++){const a=k/n*Math.PI*2;g.save();g.translate(c+Math.cos(a)*r,c+Math.sin(a)*r);g.rotate(a);
           g.fillStyle=colour;g.beginPath();g.moveTo(-size,0);g.lineTo(0,-size*.6);g.lineTo(size,0);g.lineTo(0,size*.6);g.fill();g.restore();}
     });
-    const rug=new THREE.Mesh(new THREE.CircleGeometry(2.05,64).rotateX(-Math.PI/2),
-      new THREE.MeshStandardMaterial({map:rugMap,roughness:.96,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));
+    const rug=new THREE.Mesh(new THREE.CircleGeometry(1.9,64).rotateX(-Math.PI/2),
+      new THREE.MeshStandardMaterial({map:rugMap,roughness:.98,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));
     rug.name='rug';rug.position.y=.004;rug.receiveShadow=true;scene.add(rug);
   }
 

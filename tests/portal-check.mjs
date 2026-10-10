@@ -582,10 +582,13 @@ try {
   // From the entry the camera walks to the chair, looks down at it as it
   // draws it in, and settles into the seat's fixed look: its tilt goes down
   // once and then up once, steadily, never visibly back and forth (within a
-  // hundredth of a degree: the entry's own tilt is 0.03° off the seat's).
+  // hundredth of a degree). The entry looks only a little down, no steeper
+  // than the seat (the round chamber's entry shows its vault), and the walk
+  // ends exactly on the seat's 75-degree pitch.
   const lowest = approach.reduce((low, frame, i) => frame.pitch < approach[low].pitch ? i : low, 0);
   assert.ok(approach.every((frame, i) => !i || (i <= lowest ? frame.pitch <= approach[i - 1].pitch + .01 : frame.pitch >= approach[i - 1].pitch - .01))
-    && approachPitch <= 75, 'The tilt dips once to the chair and eases steadily into the seat: ' + approach.map(frame => frame.pitch).join());
+    && approachPitch >= 75 && approachPitch < 90 && lowest > 0 && lowest < approach.length - 1,
+    'The tilt dips once to the chair and eases steadily into the seat: ' + approach.map(frame => frame.pitch).join());
   assert.equal(await evaluate(`sceneCamera.camera.pitch`), 75, 'Seated, the camera keeps the portal\'s 75-degree pitch');
   assert.ok(await evaluate(`sceneCamera.distance`) < farDistance, 'The approach physically moves the camera toward the table');
   assert.equal(await evaluate(`studyRoom.camera.fov`),72,'The approach does not substitute FOV zoom for camera movement');

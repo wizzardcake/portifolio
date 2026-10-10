@@ -8,8 +8,8 @@ import {createRoomArchitecture,architectureTuning} from '../room-architecture.js
 const turn=15,stair={from:(-12+turn)*Math.PI/180,step:10*Math.PI/180,rise:.19,inner:.70*1.15/1.35,count:14};
 const tower={x:3.825,z:-2.208,r:1.15};
 const back={z:-4};
-const aperture={x:0,halfWidth:.82,sill:.8,shoulder:3.05,peak:4.3};
-const door={x:0,halfWidth:.8,sill:0,shoulder:1.36,peak:2.75};
+const aperture={x:0,halfWidth:.82,sill:.8,shoulder:3.6,peak:4.9};
+const door={x:0,halfWidth:.74,sill:0,shoulder:1.26,peak:2.54};
 const lancets=[-25,-50,-75].map(degrees=>{
   const at=(degrees+turn)*Math.PI/180,halfWidth=.18;
   const sill=Math.round(((Math.floor((stair.from-at+halfWidth/tower.r)/stair.step)+1)*stair.rise+.18)*100)/100;

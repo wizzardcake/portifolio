@@ -121,7 +121,8 @@ if(!process.argv.includes('--timing-only')) {
     const room=await b.evaluate(`(()=>{const R=studyRoom,f=R.placement.forward,d=R.dimensions;
       const door=R.door?{x:R.door.x,z:R.door.z}:{x:.8,z:d.front};
       const tower=R.tower?{x:R.tower.x,z:R.tower.z-f}:null,win=R.window?{x:R.window.x,z:R.alcove?R.alcove.back-f:d.back}:null;
-      return {dimensions:d,door,tower,window:win,table:{w:sceneCamera.tableWidthPx/sceneCamera.units,d:sceneCamera.tableDepthPx/sceneCamera.units}};})()`);
+      return {dimensions:d,door,tower,window:win,shelf:sceneCamera.shelf.wide,lookYaw:sceneCamera.look.yaw,
+        table:{w:sceneCamera.tableWidthPx/sceneCamera.units,d:sceneCamera.tableDepthPx/sceneCamera.units}};})()`);
     console.log('room',JSON.stringify(room));
     const {door,tower,window:win,dimensions:d}=room;
     const free=(position,lookAt)=>({position,lookAt});
@@ -133,6 +134,10 @@ if(!process.argv.includes('--timing-only')) {
       ['toward-door',free([0,1.6,(win?win.z:d.back)+.9],[door.x,1.3,door.z])],
       ['stair-tower',tower&&free([tower.x-2.4,1.6,tower.z+2.0],[tower.x,1.5,tower.z])],
       ['vault',free([0,1.6,door.z-.6],[0,4.5,(win?win.z:d.back)*.4])],
+      // At the shelf, turned left as far as the pointer at the edge turns it:
+      // the chair should be in view.
+      ['shelf-turned',(()=>{const [x,y,z]=room.shelf.position,[tx,,tz]=room.shelf.lookAt;
+        const yaw=Math.atan2(x-tx,z-tz)+room.lookYaw*Math.PI/180;return free([x,y,z],[x-3*Math.sin(yaw),1,z-3*Math.cos(yaw)]);})()],
     ];
     const stats={};
     const shot=async label=>{await sleep(350);const {data}=await b.cdp('Page.captureScreenshot',{format:'png'});await writeFile(resolve(out,label+'.png'),Buffer.from(data,'base64'));shots.push(label);console.log('Captured',label);};

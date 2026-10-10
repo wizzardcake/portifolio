@@ -24,14 +24,15 @@
     // seat's distance from it and looking straight across the room at the
     // great window: the table is the large, central focal point, the study
     // nook on the left, the tower's mouth on the right and the vault
-    // overhead. It looks at the floor before the window, a hair over the
-    // seat's 15 degrees down, so the walk in only ever tilts toward the
-    // seat's view. `anchor` sets where the table's centre sits in the frame
-    // (a share of the viewport's height; the seat's is `anchorY`'s): lower
-    // here, so the vault shows. Portrait views stand a little further back.
+    // overhead. It looks only about five degrees down, so the columns stand
+    // upright and the dome shows, as in the concept; the walk in then tilts
+    // down to the chair and up into the seat's 15 degrees. `anchor` sets
+    // where the table's centre sits in the frame (a share of the viewport's
+    // height; the seat's is `anchorY`'s): lower here, so the vault shows.
+    // Portrait views stand a little further back.
     entry: {
-      wide: {position: [0, 1.7, 3.4], lookAt: [0, 0, -2.93], anchor: .66},
-      portrait: {position: [0, 1.75, 3.75], lookAt: [0, 0, -2.77], anchor: .68},
+      wide: {position: [0, 1.7, 3.4], lookAt: [0, 1.1, -3.7], anchor: .68},
+      portrait: {position: [0, 1.75, 3.75], lookAt: [0, 1, -3.7], anchor: .7},
     },
     // Final seated POV: the eye of someone sitting in the chair centred in
     // front of the table (seat 0.42 m; the table is knee height), looking
@@ -39,16 +40,18 @@
     // until the real tabletop's front edge spans at most `fit` of the
     // viewport width.
     seated: {eye: 1.18, distance: 1.6, tilt: 15, fit: {wide: .94, portrait: .8}},
-    // Shelf: standing square in front of the study nook in the chamber's left
-    // bay, centred on it and looking straight at its back wall (heading 90
-    // degrees) from a standing eye, a little down: the whole worktop seen
-    // from above, the shelf with its objects, the arch with the columns either
-    // side, and the mist gathered at its foot. The table and the chair are
-    // behind and to the left. Portrait views are narrow; they stand a little
-    // further back, to keep the shelf's three objects.
+    // Shelf: standing before the study nook in the chamber's left bay, a
+    // step toward the window, looking into it at about 28 degrees (heading
+    // 118) from a standing eye, a little down: the worktop seen from above,
+    // the shelf with its objects, the arch with its columns, and the mist
+    // gathered at its foot. Square in front of the nook the chair would stand
+    // almost straight behind (the nook is level with the table); from here it
+    // is a moderate turn to the left (`look`). The table is behind and to the
+    // left. Portrait views are narrow; they stand further back along the same
+    // line, to keep the shelf's three objects.
     shelf: {
-      wide: {position: [-2.25, 1.8, .3], lookAt: [-4.85, 1.1, .3]},
-      portrait: {position: [-1.6, 1.8, .3], lookAt: [-4.85, 1.15, .3]},
+      wide: {position: [-2.6, 1.8, -.75], lookAt: [-4.6, 1.1, .3]},
+      portrait: {position: [-1.95, 1.8, -1.1], lookAt: [-4.6, 1.15, .3]},
     },
     // The ways through the room, which the smoke on the floor draws
     // (room-scene.js) and the camera walks. [x, z], metres.
@@ -67,7 +70,7 @@
     // to it, while the eye comes over it through `sit` into the seat.
     paths: {
       trunk: [[0, 5.3], [0, 4.75], [-.02, 4.1], [-.06, 3.55], [-.12, 3.05], [-.3, 2.55], [-.62, 2.0],
-        [-1.05, 1.5], [-1.5, 1.05], [-1.9, .62], [-2.3, .3], [-2.85, .22], [-3.35, .28], [-3.7, .3]],
+        [-1.05, 1.45], [-1.5, .85], [-1.95, .2], [-2.3, -.35], [-2.6, -.75], [-3.05, -.62], [-3.45, -.25], [-3.7, .2]],
       fork: 4,
       branch: [[.2, 2.75], [.62, 2.3], [.98, 1.88], [1.18, 1.5]],
       sit: [.55, 1.92],
@@ -89,10 +92,9 @@
     // second) that never turns faster than `speed` degrees a second, and goes
     // back to the nook when the pointer does. None under reduced motion or on
     // touch, like the rest of the standing life.
-    // In the round chamber the nook stands level with the table, so the chair
-    // is almost straight behind the visitor (about 175 degrees round from the
-    // nook either way): `yaw` turns them far enough to see it at either edge.
-    look: {yaw: 150, slight: 4, from: .3, to: .95, pitch: 3, stiffness: 2.8, speed: 80},
+    // From the shelf the chair stands about 130 degrees round to the left: at
+    // the very left edge the view turns far enough to bring it in.
+    look: {yaw: 90, slight: 4, from: .3, to: .95, pitch: 3, stiffness: 2.8, speed: 55},
     // The entry's quiet life, so the view never stands dead still: the
     // standing eye sways a little and leans toward the pointer. Metres and
     // degrees; none under reduced motion or on touch. The slow sway is

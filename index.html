@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="no">
 <head>
 <meta charset="UTF-8">
@@ -11,10 +11,6 @@
 <link rel="modulepreload" href="loading-gate.js">
 <link rel="modulepreload" href="loading-exterior-3d.js">
 <link rel="modulepreload" href="loading-exterior.js">
-<link rel="preload" as="image" type="image/webp" href="assets/loading/exterior-a.webp" fetchpriority="high">
-<link rel="preload" as="image" type="image/webp" href="assets/loading/exterior-b.webp">
-<link rel="preload" as="image" type="image/webp" href="assets/loading/exterior-c.webp">
-<link rel="preload" as="image" type="image/webp" href="assets/loading/exterior-drop.webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -30,17 +26,17 @@
 </head>
 <body class="intro-active table-covered">
 <div class="loading-gate" id="loadingGate" aria-busy="true">
-  <div class="loading-gate__portal" data-portal="loading-exterior-3d.js"></div>
+  <div class="loading-gate__portal" data-portal="loading-exterior-3d.js"><div class="loading-living__seed" aria-hidden="true"></div></div>
   <p class="loading-gate__status" role="status">Laster rommet …</p>
   <div class="loading-gate__foot">
     <svg class="loading-gate__ring" viewBox="0 0 48 48" aria-hidden="true"><circle class="loading-gate__track" cx="24" cy="24" r="20"/><circle class="loading-gate__arc" cx="24" cy="24" r="20" pathLength="100"/></svg>
     <button type="button" class="loading-gate__continue" hidden>Trykk en knapp for å fortsette</button>
-    <button type="button" class="loading-gate__enter" hidden>Gå inn</button>
+    <button type="button" class="loading-gate__enter" hidden>Prøv igjen</button>
   </div>
 </div>
-<script type="module" async src="loading-gate.js" onerror="document.getElementById('loadingGate')?.remove();document.documentElement.dataset.siteEntered='yes'"></script>
+<script type="module" async src="loading-gate.js" onerror="document.querySelector('.loading-gate__status').classList.add('is-visible');document.querySelector('.loading-gate__status').textContent='Lastingen kunne ikke starte. Prøv igjen.';document.querySelector('.loading-gate__enter').hidden=false;document.querySelector('.loading-gate__enter').onclick=()=>location.reload()"></script>
 
-<main class="experience" id="experience" aria-label="Interaktiv portfolio">
+<main class="experience" inert id="experience" aria-label="Interaktiv portfolio">
 <div class="intro-scene" id="introScene">
   <div class="room-shell" id="roomShell" aria-hidden="true"><canvas id="roomCanvas"></canvas></div>
   <div class="intro-floor"></div>
@@ -463,3 +459,4 @@ if (new URLSearchParams(location.search).get('impactDebug') === '1') {
 </script>
 <script src="dev/arrange.js"></script></body>
 </html>
+

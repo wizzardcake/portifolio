@@ -1,228 +1,120 @@
-/* The loading gate. From the first paint the exterior (the building of orb
-   glass the room is inside) floats in the void over everything (index.html's
-   #loadingGate, loading-gate.css), and the page beneath is inert, so nothing
-   half-built is seen or touched. When the room is genuinely ready
-   (window.siteReady, site-ready.js) the building gathers energy, its entrance
-   becomes the focus, and the view accelerates toward and through it; once
-   the entrance fills the screen the gate thins away over the finished room,
-   and the room's own entry carries on. Under reduced motion the gate simply
-   fades. No input reaches the room until the gate is gone.
-
-   This module runs as soon as it arrives (async, right after the gate's
-   markup), so the exterior starts before the rest of the page is parsed; what
-   needs the whole page (the inert page, the ready signal) waits for it.
-
-   While the gate hides the room completely (loadingGate.veiled), the room's
-   idle life waits: unseen, it would only take frames from the way in.
-   Events on window: 'site-entering' as the way in begins (the room takes its
-   smoke back, to grow it in again from the visitor's feet), 'site-unveiling'
-   just before the gate starts to thin (the idle life resumes), 'site-entered'
-   once the gate is gone and the page is no longer inert (also
-   <html data-site-entered="yes">).
-
-   What stands in the gate is the module the mount names (data-portal), with
-   createLoadingPortal(): loading-exterior.js (opening, the entrance's place
-   on screen; doorwayGrowth; setApproach; dispose), or Codex's
-   loading-portal.js, which keeps the same contract. Without it, or if it
-   fails, a CSS orb stands in and the way in centres on that. The gate's
-   own motion is Web Animations, run by the compositor, so it keeps its pace
-   even when the page's main thread is busy.
-
-   Should the room be unusually slow, the visitor is offered to go in anyway.
-
-   Once the room is ready the loading ring closes and the visitor is asked to
-   go on ("Trykk en knapp for å fortsette"); the way in starts at their key,
-   click or tap, not before.
-
-   window.loadingGate: state ('loading', 'waiting', 'entering', 'entered'), the way in
-   ('through' or 'fade'), timings, and the frame intervals during it, for
-   checks (tests/loading-gate-check.mjs). */
-const SLOW_MS = 12000;
-// The question to go on starts to show this long after the room is ready.
-const PROMPT_MS = 800;
-const gate = document.getElementById('loadingGate');
-const still = matchMedia('(prefers-reduced-motion: reduce)');
-const stats = {state: 'loading', portal: null, way: null, veiled: true, portalAt: null, readyAt: null, unveiledAt: null, enteredAt: null, ready: null, frames: []};
-// The rest of the page: inert from when it is parsed until it may be seen.
-let others = [];
-window.loadingGate = {
-  get state() {return stats.state;},
-  // True while the gate hides the room completely: its idle life waits.
-  get veiled() {return stats.veiled;},
-  get stats() {return {...stats, frames: [...stats.frames]};},
-};
-
-// The room may show again: the gate begins to thin ('site-unveiling').
-function unveil() {
-  if (!stats.veiled) return;
-  stats.veiled = false;
-  stats.unveiledAt = Math.round(performance.now());
-  dispatchEvent(new Event('site-unveiling'));
+﻿/* Loading gate: room readiness AND completed exterior formation.
+   The interior is inert until entry finishes. The exterior never determines
+   readiness, and failures/timeouts never expose an unpainted room.
+   Existing site-entering / site-unveiling / site-entered events are preserved. */
+const gate=document.getElementById('loadingGate'),media=matchMedia('(prefers-reduced-motion: reduce)');
+const stats={state:'loading',portal:null,way:null,veiled:true,portalAt:null,readyAt:null,formationAt:null,unveiledAt:null,enteredAt:null,ready:null,frames:[],phases:[]};
+let siblings=[],portal=null,canEnter=false,slow,recording=false;
+const blockedEvents=['pointerdown','pointerup','pointermove','click','wheel','keydown'];
+function blockRoomInput(event){
+ if(event.target?.closest?.('.loading-gate__enter'))return;
+ event.stopImmediatePropagation();
+ if(!(event.type==='keydown'&&event.key==='Tab')&&event.cancelable)event.preventDefault();
 }
-function entered(detail) {
-  unveil();
-  // Only now may the page be used: no input reaches the room during the way in.
-  others.forEach(element => {element.inert = false;});
-  stats.state = 'entered';
-  stats.enteredAt = Math.round(performance.now());
-  document.documentElement.dataset.siteEntered = 'yes';
-  dispatchEvent(new CustomEvent('site-entered', {detail: {...detail, enteredAt: stats.enteredAt}}));
+if(gate)blockedEvents.forEach(type=>addEventListener(type,blockRoomInput,{capture:true,passive:false}));
+
+window.loadingGate={get state(){return stats.state;},get veiled(){return stats.veiled;},get stats(){return{...stats,frames:[...stats.frames],phases:[...stats.phases]};}};
+const parsed=()=>document.readyState==='loading'?new Promise(r=>document.addEventListener('readystatechange',r,{once:true})):Promise.resolve();
+const painted=()=>!!document.querySelector('#roomShell.is-ready,#roomShell.room-fallback');
+async function awaitPaintedRoom(){
+ if(!painted())await new Promise(resolve=>{
+  const observer=new MutationObserver(()=>{if(painted()){observer.disconnect();resolve();}});
+  observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
+ });
+ await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 }
-// The parser is done (not DOMContentLoaded, which also waits for the room's
-// module scripts to run).
-const parsed = () => document.readyState !== 'loading' ? Promise.resolve()
-  : new Promise(done => document.addEventListener('readystatechange', done, {once: true}));
-
-if (!gate) entered({state: 'no-gate'});
-else {
-  const mount = gate.querySelector('.loading-gate__portal');
-  const status = gate.querySelector('.loading-gate__status');
-  const anyway = gate.querySelector('.loading-gate__enter');
-  const proceed = gate.querySelector('.loading-gate__continue');
-  let portal = null, detail = {state: 'unknown'};
-  const open = () => {
-    gate.remove();
-    try {portal?.dispose();} catch {}
-    entered(detail);
-  };
-  try {
-    // The dark gate is painted first; the portal (its texture takes a moment
-    // to make) starts in the frame after, and emerges from it.
-    await new Promise(done => requestAnimationFrame(() => setTimeout(done)));
-    if (mount.dataset.portal) {
-      try {
-        const {createLoadingPortal} = await import(new URL(mount.dataset.portal, document.baseURI).href);
-        portal = createLoadingPortal(mount);
-      } catch (error) {
-        console.warn('Loading: the portal could not start; the orb stands in:', error?.message || error);
-      }
-    }
-    if (!portal && !mount.querySelector('.loading-gate__orb')) {
-      const orb = document.createElement('div');orb.className = 'loading-gate__orb';orb.setAttribute('aria-hidden', 'true');mount.append(orb);
-    }
-    stats.portal = portal ? 'loading-portal' : 'orb';
-    stats.portalAt = Math.round(performance.now());
-
-    const slow = setTimeout(() => {if (anyway) anyway.hidden = false;}, SLOW_MS);
-    const chosen = new Promise(done => anyway?.addEventListener('click', () => done({state: 'chosen'}), {once: true}));
-    await parsed();
-    others = [...document.body.children].filter(element => element !== gate && element.tagName !== 'SCRIPT');
-    if (stats.veiled) others.forEach(element => {element.inert = true;});
-    const ready = window.siteReady || new Promise(done => addEventListener('load', () => done({state: 'unknown'}), {once: true}));
-    detail = await Promise.race([ready, chosen]);
-    clearTimeout(slow);
-    if (anyway) anyway.hidden = true;
-    stats.ready = detail.state;
-    stats.readyAt = Math.round(performance.now());
-    gate.setAttribute('aria-busy', 'false');
-    // Ready: the ring closes and the visitor is asked to go on. Nothing moves
-    // until they do: any key (but Tab and lone modifiers), a click or a tap
-    // anywhere on the gate. One who already chose to go in early is not
-    // asked twice.
-    if (detail.state !== 'chosen') {
-      stats.state = 'waiting';
-      gate.classList.add('is-ready');
-      if (status) status.textContent = 'Rommet er klart. Trykk en knapp for å fortsette.';
-      if (proceed) { proceed.hidden = false; proceed.focus({preventScroll: true}); }
-      // Only what the visitor does once they can see the question counts (it
-      // starts to show PROMPT_MS after the ring closes, loading-gate.css): a
-      // click made while the room was loading, or as it became ready, is not
-      // an answer.
-      const askedAt = performance.now() + PROMPT_MS;
-      stats.listeningAt = Math.round(askedAt);
-      await new Promise(done => {
-        const go = event => {
-          if (event.timeStamp < askedAt) return;
-          if (event.type === 'keydown' && (event.repeat || ['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock'].includes(event.key))) return;
-          event.preventDefault();
-          stats.continuedBy = event.type + (event.key ? ':' + event.key : '');
-          removeEventListener('keydown', go, true); gate.removeEventListener('pointerdown', go); proceed?.removeEventListener('click', go);
-          done();
-        };
-        addEventListener('keydown', go, true);
-        gate.addEventListener('pointerdown', go);
-        proceed?.addEventListener('click', go);
-      });
-      stats.continuedAt = Math.round(performance.now());
-      gate.classList.add('is-going');
-    }
-    stats.state = 'entering';
-    // The portal finishes emerging before it answers (only on a very fast load).
-    await mount.getAnimations().find(animation => animation.animationName === 'gate-appear')?.finished;
-    // A 3D portal kept asleep while the room was built wakes for the way in.
-    if (portal?.wake && !still.matches) await portal.wake();
-    dispatchEvent(new CustomEvent('site-entering', {detail}));
-
-    // Frame intervals while the gate moves.
-    let recording = true;
-    (function record(last) {
-      requestAnimationFrame(now => {
-        if (last !== undefined) stats.frames.push(+(now - last).toFixed(1));
-        if (recording) record(now);
-      });
-    })();
-    try {
-      stats.way = still.matches ? 'fade' : 'through';
-      if (still.matches) {
-        unveil();
-        await gate.animate([{opacity: 1}, {opacity: 0}], {duration: 450, easing: 'ease-in-out', fill: 'forwards'}).finished;
-      } else if (portal?.flies) {
-        // A portal in real 3D flies in through its own entrance: its energy
-        // rises, its view accelerates through the doorway, and the gate thins
-        // over the room as the far end of the entrance fills the screen.
-        stats.way = 'flight';
-        await mount.animate([{filter: 'brightness(1)'}, {filter: 'brightness(1.08)'}], {duration: 380, easing: 'ease-out', fill: 'forwards'}).finished;
-        const duration = 1250;
-        const flight = portal.fly(duration);
-        const thin = gate.animate([{opacity: 1}, {opacity: 0}], {duration: duration * .24, delay: duration * .76, easing: 'ease-in-out', fill: 'forwards'});
-        setTimeout(unveil, duration * .65);
-        await Promise.all([flight, thin.finished]);
-      } else {
-        // 1. It answers: its energy rises, a little (the exterior's glass
-        // should stay dark; its entrance brightens through setApproach).
-        await mount.animate([{filter: 'brightness(1) saturate(1)'}, {filter: 'brightness(1.14) saturate(1.1)'}],
-          {duration: 380, easing: 'ease-out', fill: 'forwards'}).finished;
-        // 2. The doorway becomes the focus: the portal scales about it (the
-        // dark around it stays; scaling that too would only cost raster) ...
-        const box = mount.getBoundingClientRect();
-        const opening = portal?.opening || {x: box.left + box.width / 2, y: box.top + box.height / 2, width: box.width * .4, height: box.height * .6};
-        mount.style.transformOrigin = `${opening.x - box.left}px ${opening.y - box.top}px`;
-        // ... and the view accelerates through it. The doorway's size grows in
-        // equal steps of log scale, at an easing-in rate, and fills the screen
-        // at COVERED of the way. What the doorway grows by itself as the view
-        // nears (setApproach) the mount's scale leaves out.
-        const COVERED = .8, steps = 16, duration = 1100;
-        const cover = Math.max(innerWidth / Math.max(1, opening.width), innerHeight / Math.max(1, opening.height)) * 1.1;
-        const approach = t => portal ? Math.min(1, t * t) : 0;
-        // How much the doorway grows by itself at approach 1 (Codex's
-        // loading-portal.js: its depth layer, 1 + 2.8p; the exterior: none).
-        const growth = portal?.doorwayGrowth ?? (portal ? 2.8 : 0);
-        const doorway = t => cover ** ((t / COVERED) ** 2);
-        const zoom = mount.animate(Array.from({length: steps + 1}, (_, i) => {
-          const t = i / steps;
-          return {transform: `scale(${Math.max(1, doorway(t) / (1 + growth * approach(t)))})`};
-        }), {duration, easing: 'linear', fill: 'forwards'});
-        // 3-4. Through the doorway, the gate thins over the room.
-        const thin = gate.animate([{opacity: 1}, {opacity: 0}], {duration: duration * .3, delay: duration * .7, easing: 'ease-in-out', fill: 'forwards'});
-        // The room's life resumes a few frames before it can be seen.
-        (function watch() {
-          if ((zoom.currentTime ?? 0) >= duration * .6 || zoom.playState === 'finished') unveil();
-          else requestAnimationFrame(watch);
-        })();
-        // The portal's layers follow the zoom's own clock, so they keep in
-        // step with it even when a frame of the page's comes late.
-        if (portal) (function lean() {
-          const t = zoom.playState === 'finished' ? 1 : Math.min(1, (zoom.currentTime ?? 0) / duration);
-          portal.setApproach(approach(t));
-          if (t < 1 && stats.state === 'entering') requestAnimationFrame(lean);
-        })();
-        await Promise.all([zoom.finished, thin.finished]);
-      }
-    } finally {
-      recording = false;
-    }
-  } catch (error) {
-    console.warn('Loading: the way in failed; entering directly:', error?.message || error);
+function unveil(){
+ if(!stats.veiled)return;stats.veiled=false;stats.unveiledAt=Math.round(performance.now());dispatchEvent(new Event('site-unveiling'));
+}
+function open(detail){
+ if(!canEnter)return;
+ blockedEvents.forEach(type=>removeEventListener(type,blockRoomInput,true));
+ unveil();stats.exterior=portal?.stats;portal?.dispose();gate?.remove();
+ siblings.forEach(([el,inert])=>{el.inert=inert;});
+ // The main is statically inert to protect the first parsed frame.
+ const experience=document.getElementById('experience');if(experience)experience.inert=false;
+ stats.state='entered';stats.enteredAt=Math.round(performance.now());document.documentElement.dataset.siteEntered='yes';
+ dispatchEvent(new CustomEvent('site-entered',{detail:{...detail,enteredAt:stats.enteredAt}}));
+}
+function notePhase(event){
+ stats.phases.push({phase:event.detail.phase,at:Math.round(performance.now())});
+ if(stats.phases.length>30)stats.phases.shift();
+ if(event.detail.phase==='curtains')unveil();
+}
+if(gate){
+ const mount=gate.querySelector('.loading-gate__portal'),status=gate.querySelector('.loading-gate__status'),retry=gate.querySelector('.loading-gate__enter');
+ const retryLoading=()=>location.reload();
+ retry?.addEventListener('click',retryLoading);
+ const offer=(message='Rommet bruker litt ekstra tid. Du kan vente eller prøve igjen.')=>{
+  if(retry){retry.textContent='Prøv igjen';retry.hidden=false;}
+  if(status){status.textContent=message;status.classList.add('is-visible');}
+ };
+ const backdrop=document.createElement('div');backdrop.className='loading-gate__backdrop';gate.prepend(backdrop);
+ addEventListener('loading-exterior-phase',notePhase);
+ let detail;
+ try{
+  slow=setTimeout(()=>offer(),16000);
+  await new Promise(r=>requestAnimationFrame(()=>setTimeout(r)));
+  try{
+   const module=await import(new URL(mount.dataset.portal,document.baseURI));
+   portal=module.createLoadingPortal(mount);
+  }catch(error){
+   const seed=document.createElement('div');seed.className='loading-living__seed';mount.append(seed);
+   stats.portalFailure=error.message;
   }
-  open();
+  stats.portal=portal?'loading-portal':'orb';stats.portalAt=Math.round(performance.now());
+  const formed=Promise.resolve(portal?.formation).then(()=>{stats.formationAt=Math.round(performance.now());});
+  await parsed();
+  siblings=[...document.body.children].filter(el=>el!==gate&&el.tagName!=='SCRIPT').map(el=>[el,el.inert]);
+  siblings.forEach(([el])=>{el.inert=true;});
+  const room=(async()=>{
+   if(!window.siteReady)throw Error('The readiness coordinator is unavailable');
+   const result=await window.siteReady;
+   // siteReady can be degraded by an unrelated error. Still require a drawn room.
+   await awaitPaintedRoom();
+   stats.ready=result.state;stats.readyAt=Math.round(performance.now());
+   return result;
+  })();
+  [detail]=await Promise.all([room,formed]);
+  clearTimeout(slow);canEnter=true;
+  retry.hidden=true;status?.classList.remove('is-visible');
+  gate.setAttribute('aria-busy','false');gate.classList.add('is-going','is-ready');
+  if(status)status.textContent='Rommet er klart. Vi går inn.';
+  stats.state='entering';
+  dispatchEvent(new CustomEvent('site-entering',{detail}));
+  recording=true;
+  let previous;
+  function sample(now){if(!recording)return;if(previous!==undefined&&stats.frames.length<1500)stats.frames.push(+(now-previous).toFixed(1));previous=now;requestAnimationFrame(sample);}
+  requestAnimationFrame(sample);
+  const fade=async(duration)=>{unveil();await gate.animate([{opacity:1},{opacity:0}],{duration,easing:'ease-in-out',fill:'forwards'}).finished;};
+  if(media.matches){
+   stats.way='fade';await fade(450);
+  }else if(portal?.flies){
+   stats.way='flight';
+   portal.onAperture=({points,covered,fade:amount})=>{
+    unveil();gate.classList.add('is-revealing');
+    // An even-odd cut in the original background, aligned to the real 3D arch.
+    // The unchanged, prepared room is behind it; curtains are still drawn in front.
+    const outer='M 0 0 H '+innerWidth+' V '+innerHeight+' H 0 Z ';
+    const hole=points?'M '+points.map(p=>p.join(' ')).join(' L ')+' Z':'';
+    gate.style.setProperty('--gate-aperture',covered?'inset(100%)':'path(evenodd, "'+outer+hole+'")');
+    if(amount>0)gate.style.opacity=String(1-amount);
+   };
+   const change=()=>{if(media.matches){portal.setReducedMotion(true);portal.dispose();}};
+   media.addEventListener('change',change);
+   let flown;
+   try{flown=await portal.fly();}finally{media.removeEventListener('change',change);}
+   if(!flown||media.matches)await fade(450);
+  }else{
+   stats.way='fade-fallback';await fade(700);
+  }
+ }catch(error){
+  stats.failure=error?.message||String(error);
+  if(canEnter){unveil();await gate.animate([{opacity:1},{opacity:0}],{duration:450,fill:'forwards'}).finished;}
+  else offer('Rommet kunne ikke klargjøres. Prøv å laste siden på nytt.');
+ }finally{
+  recording=false;clearTimeout(slow);removeEventListener('loading-exterior-phase',notePhase);
+  if(canEnter){retry?.removeEventListener('click',retryLoading);open(detail);}
+ }
 }
+

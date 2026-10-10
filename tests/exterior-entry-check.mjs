@@ -119,7 +119,12 @@ try {
   assert.equal(await evaluate("document.querySelector('#deviceTilt').dataset.approach"),'entry');
   await sleep(1200);await shot('flow');
   held.delete('/room-scene.js');release();
-  await until("loadingGate.state==='entering'");await shot('ready');
+  // Ready, the gate asks the visitor to go on: nothing moves until a key is pressed.
+  await until("loadingGate.state==='waiting'");await shot('ready');
+  await until("performance.now() >= loadingGate.stats.listeningAt");await sleep(300);
+  assert.equal(await evaluate("loadingGate.state"),'waiting','The way in waits for the visitor');
+  await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  await until("loadingGate.state==='entering'");
   await sleep(700);await shot('approach');
   await sleep(800);await shot('threshold');
   await until(entered);await sleep(300);await shot('entered');await assertEntered('Desktop');

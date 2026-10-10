@@ -77,7 +77,7 @@ try {
   async function until(expression, timeout = 90000) {
     const start = Date.now();
     while (!await evaluate(expression)) {
-      if (Date.now() - start > timeout) throw new Error('Timed out: ' + expression);
+      if (Date.now() - start > timeout) throw new Error('Timed out: ' + expression + ' | ' + JSON.stringify(await evaluate("({gate: !!document.getElementById('loadingGate'), state: window.loadingGate?.state, ready: window.loadingGate?.stats.ready, way: window.loadingGate?.stats.way, by: window.loadingGate?.stats.continuedBy, events: Object.keys(__gate.events)})").catch(e => e.message)));
       await sleep(100);
     }
   }
@@ -102,6 +102,16 @@ try {
     for (const name of ['site-ready', 'site-entering', 'site-entered']) addEventListener(name, event => { __gate.events[name] = {at: performance.now(), detail: event.detail}; });`});
   const loaded = "document.readyState !== 'loading' && !!document.getElementById('loadingGate')";
   const entered = "document.documentElement.dataset.siteEntered === 'yes'";
+  // Once ready, the gate waits for the visitor: press a key (or tap) to go on.
+  const asking = "window.loadingGate?.state === 'waiting' && !document.querySelector('.loading-gate__continue').hidden";
+  async function pressOn(how = 'key') {
+    // Presses count once the question shows (loadingGate.stats.listeningAt).
+    await until(asking + ' && performance.now() >= loadingGate.stats.listeningAt');
+    if (how === 'key') {
+      await cdp('Input.dispatchKeyEvent', {type: 'keyDown', key: 'a', code: 'KeyA', text: 'a', windowsVirtualKeyCode: 65});
+      await cdp('Input.dispatchKeyEvent', {type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65});
+    } else await click(await evaluate('innerWidth / 2'), await evaluate('innerHeight * .3'));
+  }
   const goChair = `(() => { const r = document.querySelector('#goChair').getBoundingClientRect(); return [Math.round(r.x + r.width / 2) || innerWidth / 2, Math.round(r.y + r.height / 2) || innerHeight / 2]; })()`;
   // After entry: the gate is gone, nothing is inert, and the page is on top.
   async function assertEntered(label) {
@@ -129,6 +139,15 @@ try {
   assert.ok(ready.roomShown, 'The room has drawn by the time it is ready');
   assert.ok(ready.stillGate, 'The gate was still there when the room became ready');
   assert.ok(ready.first?.gate, 'The first paint already holds the gate: ' + JSON.stringify(ready.first));
+  // Ready, the ring closes and the visitor is asked; nothing moves until they press.
+  await until(asking);
+  await shot('ready');
+  assert.equal(await evaluate("document.querySelector('.loading-gate__continue').textContent"), 'Trykk en knapp for å fortsette', 'The visitor is asked to press a key');
+  assert.equal(await evaluate("document.querySelector('.loading-gate__continue').tabIndex"), 0, 'The prompt can be reached by keyboard (any key goes on, wherever the focus is)');
+  await sleep(1500);
+  assert.equal(await evaluate("loadingGate.state"), 'waiting', 'The way in waits for the visitor');
+  assert.equal(await evaluate("!!__gate.events['site-entering']"), false, 'Nothing has started');
+  await pressOn('key');
   await until(entered);
   await assertEntered('Desktop');
   const desk = await evaluate('loadingGate.stats');
@@ -149,6 +168,8 @@ try {
   await until(loaded);
   await shot('mobile-loading');
   assert.ok(await evaluate("(() => { const r = document.querySelector('.loading-gate__portal').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; })()"), 'The portal fits the phone');
+  assert.ok(await evaluate("(() => { const r = document.querySelector('.loading-gate__ring').getBoundingClientRect(); return r.width > 30 && r.bottom <= innerHeight && r.top > innerHeight / 2; })()"), 'The loading ring shows below the building');
+  await pressOn('tap');
   await until(entered);
   await assertEntered('Mobile');
   assert.equal(await evaluate("document.documentElement.scrollWidth <= innerWidth"), true, 'No sideways scroll after entry');
@@ -157,7 +178,9 @@ try {
   await until(loaded);
   await until("!!document.querySelector('.loading-gate .loading-exterior')");
   assert.equal(await evaluate("document.querySelector('.loading-exterior').dataset.reducedMotion"), 'true', 'Reduced motion: the exterior knows');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.loading-gate__ring')).animationName"), 'none', 'Reduced motion: the ring does not turn');
   assert.deepEqual(await evaluate("[...document.querySelectorAll('.loading-exterior__building, .loading-exterior__layer--b')].map(e => getComputedStyle(e).animationName + ':' + getComputedStyle(e).opacity)"), ['none:1', 'none:0'], 'Reduced motion: one still image, nothing moving');
+  await pressOn('key');
   await until(entered);
   await assertEntered('Reduced motion');
   assert.equal(await evaluate('loadingGate.stats.way'), 'fade', 'Reduced motion: the gate fades instead of flying through');
@@ -168,6 +191,7 @@ try {
     HTMLCanvasElement.prototype.getContext = function (type, ...args) { return type.includes('webgl') ? null : original.call(this, type, ...args); };`});
   await viewport(1440, 900);
   await cdp('Page.navigate', {url});
+  await pressOn('key');
   await until(entered);
   await assertEntered('No WebGL');
   assert.equal(await evaluate('document.documentElement.dataset.siteReady'), 'fallback', 'No WebGL: ready with the fallback');
@@ -179,6 +203,7 @@ try {
   missing.add('/portal-effects.js');
   errors.length = 0;
   await cdp('Page.navigate', {url});
+  await pressOn('key');
   await until(entered);
   await assertEntered('Missing part');
   assert.equal(await evaluate('document.documentElement.dataset.siteReady'), 'degraded', 'A missing part: degraded, not stuck');
@@ -193,6 +218,7 @@ try {
   await until("!!window.loadingGate?.stats.portal");
   assert.equal(await evaluate('loadingGate.stats.portal'), 'orb', 'No exterior module: the orb stands in');
   assert.ok(await evaluate("!!document.querySelector('.loading-gate__orb')"), 'The stand-in orb is shown');
+  await pressOn('key');
   await until(entered);
   await assertEntered('No exterior module');
   missing.delete('/loading-exterior.js');

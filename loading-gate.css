@@ -84,11 +84,61 @@
   white-space: nowrap;
 }
 /* Offered only if the room is unusually slow: the visitor may go in anyway. */
-.loading-gate__enter {
+/* Below the building: the loading ring while the room is built; once it is
+   ready the ring closes and the visitor is asked to go on. */
+.loading-gate__foot {
   position: absolute;
-  left: 50%;
-  bottom: max(28px, 8svh);
-  translate: -50% 0;
+  left: 0;
+  right: 0;
+  bottom: max(22px, 5svh);
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  align-items: end;
+  pointer-events: none;
+}
+.loading-gate__foot > * { grid-area: 1 / 1; pointer-events: auto; }
+/* An honest ring: it turns while the room is being built (no percentage it
+   could not know), and closes when the room is genuinely ready. */
+.loading-gate__ring {
+  width: clamp(54px, 6.4svh, 64px);
+  height: clamp(54px, 6.4svh, 64px);
+  overflow: visible;
+  filter: drop-shadow(0 0 7px #6fe0c988) drop-shadow(0 0 18px #6fe0c933);
+  animation: gate-spin 1.15s linear infinite, gate-appear .6s ease-out both;
+  transition: opacity .6s ease .75s, scale .6s ease .75s;
+}
+@keyframes gate-spin { to { rotate: 360deg; } }
+.loading-gate__track { fill: none; stroke: #cdbfe633; stroke-width: 3; }
+.loading-gate__arc {
+  fill: none;
+  stroke: #8ff0dc;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-dasharray: 30 100;
+  transition: stroke-dasharray .7s cubic-bezier(.3, .7, .3, 1), stroke .7s ease;
+}
+.loading-gate.is-ready .loading-gate__ring { animation-play-state: paused; opacity: 0; scale: .85; }
+.loading-gate.is-ready .loading-gate__arc { stroke-dasharray: 100 0; stroke: #b9fff0; }
+.loading-gate__continue {
+  padding: 12px 22px;
+  border: 0;
+  background: none;
+  color: #e3d8f6;
+  font: 600 clamp(14px, 1.6vw, 17px)/1.2 Cinzel, Georgia, serif;
+  letter-spacing: .12em;
+  cursor: pointer;
+  opacity: 0;
+  /* Starts to show 0.8 s after the ring closes (PROMPT_MS in loading-gate.js). */
+  transition: opacity .8s ease .8s;
+}
+.loading-gate__continue[hidden] { display: none; }
+.loading-gate.is-ready .loading-gate__continue { opacity: 1; animation: gate-prompt 2.8s ease-in-out 1.6s infinite; }
+@keyframes gate-prompt { 0%, 100% { text-shadow: 0 0 0 #7fe8d200; } 50% { text-shadow: 0 0 14px #7fe8d2aa; } }
+.loading-gate__continue:focus-visible { outline: 1px solid #7fe8d299; outline-offset: 4px; border-radius: 999px; }
+.loading-gate.is-going .loading-gate__continue { opacity: 0; transition: opacity .3s ease; animation: none; }
+.loading-gate__enter {
+  margin-bottom: 84px;
   padding: 10px 22px;
   border: 1px solid #cdbfe655;
   border-radius: 999px;
@@ -97,7 +147,6 @@
   font: 500 15px/1.2 Inter, system-ui, sans-serif;
   letter-spacing: .04em;
   cursor: pointer;
-  z-index: 2;
   animation: gate-appear .6s ease-out both;
 }
 .loading-gate__enter[hidden] { display: none; }
@@ -105,4 +154,6 @@
 .loading-gate__enter:focus-visible { border-color: #cdbfe6; outline: none; }
 @media (prefers-reduced-motion: reduce) {
   .loading-gate__orb, .loading-gate::before, .loading-gate::after { animation: none; }
+  .loading-gate__ring { animation: none; }
+  .loading-gate.is-ready .loading-gate__continue { animation: none; }
 }

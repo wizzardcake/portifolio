@@ -30,10 +30,16 @@
 
    Should the room be unusually slow, the visitor is offered to go in anyway.
 
-   window.loadingGate: state ('loading', 'entering', 'entered'), the way in
+   Once the room is ready the loading ring closes and the visitor is asked to
+   go on ("Trykk en knapp for å fortsette"); the way in starts at their key,
+   click or tap, not before.
+
+   window.loadingGate: state ('loading', 'waiting', 'entering', 'entered'), the way in
    ('through' or 'fade'), timings, and the frame intervals during it, for
    checks (tests/loading-gate-check.mjs). */
 const SLOW_MS = 12000;
+// The question to go on starts to show this long after the room is ready.
+const PROMPT_MS = 800;
 const gate = document.getElementById('loadingGate');
 const still = matchMedia('(prefers-reduced-motion: reduce)');
 const stats = {state: 'loading', portal: null, way: null, veiled: true, portalAt: null, readyAt: null, unveiledAt: null, enteredAt: null, ready: null, frames: []};
@@ -72,6 +78,7 @@ else {
   const mount = gate.querySelector('.loading-gate__portal');
   const status = gate.querySelector('.loading-gate__status');
   const anyway = gate.querySelector('.loading-gate__enter');
+  const proceed = gate.querySelector('.loading-gate__continue');
   let portal = null, detail = {state: 'unknown'};
   const open = () => {
     gate.remove();
@@ -107,9 +114,39 @@ else {
     if (anyway) anyway.hidden = true;
     stats.ready = detail.state;
     stats.readyAt = Math.round(performance.now());
-    stats.state = 'entering';
-    if (status) status.textContent = 'Rommet er klart';
     gate.setAttribute('aria-busy', 'false');
+    // Ready: the ring closes and the visitor is asked to go on. Nothing moves
+    // until they do: any key (but Tab and lone modifiers), a click or a tap
+    // anywhere on the gate. One who already chose to go in early is not
+    // asked twice.
+    if (detail.state !== 'chosen') {
+      stats.state = 'waiting';
+      gate.classList.add('is-ready');
+      if (status) status.textContent = 'Rommet er klart. Trykk en knapp for å fortsette.';
+      if (proceed) { proceed.hidden = false; proceed.focus({preventScroll: true}); }
+      // Only what the visitor does once they can see the question counts (it
+      // starts to show PROMPT_MS after the ring closes, loading-gate.css): a
+      // click made while the room was loading, or as it became ready, is not
+      // an answer.
+      const askedAt = performance.now() + PROMPT_MS;
+      stats.listeningAt = Math.round(askedAt);
+      await new Promise(done => {
+        const go = event => {
+          if (event.timeStamp < askedAt) return;
+          if (event.type === 'keydown' && (event.repeat || ['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock'].includes(event.key))) return;
+          event.preventDefault();
+          stats.continuedBy = event.type + (event.key ? ':' + event.key : '');
+          removeEventListener('keydown', go, true); gate.removeEventListener('pointerdown', go); proceed?.removeEventListener('click', go);
+          done();
+        };
+        addEventListener('keydown', go, true);
+        gate.addEventListener('pointerdown', go);
+        proceed?.addEventListener('click', go);
+      });
+      stats.continuedAt = Math.round(performance.now());
+      gate.classList.add('is-going');
+    }
+    stats.state = 'entering';
     // The portal finishes emerging before it answers (only on a very fast load).
     await mount.getAnimations().find(animation => animation.animationName === 'gate-appear')?.finished;
     // A 3D portal kept asleep while the room was built wakes for the way in.

@@ -440,6 +440,32 @@ user's review.
      shows while the room is built, and the 3D view wakes for the drift and
      the flight.
 
+4. **Press to go on, and a clear loading ring** (the user: they want to press
+   to continue once loading is done, a clear loading circle, and "trykk en
+   knapp for å fortsette" before the zoom in).
+   - **While the room is built**, a ring turns below the building
+     (`.loading-gate__ring`): a glowing teal arc on a faint track. It is
+     indeterminate: it shows no percentage it could not know.
+   - **Once the room is genuinely ready**, the ring closes into a full
+     circle and fades. Then "Trykk en knapp for å fortsette" (Cinzel,
+     gently pulsing) shows in its place, and the screen reader hears "Rommet
+     er klart. Trykk en knapp for å fortsette."
+   - **Nothing moves until the visitor answers.** Any key (but Tab and lone
+     modifiers), a click or a tap anywhere on the gate, or the button
+     itself starts the way in. The room stays veiled and inert while the
+     gate waits.
+   - **Only answers given once the question shows count**
+     (`loadingGate.stats.listeningAt`, 0.8 s after ready, when the text
+     starts to fade in). In the check, a click made during loading reached
+     the gate late and would otherwise have gone in by itself.
+   - **States:** `loadingGate.state` is 'loading', 'waiting', 'entering' or
+     'entered'. The "Gå inn" offer for an unusually slow room still goes in
+     at once.
+   - **Tests:** the room suites press on when asked. `loading-gate-check`
+     checks that the way in waits, then goes on by key (desktop) and by tap
+     (phone); the ring shows on the phone and is still under reduced motion.
+     `exterior-entry-check` presses Enter once asked.
+
 ### Codex's state at takeover
 
 Codex stopped at its usage limit with no tracked file changed and nothing
@@ -609,6 +635,9 @@ the display itself, so nothing on the loading screen can move through it
 
 ## Remaining for later passes
 
+- **The entrance inside does not match the outside.** The user noticed that
+  the room's door, seen from inside after the way in, is not the
+  exterior's pointed arch. To be fixed once the exterior is settled.
 - **The 3D view on phones** is untested on a real device. It is heavy
   per pixel (the orb's volume through the glass). On a weak GPU,
   `data-live="ready"` or a lower resolution may be needed.

@@ -8,9 +8,10 @@ import {resolve,extname,sep} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
-// The loading gate (loading-gate.js) covers the page until the room is ready;
-// every wait below begins once it has let the visitor in.
-const GATE_OPEN = "(document.readyState !== 'loading' && (!document.getElementById('loadingGate') || document.documentElement.dataset.siteEntered === 'yes'))";
+// The loading gate (loading-gate.js) covers the page until the room is ready
+// and then asks the visitor to go on; every wait below presses on when asked
+// and begins once the gate has let the visitor in.
+const GATE_OPEN = "(document.querySelector('.loading-gate__continue:not([hidden])')?.click(), document.readyState !== 'loading' && (!document.getElementById('loadingGate') || document.documentElement.dataset.siteEntered === 'yes'))";
 
 const root=resolve(import.meta.dirname,'..');
 const name=process.argv.find(a=>a.startsWith('--out='))?.slice(6)||'relay-final';

@@ -46,6 +46,9 @@ try{
   const {targetInfos}=await cdp('Target.getTargets',{},false);
   session=(await cdp('Target.attachToTarget',{targetId:targetInfos.find(t=>t.type==='page').targetId,flatten:true},false)).sessionId;
   await cdp('Page.enable');await cdp('Runtime.enable');
+  // The game-mode invitation (first-person.js) counts as seen, so the views
+  // compare like for like; first-person-check tests it.
+  await cdp('Page.addScriptToEvaluateOnNewDocument',{source:"try{sessionStorage.setItem('fp-invited','yes')}catch{}"});
   const evaluate=async expression=>{const r=await cdp('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
   async function until(expression,timeout=60000){const at=Date.now();while(!await evaluate(expression)){if(Date.now()-at>timeout)throw new Error('Timed out '+expression);await sleep(100);}}
   const click=async(x,y)=>{for(const type of ['mousePressed','mouseReleased'])await cdp('Input.dispatchMouseEvent',{type,x,y,button:'left',clickCount:1});};
@@ -72,7 +75,7 @@ try{
     await cdp('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile});
     await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
     await cdp('Page.navigate',{url});
-    await until("(document.querySelector('.loading-gate__continue:not([hidden])')?.click(), document.documentElement.dataset.siteEntered === 'yes') && sceneCamera.navigation === 'ENTRY'");
+    await until("(document.querySelector('.loading-gate__continue:not([hidden])')?.click(), document.documentElement?.dataset.siteEntered === 'yes') && sceneCamera.navigation === 'ENTRY'");
     await sleep(1200);
     const p=await evaluate(places);
     // At the entry: the shelf's and the chair's marker, then the nook and the chair.

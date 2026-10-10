@@ -89,8 +89,10 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
   // convention: u to the right as seen from the room, depth toward it.
   const OPEN = {
     window: {halfWidth: .82, sill: .8, shoulder: 3.6, peak: 4.9},
-    // The whole bay open between its columns, into the tower.
-    tower: {halfWidth: hw - .14, sill: 0, shoulder: 3.6, peak: 4.85},
+    // The whole bay open between its columns, into the tower, up almost to
+    // its wall rib: high enough over the gallery's bridge to walk from the
+    // gallery to the tower's upper floor, where the stair arrives.
+    tower: {halfWidth: hw - .14, sill: 0, shoulder: 4.5, peak: 5.2},
     // The outside's entrance: an equilateral pointed arch, its jambs 1.7
     // half-widths high, its rise 1.73 (DOOR in the exterior's worker).
     // (Its crown and frame stay under the gallery's slab.)

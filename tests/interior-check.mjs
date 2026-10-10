@@ -51,6 +51,9 @@ async function browser() {
   const {targetInfos}=await cdp('Target.getTargets',{},false);
   session=(await cdp('Target.attachToTarget',{targetId:targetInfos.find(t=>t.type==='page').targetId,flatten:true},false)).sessionId;
   await cdp('Page.enable');await cdp('Runtime.enable');
+  // The game-mode invitation (first-person.js) counts as seen, so the views
+  // compare like for like; first-person-check tests it.
+  await cdp('Page.addScriptToEvaluateOnNewDocument',{source:"try{sessionStorage.setItem('fp-invited','yes')}catch{}"});
   const evaluate=async expression=>{const r=await cdp('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
   async function until(expression,timeout=60000){const at=Date.now();while(!await evaluate(expression)){if(Date.now()-at>timeout)throw new Error('Timed out '+expression);await sleep(100);}}
   const close=async()=>{await cdp('Browser.close',{},false).catch(()=>{});ws.close();chrome.kill();
@@ -87,13 +90,29 @@ if(!process.argv.includes('--shots-only')) for(let run=0;run<runs;run++) {
         longTasks:[...__interior.longTasks].sort((a,b)=>b.ms-a.ms).slice(0,6)};})()`);
     await b.until("!!document.querySelector('.loading-gate__continue:not([hidden])') && performance.now() >= (loadingGate.stats.listeningAt ?? 0)");
     await b.evaluate("document.querySelector('.loading-gate__continue').click(),true");
-    await b.until("document.documentElement.dataset.siteEntered === 'yes'");
+    await b.until("document.documentElement?.dataset.siteEntered === 'yes'");
     const entered=await b.evaluate("Math.round(__interior.events['site-entered'])");
     await sleep(1500);
     const after={};
     for(const view of ['entry','chair','shelf']) {
       await b.evaluate(`sceneCamera.go('${view}',{instant:true});sceneCamera.update();studyRoom.invalidate();true`);await sleep(1200);
       after[view]=await b.evaluate(pacing(4000));
+    }
+    // A walk in website mode, from the entry to the chair (both sides).
+    await b.evaluate(`sceneCamera.go('entry',{instant:true});true`);await sleep(800);
+    {const walking=b.evaluate(pacing(2500));await b.evaluate(`void sceneCamera.go('chair'),true`);after['walk-chair']=await walking;}
+    await b.until("sceneCamera.navigation==='SEATED'",20000);
+    // Game mode (first-person.js; not on the baseline): standing still at the
+    // entry, then walking (W held, turning a degree every 16 ms, so the view
+    // changes every frame and the walker slides along what it meets).
+    if(await b.evaluate('!!window.firstPerson')) {
+      await b.evaluate(`sceneCamera.go('entry',{instant:true});true`);await sleep(600);
+      await b.evaluate(`firstPerson.setMode('game'),true`);await sleep(1200);
+      after['game-idle']=await b.evaluate(pacing(4000));
+      await b.evaluate(`firstPerson.keys.add('w');window.__turn=setInterval(()=>sceneCamera.lookBy(1,0),16);true`);await sleep(300);
+      after['game-walk']=await b.evaluate(pacing(4000));
+      after['game-walk'].moved=await b.evaluate('+Math.hypot(firstPerson.walker.x,firstPerson.walker.z-3.4).toFixed(2)');
+      await b.evaluate(`clearInterval(__turn);firstPerson.keys.delete('w');firstPerson.setMode('website');true`);await sleep(400);
     }
     await b.evaluate(`sceneCamera.go('entry',{instant:true});sceneCamera.update();studyRoom.invalidate();true`);await sleep(400);
     const stats=await b.evaluate(`(()=>{const R=studyRoom,r=R.renderer;
@@ -114,14 +133,15 @@ if(!process.argv.includes('--timing-only')) {
   try {
     await size(b.cdp,1440,900);await motion(b.cdp,'reduce');
     await b.cdp('Page.navigate',{url});
-    await b.until("(document.querySelector('.loading-gate__continue:not([hidden])')?.click(), document.documentElement.dataset.siteEntered === 'yes') && document.querySelector('#roomShell').classList.contains('is-ready')");
+    // (documentElement is null for a moment while the page is replaced.)
+    await b.until("(document.querySelector('.loading-gate__continue:not([hidden])')?.click(), document.documentElement?.dataset.siteEntered === 'yes') && document.querySelector('#roomShell')?.classList.contains('is-ready')");
     await b.evaluate('Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,1500))]).then(()=>true)');await sleep(800);
     await b.evaluate(`window.__shelfPose=structuredClone(sceneCamera.shelf);window.__nativeRAF=requestAnimationFrame;window.requestAnimationFrame=cb=>__nativeRAF(()=>cb(20000));true`);
     // The room's landmarks, from what the page exposes (scene coordinates).
     const room=await b.evaluate(`(()=>{const R=studyRoom,f=R.placement.forward,d=R.dimensions;
       const door=R.door?{x:R.door.x,z:R.door.z}:{x:.8,z:d.front};
       const tower=R.tower?{x:R.tower.x,z:R.tower.z-f}:null,win=R.window?{x:R.window.x,z:R.alcove?R.alcove.back-f:d.back}:null;
-      return {dimensions:d,door,tower,window:win,shelf:sceneCamera.shelf.wide,lookYaw:sceneCamera.look.yaw,
+      return {dimensions:d,door,tower,window:win,shelf:sceneCamera.shelf.wide,lookYaw:75,
         table:{w:sceneCamera.tableWidthPx/sceneCamera.units,d:sceneCamera.tableDepthPx/sceneCamera.units}};})()`);
     console.log('room',JSON.stringify(room));
     const {door,tower,window:win,dimensions:d}=room;
@@ -134,8 +154,8 @@ if(!process.argv.includes('--timing-only')) {
       ['toward-door',free([0,1.6,(win?win.z:d.back)+.9],[door.x,1.3,door.z])],
       ['stair-tower',tower&&free([tower.x-2.4,1.6,tower.z+2.0],[tower.x,1.5,tower.z])],
       ['vault',free([0,1.6,door.z-.6],[0,4.5,(win?win.z:d.back)*.4])],
-      // At the shelf, turned left as far as the pointer at the edge turns it:
-      // the chair should be in view.
+      // At the shelf, dragged round 75 degrees to the left (first-person.js's
+      // look, as portal-check drags it): the chair should be in view.
       ['shelf-turned',(()=>{const [x,y,z]=room.shelf.position,[tx,,tz]=room.shelf.lookAt;
         const yaw=Math.atan2(x-tx,z-tz)+room.lookYaw*Math.PI/180;return free([x,y,z],[x-3*Math.sin(yaw),1,z-3*Math.cos(yaw)]);})()],
     ];

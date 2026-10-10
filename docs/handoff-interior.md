@@ -53,6 +53,10 @@ Commits since `926adf8`, oldest first:
 4. **Shelf to chair.** A natural turn, not 150°. It is now 90°, from a shelf
    eye a step toward the window.
 
+**Phase 3, first person** (website mode and game mode): built, reviewed
+after Copilot's integration, and fixed. See "Phase 3" below. It is
+committed after `71b78cb`.
+
 **Ownership.** Codex Astra owns the exterior and the loading screen. None of
 their files are touched (`loading-*`, `dev/exterior-*`, `assets/loading/`).
 
@@ -786,6 +790,333 @@ walk, in either format. The nearest thing is the door lantern by the
 entry.
 
 **Screenshots:** `verification/interior/final/`, with `sheet.png`.
+
+## Phase 3: first person (website mode and game mode)
+
+**Who built what.**
+
+- **Claude, first pass:** the free pose and the user's look in
+  `scene-camera.js`, and the controller in `first-person.js`.
+- **Copilot:** the integration.
+  - The controller is started in `room-scene.js`, which now exposes
+    `studyRoom.walk`, `shelfHover()` and `aimCentre()`.
+  - `first-person.css` is linked from `index.html`.
+  - The first stylesheet.
+  - `tests/first-person-check.mjs`.
+  - Its audit, `docs/phase3-copilot-handoff.md`. Its "returns to ENTRY" line
+    is superseded below.
+- **Claude, this pass:** the review and the fixes below.
+
+### What the visitor gets
+
+- **Website mode (the default).**
+  - A drag turns the view, with pitch limits.
+  - A click goes to a place, as before.
+  - A hollow ring sits at the screen's centre and brightens over a place.
+- **Game mode.**
+  - W A S D or the arrow keys walk relative to the view, easing in about
+    0.15 s and out about 0.12 s, at 1.5 m/s. The mouse looks around under
+    pointer lock.
+  - Escape frees the mouse and stays in game mode. A hint says how to take
+    the mouse again.
+  - Aim at the table or the chair and press E (or click) to sit, labelled
+    "Sett deg · E".
+  - The shelf objects wake under the sight.
+  - The visitor collides with the walls, the columns, the table and the
+    chair.
+  - The spiral stair climbs to the tower's upper floor. Through the
+    tower's mouth lies the gallery, which ends at the balustrade.
+  - Head bob of 2.2 cm per 1.5 m stride, off under reduced motion.
+- **The invitation.**
+  - Shown once per visit (sessionStorage `fp-invited`), 1.4 s after entry.
+  - It waits while the visitor is on the move.
+  - Never on touch-only devices.
+- **The menu.**
+  - At the top right, beside the sound toggle (`right: 116px`).
+  - The mode switch, the current mode and the help text.
+  - Game mode is disabled on touch, and the text says why.
+- **Leaving game mode keeps the visitor where they stand** (`FREE`).
+  - The three marks are shown: chair, shelf, and the entry (`#goEntry`,
+    new, in `script.js`).
+  - On the chamber floor, a mark walks the visitor there, round the table.
+  - From the stair, the tower or the gallery, a walk would pass through
+    floors. Instead a short veil of mist (`.fp-veil`, about 0.3 s) closes
+    and opens at the place.
+
+### Review: what was wrong, and the fix
+
+1. **The walk plan was offset by 0.6 m.**
+   - The cause: `studyRoom.walk.forward` had the wrong sign
+     (`-placement.forward`). Walls, columns and the stair all sat 0.6 m
+     from where they are drawn.
+   - The test missed it because it converted both ways with the same sign.
+   - Fixed. The test now also checks registration against the drawn
+     meshes: the window wall, the nook wall, and a ray against the
+     "spiral stair" mesh within 0.13 m.
+2. **The stairwell was open over the whole tower.** `walk.well` began at 0.
+   It now begins where the well does.
+3. **Game mode to website mode walked to the entry.**
+   - From upstairs, that walk went through the floor.
+   - Now the visitor stays where they are, as described above.
+4. **`touch-action` was set too late.** The browser decides when a touch
+   begins, so a drag scrolled the page. It is now set ahead, with
+   `body.fp-room`.
+5. **The stylesheet was generic.**
+   - Rewritten in the room's idiom: dark violet glass, a gilt hairline,
+     Cinzel titles, the keys as engraved stones.
+   - The sight is a 16 px ring that warms over what can be used.
+6. **Pointer lock in headless Chrome** may come or not.
+   - The test accepts either outcome.
+   - The controller shows the hint after 1.2 s if the lock neither comes
+     nor is refused.
+7. **The gallery could not be reached.**
+   - The tower mouth's arch was lower than a person on the gallery. In
+     `room-chamber.js`, OPEN.tower is now shoulder 4.5 and peak 5.2 (was 3.6
+     and 4.85).
+   - The walk plan let the walker through the balustrade in the tower's
+     bay. It is rewritten as `throughMouth`: the gallery runs to the mouth's
+     plane, and the tower's floor begins beyond it.
+8. **The walker stuck on round columns.**
+   - A blocked step is now tried turned ±0.5 rad, then ±1 rad (shortened),
+     before the two axis halves.
+   - The velocity follows the step that was taken.
+9. **Shelf aim without pointer lock followed the mouse.** In game mode the
+   sight is now always the aim (`aimCentre(true)` on entering game mode).
+10. **"On the chamber floor"**, which decides between a walk and the veil,
+    counted the tower circle's bulge in front of the mouth as the tower.
+    It now needs to be beyond the mouth's plane.
+11. **Polish.**
+    - The invitation is 420 px wide, so each choice fits on one line.
+    - The veil sits under the top-right controls (z-index 998, under the
+      999 controls).
+    - The hint hides while the menu is open.
+    - The help text says "Trykk" on touch.
+
+12. **Game mode from the chair put the visitor in the table.**
+    - `spawn()` stepped toward the chamber's middle to find floor, and the
+      middle is the table.
+    - It now takes the nearest free spot, away from the table first, so the
+      visitor stands up beside the chair.
+    - Tested: "game mode from the chair" in `first-person-check`.
+
+13. **Choosing a place past the invitation left it hanging** over the
+    moving view. Choosing a place now closes it, which counts as choosing
+    website mode, and it does not return. This is tested.
+
+14. **Game mode while the portal woke pulled the visitor back to the
+    chair.**
+    - The portal's opening sequence (`script.js`
+      `runFinishingSequence`) starts when the cloth has finished sliding,
+      and it seats the visitor first (`cancelApproach`).
+    - Game mode opened in between was undone a moment later.
+    - Game mode now waits while the portal wakes: from the cloth drawn off
+      (`table-covered` gone) until `intro-done`. The menu says
+      "Spillmodus venter til portalen har våknet."
+    - This is tested. The test also waits for `intro-done` before going on,
+      which was the race behind an intermittent failure.
+15. **Walking in game mode ran at about 45 fps.**
+    - On every update, `scene-camera.js` wrote six variables on
+      `<html>` (`--table-view-*`, `--scene-focal`, `--scene-origin-y`,
+      `--table-leg-length`). That restyled every element on the page while
+      the eye moved, 8 to 11 ms a frame.
+    - Their only reader is the portal plane's own transform and top
+      (`portal.css` `.screen`).
+    - Now `update()` writes that transform and top on `#screen`
+      directly. `--view-pitch` and `--table-leg-length` are set only when
+      they change. `--view-yaw` is gone, since only that transform used it.
+    - `portal.css` still has the same transform built from the variables,
+      as the fallback before the first update.
+
+    | Headless, mains power | Before | After |
+    | --- | --- | --- |
+    | Game: walking and turning | 45 fps | 59.7 fps |
+    | Game: walking straight | 48 fps | 56.6 fps |
+    | Game: turning only | 59 fps | 60 fps |
+    | Website walk, entry → chair | 31 fps | 33–36 fps |
+
+**Changed on purpose in Phase 3:** at the shelf the view no longer follows
+the pointer (the old `look: {yaw: 90, …}`, up to 90° at the screen's edge).
+The visitor's own drag-look replaces it everywhere, so they drag round to
+the chair.
+
+- `portal-check`'s shelf-to-chair step now drags (1040 px to the right,
+  about 75°) instead of moving the pointer to the edge.
+- `interior-check`'s "shelf-turned" view turns a fixed 75°. It used to
+  read the removed `sceneCamera.look.yaw`.
+
+**Other test changes:**
+
+- `interior-check` and `navigation-check` mark the invitation as seen
+  (`Page.addScriptToEvaluateOnNewDocument`), so their views compare like
+  for like.
+- `interior-check`, `navigation-check` and `first-person-check` read
+  `document.documentElement?.dataset`. The element is null for a moment
+  while the page is replaced, and that race now and then stopped a run.
+- `first-person-check` waits for the hint after Escape
+  (`pointerlockchange` follows the release a moment later).
+- `first-person-check` clicks the shelf's mark on the floor beside the
+  invitation, not its box's middle, which lies under the card.
+- `first-person-check` waits, after the instant jump to the shelf, for the
+  room's camera to follow before projecting the shelf.
+- `first-person-check` reports the state when the shelf hover or the walk
+  after standing up fails.
+- The entry's slight lean toward the pointer (0.4°) is kept.
+
+**Shared-file overlap:** `index.html`, one `<link>` line for
+`first-person.css` (Copilot's). No loading screen or exterior file is
+touched.
+
+### Tests
+
+`tests/first-person-check.mjs`, headless by default. It covers:
+
+- the integration;
+- the invitation;
+- website drag-look (a drag turns the view and is not a click);
+- the menu;
+- game mode and pointer lock (asserted in a visible window; headless, the
+  hint is asserted instead);
+- WASD movement;
+- collisions, and registration against the meshes;
+- the stair climb to the landing;
+- the gallery through the tower's mouth, ending at the balustrade;
+- Escape, with the hint;
+- staying `FREE` on leaving game mode;
+- the entry mark from `FREE`;
+- the veil from upstairs;
+- E to sit;
+- centre aim on the shelf;
+- the cloth drag;
+- website shelf hover;
+- game mode from the chair (stands up beside it, can walk);
+- game mode waiting while the portal wakes;
+- a new visit where a place is chosen past the invitation (it closes and
+  does not return).
+
+Run it with `$env:PORTFOLIO_HEADLESS='0'` for the pointer-lock path in a
+visible Chrome.
+
+**Headless, 2026-10-10, the final code:** passed 3 of 3 runs in a row.
+
+- Chrome logs one warning: "Pointer lock cannot be acquired immediately
+  after the user has exited the lock".
+- That is a re-lock attempted right after Escape. The hint shows, and a
+  click locks again.
+
+**Screenshots:** `verification/first-person/phase3/shots/`, with
+`sheet.html`. They show:
+
+- the invitation;
+- the website entry with the sight;
+- both menus;
+- game mode at the entry;
+- the table aim;
+- the shelf;
+- the tower's mouth;
+- the gallery, two ways;
+- the dome;
+- standing free in website mode with the marks;
+- the veil;
+- a phone, at entry and with the menu.
+
+### Regression (2026-10-10, mains power, the final code)
+
+The full set was run: 22 runs.
+
+- `portal-check` ran in all six modes.
+- `interior-check`, `navigation-check` and `first-person-check` were
+  included.
+- So were all the other suites, Codex's included.
+
+On the first pass, 20 of 22 passed. The other two:
+
+- **`impact-check`** failed with `reason: 'motion-preference'`. This is
+  the known race, which also fails now and then on the baseline. It passed
+  2 of 2 when run again.
+- **`first-person-check`** failed with a race in the test itself.
+  - Projected straight after an instant jump to the shelf, the shelf lands
+    where it was seen from the chair. The room's own camera follows on its
+    next frame.
+  - The test now waits for it, and then passed 3 of 3 in a row.
+  - A visitor never sees that frame.
+
+Earlier passes during the review stopped on races that are now fixed in
+the tests (see "Other test changes" above):
+
+- the page briefly having no `<html>` element during navigation;
+- the hint after Escape;
+- the click under the invitation;
+- the portal's opening sequence.
+
+Two more stops came from the laptop going to sleep on battery in the
+middle of a run.
+
+`loading-gate-check` passed. It is Codex's race, which also shows on the
+baseline.
+
+**Clearance:** unchanged. On every walk the eye stays at least 0.44 m from
+anything solid.
+
+### Performance A/B (mains power, Phase 3 included)
+
+**Conditions:** interleaved cold loads, four per side, 1440x900, ANGLE
+D3D11. Baseline `926adf8` against this branch. Medians, with ranges.
+
+| | Baseline 926adf8 | This branch |
+| --- | --- | --- |
+| Site ready, mean of 4 | 11.67 s (9.8–13.1) | 11.62 s (9.5–13.1) |
+| In after pressing on, mean of 4 | 14.31 s (12.5–15.8) | 14.37 s (12.3–15.9) |
+| Entry: fps, p95 | 60.0, 17.2 ms | 60.1, 18.0 ms |
+| Chair: fps, p95 | 60.1, 19.4 ms | 60.3, 17.1 ms |
+| Shelf: fps, p95 | 60.2, 19.0 ms | 60.1, 16.9 ms |
+| Website walk, entry → chair: fps | 38.1 (30–41.7) | 41.7 (30–41.9) |
+| Game mode, standing: fps, p95 | – | 60.2, 17.0 ms |
+| Game mode, walking (W held, turning): fps, p95 | – | 59.0 (53.9–60.2), 33.3 ms |
+| Room draw calls, triangles (entry) | 45, 24.7 k | 36, 41.8 k |
+| Shader programs | 27 | 28 |
+| Geometries, textures | 46, 26 | 54, 30 |
+
+- Loading is as before: the means are within 0.1 s.
+- Every standing view holds 60 fps.
+- Game mode walks at about 59 fps. Before fix 15 it was 45.
+- Phase 3 adds no shader program.
+- The website walk is no slower than on the baseline. It is slow on both
+  sides (see "Open, Phase 3").
+- The A/B is `ab.sh` with `ab-summary.cjs` (scratchpad).
+  `interior-check` now also measures the website walk and game mode
+  (`walk-chair`, `game-idle`, `game-walk`).
+- The earlier A/B's reports are in `verification/interior/previous-ab-a7020ff/`.
+
+### Open, Phase 3
+
+- **Website-mode walks run at about 35–42 fps headless, on the published
+  baseline as well.**
+  - Baseline `926adf8`, entry → chair: 34.6 fps in a single measurement,
+    38.1 in the A/B.
+  - During a walk the main thread is full, and style recalculation alone
+    takes about 63 % of it.
+  - What is left after fix 15: the portal's variables on `#screen`
+    restyle all of its 382 elements whenever they change.
+    `--view-pitch` changes every frame of a walk, as the view tilts.
+    `--wall-front-cut` changes with every move of the eye
+    (`portal-depth.js` `measure()`).
+  - Only a few elements read them: the depth layers, the abyss and the two
+    side walls.
+  - Proposal: write `--wall-front-cut` on the two walls and the pitch on
+    its readers, or give those readers their transforms from script.
+  - This is the portal's code and older than this branch, so it is left
+    for a separate, measured step.
+- **The floor's smoke marks stay visible in game mode, but do nothing**
+  there (the sight replaces them). Should they fade while walking? For the
+  user.
+- **Movement feel is not yet tried by a person** with a real mouse and
+  keyboard. The current values:
+  - speed 1.5 m/s;
+  - look 0.12° per pixel;
+  - look up to 60° and down to 70°;
+  - eye 1.7 m.
+- **The door lantern's chain** hangs just inside the balustrade above the
+  door. From the gallery it passes close by.
 
 ## Open, for the user or later
 

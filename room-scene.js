@@ -8,6 +8,7 @@ import {createRoomSmoke} from './room-smoke.js';
 import {createRoomLamps,lampTuning} from './room-lamps.js';
 import {createFigmaObject,createGrimoireObject,createCrystalBallObject} from './tools-shelf.js';
 import {createShelfSound} from './tools-sound.js';
+import {createFirstPerson} from './first-person.js';
 
 // Architecture and physical furniture. Portal, orb and HTML reader stay in their
 // own renderers; scene-camera.js gives both branches the same projection.
@@ -1504,7 +1505,8 @@ if (renderer) {
   const shelfPointer=new THREE.Vector2(4,4),shelfRay=new THREE.Raycaster(),shelfCentre=new THREE.Vector3(),shelfNear=4.5;
   let shelfAt=0,shelfShadowAt=0,shelfAwakeUntil=0,shelfHover=-1;
   const wakeShelf=()=>{shelfAwakeUntil=performance.now()+1200;};
-  addEventListener('pointermove',event=>{const r=canvas.getBoundingClientRect();
+  addEventListener('pointermove',event=>{if(aimAtCentre){shelfPointer.set(0,0);wakeShelf();return;}
+    const r=canvas.getBoundingClientRect();
     shelfPointer.set((event.clientX-r.left)/r.width*2-1,-(event.clientY-r.top)/r.height*2+1);wakeShelf();},{capture:true});
   addEventListener('blur',()=>{shelfPointer.set(4,4);wakeShelf();});
   document.documentElement.addEventListener('pointerleave',()=>{shelfPointer.set(4,4);wakeShelf();});
@@ -1665,7 +1667,30 @@ if (renderer) {
   canvas.addEventListener('webglcontextrestored',()=>{lost=false;resize();});
   // Used by the local geometry/registration check and dev inspection.
   // hem: the cloth hem wave's parameters, live-tunable from the console.
-  window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,table:artifact,smoke,hoverMark,auraLights,
+  let aimAtCentre=false;
+  // The plan the first-person walker keeps to (first-person.js): plan
+  // coordinates are the scene's with z + placement.forward (the shell sits at
+  // -placement.forward). well: the stair's angles (from its foot, radians)
+  // over which the tower's upper floor is open to the flight below.
+  const fromFoot=a=>((stair.from-a)%(2*Math.PI)+2*Math.PI)%(2*Math.PI);
+  const walk={forward:placement.forward,apothem,bayHalf:chamber.hw,
+    bays:chamber.bays.map(({kind,theta,open})=>({kind,cos:Math.cos(theta),sin:Math.sin(theta),
+      halfWidth:open.halfWidth,depth:open.depth??0})),
+    tower:{x:tower.x,z:tower.z,r:tower.r},
+    stair:{from:stair.from,step:stair.step,rise:stair.rise,inner:stair.inner,count:stair.count},
+    columns:Array.from({length:sides},(_,i)=>{
+      const at=chamberTuning.apothem/Math.cos(Math.PI/sides)-.07,angle=-Math.PI/2-Math.PI/sides+i*2*Math.PI/sides;
+      return [at*Math.cos(angle),at*Math.sin(angle)];
+    }),
+    column:.23,table:Math.max(view.tableWidthPx,view.tableDepthPx)/(2*view.units),
+    gallery:chamberTuning.gallery,well:[fromFoot(well.to),stair.count*stair.step]};
+  window.studyRoom={camera,scene,renderer,front,chair,shell,placement,hem,table:artifact,smoke,hoverMark,auraLights,walk,
+    shelfHover:()=>shelfHover,
+    aimCentre(enabled){
+      aimAtCentre=enabled;
+      if(enabled)shelfPointer.set(0,0);else shelfPointer.set(4,4);
+      wakeShelf();
+    },
     // The chamber's extents in scene (table-relative) coordinates: height is
     // the vault's springing, back the window's wall, front the door's. The
     // door and the nook (scene) place their targets and checks; the plan
@@ -1714,6 +1739,8 @@ if (renderer) {
         }
         lighting.lamp=warm.intensity;lighting.front=frontFill.intensity;invalidate();return this.values;}},
     invalidate};
+  window.firstPerson=createFirstPerson({camera:view,room:window.studyRoom,
+    reducedMotion:()=>matchMedia('(prefers-reduced-motion: reduce)').matches});
   resize();
   // ---- Warm-up. Every shader the room and its foreground draw is compiled
   // before their first frame, off the main thread where the browser allows

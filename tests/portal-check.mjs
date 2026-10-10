@@ -525,12 +525,16 @@ try {
   await until(`sceneCamera.navigation === 'ENTRY'`, 15000);
   assert.equal(await evaluate(`document.querySelector('#deviceTilt').dataset.approach + ':' + !document.querySelector('#entryTargets').hidden + ':' + document.querySelector('#leaveShelf').hidden`),
     'entry:true:true', 'A click at the shelf walks back to the entry');
-  // At the shelf the view follows the pointer: toward the left edge it turns
-  // round far enough to see the chair, which then takes a click straight to
-  // the seat (the same seated view as walking in from the entry).
+  // At the shelf a drag turns the view (first-person.js, website mode; it
+  // took the place of the shelf's pointer-led look): dragged to the right it
+  // turns round far enough to see the chair, which then takes a click
+  // straight to the seat (the same seated view as walking in from the entry).
   await click('#goShelf');
   await until(`sceneCamera.navigation === 'SHELF_INSPECTION'`, 15000);
-  await cdp('Input.dispatchMouseEvent', {type:'mouseMoved', x:2, y:500, buttons:0});
+  await cdp('Input.dispatchMouseEvent', {type:'mouseMoved', x:200, y:500, buttons:0});
+  await cdp('Input.dispatchMouseEvent', {type:'mousePressed', x:200, y:500, button:'left', buttons:1, clickCount:1});
+  for (let i = 1; i <= 20; i++) await cdp('Input.dispatchMouseEvent', {type:'mouseMoved', x:200 + 52 * i, y:500, buttons:1});
+  await cdp('Input.dispatchMouseEvent', {type:'mouseReleased', x:1240, y:500, button:'left', clickCount:1});
   // How far left of the nook (heading 90) the view has turned, in (-180, 180]:
   // in the round chamber the chair stands nearly behind the visitor.
   await until(`${targetShown('#goChair')} && (sceneCamera.camera.yaw - 90 + 540) % 360 - 180 > 60`, 8000);

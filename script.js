@@ -104,7 +104,7 @@
   // toward it: walk there and sit down (at once under reduced motion).
   // keyboard: chosen with Enter or Space, so the focus moves on to the cloth.
   function walkToChair(keyboard = false) {
-    if (!['ENTRY', 'SHELF_INSPECTION'].includes(camera.navigation)) return;
+    if (!['ENTRY', 'SHELF_INSPECTION', 'FREE'].includes(camera.navigation)) return;
     camera.go('chair').then(arrived => {
       if (!arrived) return;
       sitDown();
@@ -115,7 +115,7 @@
   // anywhere there, or Escape, walks back to the entry (the final navigation
   // UI is still to be designed). keyboard: the focus moves on to the way back.
   function walkToShelf(keyboard = false) {
-    if (camera.navigation !== 'ENTRY') return;
+    if (!['ENTRY', 'FREE'].includes(camera.navigation)) return;
     camera.go('shelf').then(arrived => { if (arrived && keyboard) leaveShelfButton?.focus({preventScroll: true}); });
   }
   function leaveShelf(keyboard = false) {
@@ -133,13 +133,20 @@
 
   // The places to go: invisible buttons laid over what the room draws there.
   // At the entry the chair (with the table) and the study nook; at the shelf
-  // the chair, once the visitor has turned far enough to see it. Re-placed
-  // whenever the camera moves.
+  // the chair, once the visitor has turned far enough to see it; standing
+  // free in website mode (first-person.js, after game mode) all three, the
+  // entry by its marker. Re-placed whenever the camera moves. In game mode
+  // the sight takes their place.
+  const goEntry = entryTargets && Object.assign(document.createElement('button'), {type: 'button', className: 'entry-target', id: 'goEntry'});
+  if (goEntry) { goEntry.setAttribute('aria-label', 'Gå tilbake til inngangen'); goEntry.hidden = true; entryTargets.append(goEntry); }
+  const gameMode = () => document.body.classList.contains('game-mode');
+  addEventListener('first-person-mode', () => showEntryTargets(camera.navigation));
   function showEntryTargets(state) {
     if (!entryTargets) return;
-    const on = state === 'ENTRY' || state === 'SHELF_INSPECTION';
+    const on = ['ENTRY', 'SHELF_INSPECTION', 'FREE'].includes(state) && !gameMode();
     entryTargets.hidden = !on;
-    if (goShelf) goShelf.hidden = state !== 'ENTRY';
+    if (goShelf) goShelf.hidden = !['ENTRY', 'FREE'].includes(state);
+    if (goEntry) goEntry.hidden = state !== 'FREE';
     if (on) placeEntryTargets();
     else if (entryTargets.contains(document.activeElement)) document.activeElement.blur();
   }
@@ -197,11 +204,12 @@
     const ring = ([x, z]) => Array.from({length: 8}, (_, i) => [x + .36 * Math.cos(i * Math.PI / 4), 0, z + .36 * Math.sin(i * Math.PI / 4)]);
     const {branch} = camera.paths, shelfEye = camera.points.shelf.position;
     cover(goChair, [tablePoints, chairPoints, ring(branch[branch.length - 1])]);
-    if (camera.navigation === 'ENTRY') cover(goShelf, [nookPoints, ring([shelfEye[0], shelfEye[2]])]);
+    if (['ENTRY', 'FREE'].includes(camera.navigation)) cover(goShelf, [nookPoints, ring([shelfEye[0], shelfEye[2]])]);
+    if (camera.navigation === 'FREE') { const entryEye = camera.points.entry.position; cover(goEntry, [ring([entryEye[0], entryEye[2]])]); }
   }
   addEventListener('scene-camera-change', placeEntryTargets);
   // Pointing at a place, or focusing it, lights its mark on the floor.
-  for (const [button, mark] of [[goChair, 'chair'], [goShelf, 'shelf'], [leaveShelfButton, 'entry']]) {
+  for (const [button, mark] of [[goChair, 'chair'], [goShelf, 'shelf'], [leaveShelfButton, 'entry'], [goEntry, 'entry']]) {
     const light = on => () => window.studyRoom?.hoverMark?.(mark, on);
     for (const [type, on] of [['pointerenter', true], ['pointerleave', false], ['focus', true], ['blur', false]])
       button?.addEventListener(type, light(on));
@@ -210,6 +218,11 @@
   goShelf?.addEventListener('click', event => walkToShelf(event.detail === 0));
   leaveShelfButton?.addEventListener('click', event => leaveShelf(event.detail === 0));
   goChair?.addEventListener('click', event => walkToChair(event.detail === 0));
+  goEntry?.addEventListener('click', event => {
+    if (camera.navigation !== 'FREE') return;
+    const keyboard = event.detail === 0;
+    camera.go('entry').then(arrived => { if (arrived && keyboard) goShelf?.focus({preventScroll: true}); });
+  });
 
   let finishing = false;
   let sequenceGen = 0; // bumped whenever the dev nav buttons force-jump state,

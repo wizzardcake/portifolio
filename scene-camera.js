@@ -88,16 +88,12 @@
     // the trunk's way back); `down`: how many degrees further down it
     // looks at the chair as it reaches it.
     pace: {walk: 1.1, sit: .6, ahead: 1.1, leave: 1.2, arrive: 2.2, drawn: {'entry>shelf': [3.5, 1], 'entry>seated': [3.5, 1], 'shelf>seated': [6.5, 3.5]}, down: 24},
-    // At the shelf the view follows the pointer: a slight look round the
-    // nook near the middle, turning progressively further toward either edge,
-    // up to `yaw` degrees at the very edge, and
-    // `pitch` degrees up or down. It follows like a spring (`stiffness`, per
-    // second) that never turns faster than `speed` degrees a second, and goes
-    // back to the nook when the pointer does. None under reduced motion or on
-    // touch, like the rest of the standing life.
-    // From the shelf the chair stands about 130 degrees round to the left: at
-    // the very left edge the view turns far enough to bring it in.
-    look: {yaw: 90, slight: 4, from: .3, to: .95, pitch: 3, stiffness: 2.8, speed: 55},
+    // The visitor's own look (first-person.js turns it: a drag in website
+    // mode, the mouse in game mode), on top of where a place or a walk looks:
+    // all the way round, and up or down between `pitch` (the camera's pitch
+    // in degrees: 90 is level, lower looks down). It eases toward where it is
+    // turned over `ease` seconds, and walking somewhere lets it go.
+    look: {pitch: [18, 150], ease: .06},
     // The entry's quiet life, so the view never stands dead still: the
     // standing eye sways a little and leans toward the pointer. Metres and
     // degrees; none under reduced motion or on touch. The slow sway is
@@ -206,7 +202,10 @@
       const f = times[hi] > times[lo] ? (time - times[lo]) / (times[hi] - times[lo]) : 0;
       return samples[lo][0] + (samples[hi][0] - samples[lo][0]) * f;
     };
+    // The share of the walking time at which the settle into the seat begins.
+    const settleIndex = samples.findIndex(sample => sample[0] >= settleAt);
     const built = {length, settleAt: seat ? settleAt : length, marks,
+      settleProgress: seat && settleIndex > 0 ? times[settleIndex] / total : 1,
       // The leg's whole walking time, ms.
       duration: total * 1000,
       at(progress) {
@@ -236,9 +235,51 @@
     ways.set(key, built);
     return built;
   }
-  // The standing life (sway, lean, the shelf's look), or what a walk carries
-  // of it, applied on top of the path (see the driver). Metres and degrees.
-  const offset = {x: 0, y: 0, yaw: 0, pitch: 0};
+  // ---- A walk from wherever the visitor stands free (game mode, or website
+  // mode after it) to a place: straight, or round the table and its chair if
+  // they are in the way, on the nearer side; turning from the way the eye
+  // looked to the way the place looks. The same interface as way()'s.
+  let freeRoute = null;
+  function freeWay(from, end) {
+    const a = [from.x, from.z], b = [end.position[0], end.position[2]], marks = [a];
+    const c = [.35, .25], r = 1.5, ab = [b[0] - a[0], b[1] - a[1]], l2 = ab[0] ** 2 + ab[1] ** 2 || 1e-9;
+    const f = Math.max(0, Math.min(1, ((c[0] - a[0]) * ab[0] + (c[1] - a[1]) * ab[1]) / l2));
+    const near = [a[0] + ab[0] * f, a[1] + ab[1] * f], d = Math.hypot(near[0] - c[0], near[1] - c[1]);
+    const inside = p => Math.hypot(p[0] - c[0], p[1] - c[1]) < r;
+    if (d < r && f > 0 && f < 1 && !inside(a) && !inside(b)) {
+      const out = d > 1e-3 ? [(near[0] - c[0]) / d, (near[1] - c[1]) / d] : [-ab[1] / Math.sqrt(l2), ab[0] / Math.sqrt(l2)];
+      marks.push([c[0] + out[0] * (r + .2), c[1] + out[1] * (r + .2)]);
+    }
+    marks.push(b);
+    const segments = [];
+    let length = 0;
+    for (let i = 1; i < marks.length; i++) {
+      const s = Math.hypot(marks[i][0] - marks[i - 1][0], marks[i][1] - marks[i - 1][1]);
+      segments.push({a: marks[i - 1], b: marks[i], from: length, length: s}); length += s;
+    }
+    const at = s => {
+      const seg = segments.find(g => s <= g.from + g.length) ?? segments[segments.length - 1], u = seg.length ? Math.min(1, (s - seg.from) / seg.length) : 1;
+      return {point: [seg.a[0] + (seg.b[0] - seg.a[0]) * u, seg.a[1] + (seg.b[1] - seg.a[1]) * u], dir: [seg.b[0] - seg.a[0], seg.b[1] - seg.a[1]]};
+    };
+    const turn = Math.abs(wrap(end.yaw - from.yaw));
+    return {length, marks, duration: Math.max(600, (length / state.pace.walk + turn / 150) * 1000), settleAt: length,
+      at(progress) {
+        const s = Math.max(0, Math.min(1, progress)) * length, {point: [x, z], dir} = at(s);
+        const walking = Math.atan2(-dir[0], -dir[1]) / radians;
+        const leave = 1 - smooth(0, Math.min(1.2, length * .4), s), arrive = smooth(length - Math.min(1.5, length * .5), length, s);
+        const yaw = length < .1 ? turnToward(from.yaw, end.yaw, smooth(0, 1, progress)) : turnToward(turnToward(walking, from.yaw, leave), end.yaw, arrive);
+        const k = smooth(0, 1, progress);
+        return {position: [x, from.y + (end.position[1] - from.y) * k, z], yaw, tilt: from.tilt + (end.tilt - from.tilt) * k, settle: 0};
+      }};
+  }
+  // The standing life (sway, lean, the visitor's own look), or what a walk
+  // carries of it, applied on top of the path (see the driver). Metres and
+  // degrees. `base`: the path's own heading and tilt before them.
+  const offset = {x: 0, y: 0, yaw: 0, pitch: 0}, base = {yaw: 0, tilt: 0};
+  // What update() last wrote on the page's elements.
+  const published = {};
+  // The visitor's look (degrees), and where it is being turned to.
+  const gaze = {yaw: 0, pitch: 0, goalYaw: 0, goalPitch: 0};
   function update() {
     const width = screen.clientWidth, height = screen.clientHeight;
     // Read layout before publishing camera styles. Navigation hit targets use
@@ -262,13 +303,13 @@
       lookAt: [0, state.tableHeight, seatedDistance - (seated.eye - state.tableHeight) / Math.tan(seatTilt)]};
     // A pose: where the eye is and how it is turned (the standing life on
     // top), and the table centre in its frame: right, up and depth (metres).
-    const pose = ({position, yaw: heading, tilt: down}) => {
-      const yawDeg = round(wrap(heading + offset.yaw)), pitchDeg = round(90 - down + offset.pitch);
+    const pose = ({position, yaw: heading, tilt: down}, o = offset) => {
+      const yawDeg = round(wrap(heading + o.yaw)), pitchDeg = round(90 - down + o.pitch);
       const yaw = yawDeg * radians, tilt = Math.PI / 2 - pitchDeg * Math.PI / 180;
       // The sway moves the eye along its own right and up.
-      const x = position[0] + offset.x * Math.cos(yaw);
-      const eyeHeight = position[1] + offset.y;
-      const distance = position[2] - offset.x * Math.sin(yaw);
+      const x = position[0] + o.x * Math.cos(yaw);
+      const eyeHeight = position[1] + o.y;
+      const distance = position[2] - o.x * Math.sin(yaw);
       const dx = -x, dy = state.tableHeight - eyeHeight, dz = -distance;
       const sinY = Math.sin(yaw), cosY = Math.cos(yaw), sinT = Math.sin(tilt), cosT = Math.cos(tilt);
       return {yawDeg, pitchDeg, tilt, x, eyeHeight, distance,
@@ -281,12 +322,19 @@
     // composition), the entry's own `anchor`. The shelf, where the table is
     // out of view, takes no shift. A walk blends between its ends' shifts.
     const anchored = (p, at = anchorY) => at - focal * (-p.up * units) / (p.depth * units);
-    const {leg} = state, t = leg.progress, name = leg.from + '>' + leg.to, route = way(name, format);
+    const {leg} = state, t = leg.progress, name = leg.from + '>' + leg.to;
     for (const each of Object.keys(state.durations)) state.durations[each] = way(each, format).duration;
-    const walk = route.at(t), now = pose(walk);
-    const lens = place => place === 'shelf' ? innerHeight / 2
-      : anchored(pose(aim(points[place])), points[place].anchor ? innerHeight * points[place].anchor : anchorY);
-    const originY = lens(leg.from) + (lens(leg.to) - lens(leg.from)) * t;
+    // Standing free (game mode, or website mode after it): the eye's own pose.
+    // Walking from there: the way built for that walk (go()).
+    const free = state.free, route = leg.from === 'free' ? freeRoute : way(name, format);
+    const walk = free ? {position: [free.x, free.y, free.z], yaw: free.yaw, tilt: free.tilt, settle: 0} : route.at(t);
+    base.yaw = walk.yaw; base.tilt = walk.tilt;
+    const now = pose(walk);
+    // (Measured without the visitor's look, so turning never moves the lens.)
+    const steady = {...offset, yaw: offset.yaw - gaze.yaw, pitch: offset.pitch - gaze.pitch};
+    const lens = place => place === 'shelf' || place === 'free' ? innerHeight / 2
+      : anchored(pose(aim(points[place]), steady), points[place].anchor ? innerHeight * points[place].anchor : anchorY);
+    const originY = free ? innerHeight / 2 : lens(leg.from) + (lens(leg.to) - lens(leg.from)) * t;
     // Where the chair stands: pushed back and turned (see `paths`), drawn in
     // square to the table as the visitor settles into the seat.
     const [restX, restZ, restYaw] = state.paths.chair, k = walk.settle * walk.settle * (3 - 2 * walk.settle);
@@ -309,21 +357,30 @@
     Object.assign(state, {width, height, tableWidthPx, tableDepthPx, units, tilt, focal, x, eyeHeight, distance, seatedDistance, viewX, viewY, viewDistance,
       originY, anchorY, format, appliedPitch: camera.pitch, elevation: eyeHeight - state.tableHeight,
       localEyeX: x * units, localEyeY: distance * units, localEyeZ: (eyeHeight - state.tableHeight) * units});
-    for (const [key, value] of Object.entries({
-      '--scene-focal': focal, '--scene-origin-y': originY,
-      '--table-view-x': viewX, '--table-view-y': viewY, '--table-view-z': focal - viewDistance,
-      '--table-leg-length': state.tableHeight * units
-    })) root.style.setProperty(key, value + 'px');
-    screen.style.setProperty('--view-pitch', camera.pitch + 'deg');
-    screen.style.setProperty('--view-yaw', camera.yaw + 'deg');
+    // The portal's plane (portal.css .screen) takes its place and turn on
+    // itself: a variable changed on the root restyles every element of the
+    // page, and while the eye moved that cost 8 to 11 ms a frame (a walk ran
+    // at 31 fps); a transform on the plane restyles the plane alone. What its
+    // own parts read (the pitch, the legs' length) is set only when it
+    // changes. (portal.css keeps the same transform from the variables, as
+    // the fallback before the first update.)
+    const transform = `translate(-50%, -50%) perspective(${focal}px) translate3d(${viewX}px, ${viewY}px, ${focal - viewDistance}px) ` +
+      `rotateX(${camera.pitch}deg) rotateZ(${camera.yaw}deg)`;
+    if (published.transform !== transform) screen.style.transform = published.transform = transform;
+    if (published.top !== originY) { screen.style.top = originY + 'px'; published.top = originY; }
+    if (published.pitch !== camera.pitch) { screen.style.setProperty('--view-pitch', camera.pitch + 'deg'); published.pitch = camera.pitch; }
+    const legLength = state.tableHeight * units;
+    if (published.leg !== legLength) { root.style.setProperty('--table-leg-length', legLength + 'px'); published.leg = legLength; }
     screen.classList.toggle('is-behind', behind);
     window.dispatchEvent(new Event('scene-camera-change'));
   }
   state.update = update;
   state.points = points;
   // How far toward the seat: the leg's progress on the way there, 1 seated.
+  // Standing free, or walking from there, the visitor is not settling yet.
   Object.defineProperty(state, 'approach', {enumerable: true, get() {
     const {from, to, progress} = state.leg;
+    if (state.free || from === 'free') return 0;
     return to === 'seated' ? (from === 'seated' ? 1 : progress) : from === 'seated' ? 1 - progress : 0;
   }});
   state.setApproach = progress => state.setLeg('entry', 'seated', progress);
@@ -355,22 +412,15 @@
   };
 
   // ---- One driver for every camera movement: walking a path (smoothstep, as
-  // the original walk in), the standing sway and lean, and the shelf's look.
+  // the original walk in), the standing sway and lean, and the visitor's own look.
   // It runs only while something moves; the idle life redraws at its own
   // slower pace, a turning look every frame.
   let move = null, idling = false, raf = 0, last = 0, drawn = 0, weight = 0;
   const pointer = {x: 0, y: 0}, lean = {x: 0, y: 0};
-  // The shelf's look: degrees, and degrees a second.
-  const look = {yaw: 0, pitch: 0, yawSpeed: 0, pitchSpeed: 0};
   const wake = () => { if (!raf) raf = requestAnimationFrame(drive); };
-  // Leave the standing life behind at once (a jump, or a walk setting off).
-  const settle = () => { weight = 0; Object.assign(look, {yaw: 0, pitch: 0, yawSpeed: 0, pitchSpeed: 0}); };
-  // A critically damped spring toward goal, its speed capped.
-  function follow(value, speed, goal, dt) {
-    const {stiffness: w, speed: cap} = state.look;
-    look[speed] = Math.max(-cap, Math.min(cap, look[speed] + (w * w * (goal - look[value]) - 2 * w * look[speed]) * dt));
-    look[value] += look[speed] * dt;
-  }
+  // Leave the standing life behind at once (a jump, or a walk setting off),
+  // the visitor's look with it.
+  const settle = () => { weight = 0; Object.assign(gaze, {yaw: 0, pitch: 0, goalYaw: 0, goalPitch: 0}); };
   function drive(now) {
     raf = 0;
     const dt = last ? Math.min(.1, (now - last) / 1000) : 0;
@@ -385,19 +435,17 @@
     weight = veiled ? 0 : weight + ((live && !move ? 1 : 0) - weight) * ease(.6);
     lean.x += (pointer.x - lean.x) * ease(idle.response);
     lean.y += (pointer.y - lean.y) * ease(idle.response);
-    // At the shelf the view turns toward the side the pointer is on (left is
-    // a positive yaw), and a little up or down with it.
-    const shelf = state.look, looking = live && !move && navigation === 'SHELF_INSPECTION';
-    const side = Math.min(1, Math.abs(pointer.x)), v = Math.min(1, Math.max(0, (side - shelf.from) / (shelf.to - shelf.from)));
-    const goal = looking ? -Math.sign(pointer.x) * (shelf.slight * side + (shelf.yaw - shelf.slight) * v * v * (3 - 2 * v)) : 0;
-    follow('yaw', 'yawSpeed', goal, dt);
-    follow('pitch', 'pitchSpeed', looking ? -shelf.pitch * pointer.y : 0, dt);
+    // The visitor's look eases toward where it is turned (at once under
+    // reduced motion).
+    const k = still.matches ? 1 : ease(state.look.ease);
+    gaze.yaw += (gaze.goalYaw - gaze.yaw) * k; gaze.pitch += (gaze.goalPitch - gaze.pitch) * k;
+    const turning = Math.abs(gaze.goalYaw - gaze.yaw) + Math.abs(gaze.goalPitch - gaze.pitch) > .005;
     const s = now / 1000, wave = (period, phase = 0) => Math.sin(s * 2 * Math.PI / period + phase);
     const standing = {
       x: weight * (idle.sway[0] * wave(11) + idle.lean[0] * lean.x),
       y: weight * (idle.sway[1] * wave(6.5, 1) - idle.lean[1] * lean.y),
-      yaw: weight * (idle.swayYaw * wave(13, 2) - idle.leanYaw * lean.x) + look.yaw,
-      pitch: look.pitch,
+      yaw: weight * (idle.swayYaw * wave(13, 2) - idle.leanYaw * lean.x) + gaze.yaw,
+      pitch: gaze.pitch,
     };
     if (move) {
       // A walk takes the eye's offset along from where it set off, and lets it
@@ -414,11 +462,11 @@
     } else {
       Object.assign(offset, standing);
       const following = Math.abs(pointer.x - lean.x) + Math.abs(pointer.y - lean.y) > .02;
-      const turning = Math.abs(look.yawSpeed) + Math.abs(look.pitchSpeed) > .05;
       if (turning || now - drawn > (following ? idle.leanFrameMs : idle.frameMs)) { drawn = now; update(); }
     }
-    if (move || live || weight > .002 || Math.abs(look.yaw) + Math.abs(look.pitch) > .01) wake();
-    else { settle(); for (const key in offset) offset[key] = 0; last = 0; update(); }
+    if (move || live || weight > .002 || turning) wake();
+    // At rest: the sway and lean gone, the visitor's look kept.
+    else { weight = 0; Object.assign(offset, {x: 0, y: 0, yaw: gaze.yaw, pitch: gaze.pitch}); last = 0; update(); }
   }
   // Walk the current leg to `progress` (1 = its end) over `duration` ms;
   // resolves true on arrival, false if stopped or replaced.
@@ -429,6 +477,39 @@
   });
   state.stop = () => { const stopped = move; move = null; stopped?.resolve(false); };
   Object.defineProperty(state, 'moving', {get: () => !!move});
+  // Turn the visitor's look by degrees (left and up positive), within the
+  // pitch limits. Standing free, it turns the free pose itself. Not while
+  // walking: the walk carries the look and lets it go.
+  state.lookBy = (dYaw, dPitch) => {
+    if (move) return;
+    const [low, high] = state.look.pitch;
+    if (state.free) {
+      const f = state.free;
+      state.setFree({...f, yaw: wrap(f.yaw + dYaw), tilt: Math.max(90 - high, Math.min(90 - low, f.tilt - dPitch))});
+      return;
+    }
+    gaze.goalYaw += dYaw;
+    // The camera's pitch is 90 - (the path's tilt) + the look's pitch.
+    gaze.goalPitch = Math.max(low - 90 + base.tilt, Math.min(high - 90 + base.tilt, gaze.goalPitch + dPitch));
+    wake();
+  };
+  // ---- Standing free: the eye's own pose ({x, y, z} metres, yaw and tilt
+  // in degrees, tilt down positive), in place of a place's or a walk's.
+  // enterFree() takes the current view as it is on screen (the lens's shift
+  // turned into tilt), and the navigation state becomes FREE.
+  state.free = null;
+  state.setFree = pose => { state.free = pose; update(); };
+  state.enterFree = () => {
+    state.stop(); journey++;
+    const pose = {x: state.x, y: state.eyeHeight, z: state.distance, yaw: camera.yaw,
+      tilt: 90 - camera.pitch + Math.atan2(innerHeight / 2 - state.originY, state.focal) / radians};
+    settle(); for (const key in offset) offset[key] = 0;
+    state.free = pose; update(); announce('FREE');
+    return pose;
+  };
+  // Turn the look back to where the place looks.
+  state.resetLook = () => { gaze.goalYaw = gaze.goalPitch = 0; wake(); };
+  Object.defineProperty(state, 'gaze', {get: () => ({yaw: gaze.yaw, pitch: gaze.pitch})});
   addEventListener('pointermove', event => {
     if (event.pointerType === 'touch') return;
     pointer.x = event.clientX / innerWidth * 2 - 1; pointer.y = event.clientY / innerHeight * 2 - 1;
@@ -444,7 +525,10 @@
     wake();
   });
 
-  // ---- Where the visitor is: five named states over the points and legs.
+  // ---- Where the visitor is: named states over the points and legs.
+  //   FREE              standing free (first-person.js: game mode, or website
+  //                     mode after it); ENTRY_APPROACH walking from there to
+  //                     the entry
   //   ENTRY             standing at the room's entry
   //   CHAIR_APPROACH    walking to the chair (from the entry or the shelf),
   //                     or from it back to the entry
@@ -480,6 +564,28 @@
     if (!Object.hasOwn(arrival, place)) throw new TypeError('sceneCamera.go: no place called ' + place);
     const id = ++journey, target = pointOf[place];
     state.stop();
+    // From standing free: a walk of its own to the place, or to beside the
+    // chair, where sitting down goes on as from the entry.
+    if (state.free) {
+      const format = state.format, seat = target === 'seated', sit = seat ? way('entry>seated', format) : null;
+      const settleAt = seat ? sit.settleProgress : 0, end = seat ? sit.at(settleAt) : aim(points[target]);
+      const landing = () => target === 'shelf' ? state.setLeg('entry', 'shelf', 1) : state.setLeg('entry', 'seated', seat ? settleAt : 0);
+      settle(); for (const key in offset) offset[key] = 0;
+      if (instant || still.matches) {
+        state.free = null; state.setLeg('entry', 'seated', seat ? 1 : 0);
+        if (target === 'shelf') state.setLeg('entry', 'shelf', 1);
+        announce(arrival[place]); return Promise.resolve(true);
+      }
+      freeRoute = freeWay(state.free, end);
+      state.free = null; state.leg = {from: 'free', to: target, progress: 0}; update();
+      announce(approaching[target] ?? 'ENTRY_APPROACH');
+      return state.moveTo(1, freeRoute.duration).then(arrived => {
+        if (!arrived || id !== journey) return false;
+        landing();
+        if (!seat) { announce(arrival[place]); return true; }
+        return state.moveTo(1, sit.duration * (1 - settleAt)).then(sat => sat && id === journey && (announce('SEATED'), true));
+      });
+    }
     // The way there, as legs walked to one end ([from, to, progress]): from
     // mid-leg on to its end if that is the place, else back where it came
     // from; then straight there, or through the entry if no leg leads there.

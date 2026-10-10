@@ -1,0 +1,276 @@
+/* First person (first-person.js): the sight, the invitation, the menu, the
+   hint while the mouse is free, and the veil of mist that carries a visitor
+   where they cannot walk. In the room's own idiom: dark violet glass, gilt
+   hairlines, Cinzel for titles, a little teal light. */
+.fp-ui,
+.fp-ui *,
+.fp-invite {
+  box-sizing: border-box;
+  font-family: var(--font-body, Inter, system-ui, sans-serif);
+}
+.fp-ui[hidden],
+.fp-invite[hidden] { display: none; }
+
+/* ---- The menu button: beside the sound toggle (styles.css .room-sound),
+   the same size and line, so the two read as a pair. */
+.fp-menu-button {
+  position: fixed;
+  z-index: 1002;
+  top: 17px;
+  right: 116px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .4);
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0, 0, 0, .55);
+  cursor: pointer;
+  transition: background .15s ease, transform .1s ease, border-color .15s ease;
+}
+.fp-menu-button:hover,
+.fp-menu-button[aria-expanded="true"] { background: rgba(255, 255, 255, .2); border-color: rgba(214, 178, 112, .8); }
+.fp-menu-button:active { transform: scale(.94); }
+.fp-menu-button:focus-visible { outline: 2px solid rgba(190, 206, 255, .6); outline-offset: 3px; }
+/* Three short lines, the middle one a little shorter: a quiet menu glyph. */
+.fp-menu-button__glyph,
+.fp-menu-button__glyph::before,
+.fp-menu-button__glyph::after {
+  width: 15px;
+  height: 1.5px;
+  display: block;
+  border-radius: 1px;
+  background: currentColor;
+  content: "";
+}
+.fp-menu-button__glyph { position: relative; width: 11px; }
+.fp-menu-button__glyph::before { position: absolute; top: -5px; left: -2px; }
+.fp-menu-button__glyph::after { position: absolute; top: 5px; left: -2px; }
+
+/* ---- Panels: the menu and the invitation. */
+.fp-menu,
+.fp-invite {
+  position: fixed;
+  z-index: 1003;
+  width: min(348px, calc(100vw - 32px));
+  padding: 22px 22px 20px;
+  border: 1px solid rgba(201, 162, 96, .42);
+  border-radius: 14px;
+  color: #ece4d2;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(74, 52, 112, .38), transparent 70%),
+    linear-gradient(180deg, rgba(24, 16, 36, .95), rgba(12, 9, 20, .96));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .4), 0 22px 64px rgba(0, 0, 0, .55), 0 0 42px rgba(78, 196, 180, .08) inset;
+  backdrop-filter: blur(14px);
+}
+/* A fine gilt rule just inside the border. */
+.fp-menu::before,
+.fp-invite::before {
+  position: absolute;
+  inset: 5px;
+  border: 1px solid rgba(201, 162, 96, .16);
+  border-radius: 10px;
+  content: "";
+  pointer-events: none;
+}
+.fp-menu { top: 66px; right: 20px; }
+.fp-menu__title,
+.fp-invite__title {
+  margin: 0 0 12px;
+  color: #e8cf9c;
+  font: 600 18px/1.25 var(--font-accent, Cinzel, serif);
+  letter-spacing: .04em;
+  text-shadow: 0 0 14px rgba(232, 207, 156, .25);
+}
+.fp-invite__title { text-align: center; font-size: 20px; }
+
+.fp-modes,
+.fp-invite__choices { display: flex; gap: 8px; }
+.fp-mode,
+.fp-invite__yes,
+.fp-invite__no {
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid rgba(201, 162, 96, .3);
+  border-radius: 9px;
+  color: inherit;
+  background: rgba(255, 255, 255, .05);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.fp-mode { flex: 1; }
+.fp-mode:hover,
+.fp-invite__no:hover { background: rgba(255, 255, 255, .1); }
+.fp-mode[aria-pressed="true"],
+.fp-invite__yes {
+  border-color: rgba(214, 178, 112, .85);
+  color: #fff4dc;
+  background: linear-gradient(180deg, rgba(150, 110, 52, .45), rgba(96, 66, 30, .4));
+  box-shadow: 0 0 16px rgba(214, 178, 112, .16);
+}
+.fp-invite__yes:hover { background: linear-gradient(180deg, rgba(170, 126, 60, .55), rgba(110, 76, 34, .5)); }
+.fp-mode:focus-visible,
+.fp-invite__yes:focus-visible,
+.fp-invite__no:focus-visible { outline: 2px solid rgba(160, 220, 210, .7); outline-offset: 2px; }
+.fp-mode:disabled { cursor: not-allowed; opacity: .45; }
+.fp-menu__current { margin: 14px 0 6px; color: #bfb39a; font-size: 12px; letter-spacing: .02em; }
+.fp-menu__help p { margin: 8px 0 0; color: #d8d0c0; font-size: 13px; line-height: 1.55; }
+.fp-menu__note { color: #b9ab93 !important; font-style: italic; }
+.fp-menu__keys { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+.fp-menu__keys p { margin: 0 !important; }
+
+/* ---- The keys, as small engraved stones: W over A S D. */
+.fp-keys {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.fp-keys__row { display: flex; gap: 4px; }
+.fp-keys kbd {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(201, 162, 96, .45);
+  border-radius: 7px;
+  color: #f3e3bd;
+  background: linear-gradient(180deg, rgba(64, 50, 84, .9), rgba(28, 20, 40, .95));
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .55), 0 0 10px rgba(78, 196, 180, .12) inset;
+  font: 600 13px/1 var(--font-accent, Cinzel, serif);
+}
+.fp-menu .fp-keys kbd { width: 24px; height: 24px; font-size: 11px; }
+
+/* ---- The invitation: in the middle, rising softly into view. */
+.fp-invite {
+  top: 50%;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, calc(-50% + 12px));
+  transition: opacity .32s ease, transform .32s ease;
+}
+.fp-invite.is-shown { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%); }
+/* Wide enough for both choices on one line each. */
+.fp-invite { width: min(420px, calc(100vw - 32px)); }
+.fp-invite__text { margin: 0 0 16px; color: #d8d0c0; font-size: 13.5px; line-height: 1.55; text-align: center; }
+.fp-invite > .fp-keys { margin-bottom: 18px; }
+.fp-invite__choices { width: 100%; }
+.fp-invite__choices > button { flex: 1; }
+
+/* ---- The sight: a fine hollow ring of pale light at the very centre. It
+   brightens, warms and opens a little over what can be used. */
+.fp-sight {
+  position: fixed;
+  z-index: 1001;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+}
+.fp-sight.is-shown { opacity: .62; }
+.fp-sight.is-shown.is-active { opacity: 1; }
+.fp-sight__ring {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 16px;
+  height: 16px;
+  border: 1.25px solid rgba(214, 236, 255, .9);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(140, 220, 210, .45), 0 0 1px rgba(0, 0, 0, .7);
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+.fp-sight.is-active .fp-sight__ring {
+  border-color: rgba(255, 226, 168, .95);
+  box-shadow: 0 0 10px rgba(255, 210, 140, .6), 0 0 1px rgba(0, 0, 0, .7);
+  transform: scale(1.3);
+}
+.fp-sight__label {
+  position: absolute;
+  top: 18px;
+  left: 0;
+  padding: 3px 8px;
+  border: 1px solid rgba(201, 162, 96, .3);
+  border-radius: 6px;
+  color: #fff3dc;
+  background: rgba(14, 10, 22, .78);
+  font: 600 11px/1.3 var(--font-accent, Cinzel, serif);
+  letter-spacing: .04em;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+.fp-sight__label:empty { display: none; }
+
+/* ---- While the mouse is free in game mode. */
+.fp-hint {
+  position: fixed;
+  z-index: 1002;
+  right: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: 16px;
+  width: fit-content;
+  max-width: calc(100vw - 32px);
+  margin: 0 auto;
+  padding: 9px 14px;
+  border: 1px solid rgba(201, 162, 96, .3);
+  border-radius: 9px;
+  color: #ece4d2;
+  background: rgba(14, 10, 22, .84);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* ---- The veil: mist closing over the view and opening again elsewhere.
+   Over the room and its arrows, under the controls at the top right
+   (styles.css: the sound and the theme at 999). */
+.fp-veil {
+  position: fixed;
+  z-index: 998;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 50% 55%, rgba(70, 150, 140, .35), transparent 70%),
+    radial-gradient(90% 80% at 50% 50%, rgba(18, 12, 30, .97), rgba(6, 4, 12, 1));
+  transition: opacity .28s ease;
+}
+.fp-veil.is-on { opacity: 1; }
+
+/* ---- Input. Where the room can be turned by touch the browser must not take
+   the gesture for a scroll; while dragging, no text is selected. The mouse
+   is hidden under pointer lock. In game mode the sight takes the place of
+   the places' click areas. */
+body.fp-room .intro-scene,
+body.fp-room .entry-target,
+body.fp-room .leave-shelf { touch-action: none; }
+body.fp-looking { user-select: none; cursor: grabbing; }
+body.fp-locked,
+body.fp-locked * { cursor: none !important; }
+body.game-mode #entryTargets,
+body.game-mode #leaveShelf { display: none !important; }
+
+@media (max-width: 520px) {
+  .fp-menu { top: 64px; right: 12px; }
+  .fp-menu,
+  .fp-invite { padding: 18px 16px 16px; }
+  .fp-invite__choices { flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fp-ui,
+  .fp-ui *,
+  .fp-invite,
+  .fp-veil { transition-duration: .01ms !important; }
+  .fp-invite { transform: translate(-50%, -50%); }
+}

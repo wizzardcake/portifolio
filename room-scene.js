@@ -176,7 +176,7 @@ if (renderer) {
   const vaultGlass=new THREE.MeshStandardMaterial({color:'#9fb5ad',map:vaultMap,emissive:'#7fe0cc',emissiveMap:vaultMap,emissiveIntensity:.55,roughness:.42,metalness:.15});
   // The lantern under the boss: warm glass, glowing on its own (its light on
   // the room is the lighting pass's to add).
-  const lanternGlass=new THREE.MeshStandardMaterial({color:'#ffd9a0',emissive:'#ff9f45',emissiveIntensity:1.6,roughness:.35});
+  const lanternGlass=new THREE.MeshStandardMaterial({color:'#ffcf8f',emissive:'#ff8a32',emissiveIntensity:1.25,roughness:.35});
   const materials=[stone,wood,ceilingMaterial,trim,timber,stairStone,chairWood,velvet,stepStone,architecturalMetal,vaultGlass];
   const textured = materials.map(m=>({map:m.map,color:m.color.clone()}));
   // Pieces sharing a material are merged into one mesh, which keeps the
@@ -281,7 +281,9 @@ if (renderer) {
   // and the door's passage, and the tower's circle.
   const footprint=x=>chamber.footprint(x,tower);
   const east=tower.x+tower.r+T,west=nook.back-T,south=-apothem-T,north=door.z+door.depth+.05;
-  mesh('floor substrate',block(east-west+T*2,.07,north-south+T*2,(west+east)/2,-.06,(north+south)/2),
+  // Beneath the boards; in the door's passage it is the floor and the walls
+  // themselves, dark slate.
+  mesh('floor substrate',merge([block(east-west+T*2,.07,north-south+T*2,(west+east)/2,-.06,(north+south)/2),chamber.passageFloor,...chamber.passage]),
     new THREE.MeshStandardMaterial({color:'#151312',roughness:1}),false);
   // Each board runs to the outermost wall line across its width; the ragged
   // ends of the round chamber's rows disappear under its walls.
@@ -422,6 +424,8 @@ if (renderer) {
   beamParts.push(new THREE.ExtrudeGeometry(upper,{depth:.12,bevelEnabled:false,curveSegments:24})
     .rotateX(Math.PI/2).translate(tower.x,tread(stair.count),tower.z));
   mesh('timber beams',merge(beamParts),timber);
+  // The outer door at the end of the passage: old, dark, ironbound oak.
+  mesh('outer door',merge([chamber.parts.doorLeaf]),new THREE.MeshStandardMaterial({color:'#4c3828',map:woodMap,roughness:.9}),false);
 
   // The tower's roof, far above the vault's springing (the part over the
   // chamber hides above its vault).
@@ -438,7 +442,9 @@ if (renderer) {
     const one=merge(parts);
     mesh(name,merge(chamber.frame.instances.map(matrix=>one.clone().applyMatrix4(matrix))),material);
   }
-  mesh('vault lantern',chamber.parts.lanternGlass,lanternGlass,false);
+  // Warm glass that glows on its own: the vault's lantern, the sconces'
+  // chimneys and the candles' flames (room-chamber.js), one draw call.
+  mesh('lamp and candle glass',merge([chamber.parts.lanternGlass,...chamber.parts.glow]),lanternGlass,false);
   // ---- Furnishing, simplified: books on the shelving niches' shelves (one
   // merged mesh), a banner in each blind arch, and a round rug under the
   // table, as in the concept. Its own seeded generator, so the room's shared
@@ -451,15 +457,15 @@ if (renderer) {
     // Each book is a box whose texture coordinates all point at one cell of
     // a small palette (colour across, shade down), so the shelves share the
     // timber's shader instead of needing instanced colour.
-    const {colours,shades}=chamber.bookPalette;
-    const palette=canvas(colours.length,shades,(g)=>colours.forEach((c,i)=>{for(let j=0;j<shades;j++){
-      g.fillStyle='#'+new THREE.Color(c).multiplyScalar(.7+.5*j/(shades-1)).getHexString();g.fillRect(i,j,1,1);}}));
+    // The candles' wax takes a last, ivory column.
+    const {colours,shades}=chamber.bookPalette,cells=colours.length+1;
+    const palette=canvas(cells,shades,(g)=>{colours.forEach((c,i)=>{for(let j=0;j<shades;j++){
+      g.fillStyle='#'+new THREE.Color(c).multiplyScalar(.7+.5*j/(shades-1)).getHexString();g.fillRect(i,j,1,1);}});
+      g.fillStyle='#d9ccb0';g.fillRect(colours.length,0,1,shades);});
     palette.magFilter=palette.minFilter=THREE.NearestFilter;palette.generateMipmaps=false;
-    mesh('books',merge(books.map(book=>{
-      const g=new THREE.BoxGeometry(1,1,1),uv=g.attributes.uv,u=(book.colour+.5)/colours.length,v=1-(book.shade+.5)/shades;
-      for(let i=0;i<uv.count;i++)uv.setXY(i,u,v);
-      return g.applyMatrix4(book.matrix);
-    })),new THREE.MeshStandardMaterial({map:palette,roughness:.78}),false);
+    const cell=(g,u,v)=>{const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,u,v);return g;};
+    mesh('books and candles',merge([...books.map(book=>cell(new THREE.BoxGeometry(1,1,1),(book.colour+.5)/cells,1-(book.shade+.5)/shades).applyMatrix4(book.matrix)),
+      ...chamber.parts.wax.map(g=>cell(g,(cells-.5)/cells,.5))]),new THREE.MeshStandardMaterial({map:palette,roughness:.78}),false);
     // Deep violet cloth, a gilt border and a crescent over a small star.
     const bannerMap=canvas(128,320,(g,w,h)=>{
       const cloth=g.createLinearGradient(0,0,0,h);cloth.addColorStop(0,'#2c1840');cloth.addColorStop(1,'#1c0f2a');
@@ -546,7 +552,7 @@ if (renderer) {
   // and scaled with the tower. Their rods reach up to the vault.
   const lamps=createRoomLamps(THREE,{tower,stair,height:H,slab:tread(stair.count)-.12,ringBeam:H-.2,
     anisotropy:Math.min(4,renderer.capabilities.getMaxAnisotropy()),place:{
-      door:{at:[door.x-.65,door.z-.65],aim:[door.x,1.25,door.z]},
+      door:{at:[door.x-.65,door.z-1.2],aim:[door.x,.8,door.z-.15]},
       shelf:{shift:[nook.x+2.4,nook.z+.25]},
       stair:{turn:tower.turn,scale:tower.scale},
       mouth:top=>new THREE.Vector3(top.x,chamber.ceilingAt(top.x,top.z)+.04,top.z),
@@ -625,7 +631,8 @@ if (renderer) {
   moon.position.set(aperture.x,2.4,aperture.z-T/2);moon.target.position.set(-1.7,0,-1.4);
   moon.castShadow=true;moon.shadow.mapSize.set(1024,1024);moon.shadow.bias=-.001;moon.shadow.normalBias=.025;
   shell.add(moon,moon.target);
-  const windowBounce=new THREE.PointLight('#91acd7',2.2,2.8,2);
+  // (Wider in the chamber: the great window is twice the old one's height.)
+  const windowBounce=new THREE.PointLight('#91acd7',3.4,4.2,2);
   windowBounce.position.set(aperture.x,aperture.sill+.62,aperture.z+.24);shell.add(windowBounce);
   // The same cool window light inside the tower, so its lancets read at night.
   const towerBounce=new THREE.PointLight('#91acd7',2.2,3,2),[bounceX,bounceZ]=radialAt(lancets[1].at,.75*tower.scale);
@@ -635,6 +642,19 @@ if (renderer) {
   // floor round it, and a weak glow that keeps the nearest beams and the
   // chair's back from going pure black. It replaces an unseen warm fill.
   const frontFill=lamps.lights.glow;
+  // The chamber's own warm light (room-chamber.js), each from a lamp the
+  // visitor can see: the lantern under the boss lights the vault's ribs, the
+  // gallery's rail and the floor round the table from above; two of the
+  // column sconces wash the walls on either side, the shelving niches and
+  // the banners, in amber. None casts a shadow; the room stays dark at its
+  // edges and high in the vault. Live-tunable with studyRoom.chamberLight.
+  const chamberLight={lantern:24,sconces:7};
+  const vaultLight=new THREE.PointLight('#ffb468',chamberLight.lantern,11,2);
+  vaultLight.name='vault lantern';vaultLight.position.copy(chamber.parts.lanternAt);shell.add(vaultLight);
+  const sconceLights=[8,4].map(k=>{
+    const at=chamber.sconces[k],light=new THREE.PointLight('#ffad5c',chamberLight.sconces,4.5,2);
+    light.name='sconce '+(at.x<0?'left':'right');light.position.copy(at).multiplyScalar(.93).setY(at.y);shell.add(light);return light;
+  });
   // The portal's own light gathers round the table and the floor beside it;
   // it reaches no further than the floor's middle, so the side walls stay in
   // the room's shadow and the open portal remains the brightest thing in view.
@@ -1665,6 +1685,11 @@ if (renderer) {
         lighting[key]=Math.max(0,key==='tableAwake'?Math.min(1,value):value);
       hemisphere.intensity=lighting.fill;ambient.intensity=lighting.ambient;warm.intensity=lighting.lamp;
       frontFill.intensity=lighting.front;applyGlow();invalidate();return {...lighting};}},
+    // The chamber's warm lamps ("The chamber's own warm light"), read or tuned
+    // live: lantern and sconces, in candela.
+    chamberLight:{get values(){return {...chamberLight};},configure(values={}) {
+      for(const [key,value] of Object.entries(values)) if(Object.hasOwn(chamberLight,key)&&Number.isFinite(value)) chamberLight[key]=Math.max(0,value);
+      vaultLight.intensity=chamberLight.lantern;sconceLights.forEach(light=>light.intensity=chamberLight.sconces);invalidate();return {...chamberLight};}},
     // The painted sky ("The view out of the windows"), repainted live, and the
     // moonlight it sends in through the windows ("windowLight").
     sky:{get values(){return night.values;},configure(values={}){const result=night.configure(values);invalidate();return result;}},

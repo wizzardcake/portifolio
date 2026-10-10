@@ -139,7 +139,8 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
 
   // ---- Each bay's wall: from the floor up into its wall rib (in the tower's
   // bay, on up to the tower's roof), with its opening cut through or into it.
-  let windowWall = null;
+  let windowWall = null, doorLeaf = null;
+  const passage = [];
   function wallShape(b, top) {
     const w = b.open, shape = new THREE.Shape().moveTo(-hw, 0);
     if (w.sill === 0) {
@@ -163,9 +164,16 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
     const depth = w.depth ?? (b.kind === 'window' || b.kind === 'tower' ? T : null);
     if (b.kind === 'window' || b.kind === 'tower') continue;
     // Deeper than the wall: its reveals run on behind it.
-    if (depth > T) walls.push(place(reveal(outline(w), T, depth, w.sill > 0), b));
+    // (The door's passage is dark slate beyond the wall, like its floor.)
+    if (depth > T) (b.kind === 'door' ? passage : walls).push(place(reveal(outline(w), T, depth, w.sill > 0), b));
     // Shallower: a back closes it inside the wall.
-    walls.push(place(panel(w, depth), b));
+    // At the door's passage the far end is the outer door: dark oak
+    // (doorLeaf, its own darker timber), with three iron straps. Elsewhere
+    // the back of the niche, in stone.
+    if (b.kind === 'door') {
+      doorLeaf = place(panel(w, depth), b);
+      for (const y of [.35, 1.0, 1.65]) metal.push(place(box(2 * archHalfAt(w, y + .03) - .04, .035, .012, 0, y, depth - .008), b));
+    } else walls.push(place(panel(w, depth), b));
   }
 
   // ---- What the bays hold.
@@ -400,7 +408,8 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
     if (back > front) { back = Infinity; front = -Infinity; }
     for (const b of bays) {
       const w = b.open;
-      if (w.sill > 0 || !(w.depth > T)) continue;
+      // (The door's passage has its own floor of dark slate: passageFloor.)
+      if (w.sill > 0 || !(w.depth > T) || b.kind === 'door') continue;
       // The recess, as a box in plan: across ±halfWidth, out to its depth.
       const corners = [[-w.halfWidth, 0], [w.halfWidth, 0], [w.halfWidth, w.depth], [-w.halfWidth, w.depth]]
         .map(([u, d]) => b.map(u, 0, -d));
@@ -461,6 +470,38 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
     return {books, banners};
   }
 
+  // ---- Lamps and candles: the room's warm light, as things you can see.
+  // A brass sconce with a glass chimney on the room's face of six columns
+  // (either side of the window, two on the right wall, two on the left), and
+  // a few candles on the shelving niches' cabinets and at the ends of the
+  // nook's worktop. Glass and flames glow (room-scene.js puts them with the
+  // lantern's glass); wax and brass go with the books and the bronze.
+  const glow = [], wax = [], sconces = [];
+  const SCONCES = [0, 1, 4, 5, 8, 11];
+  {
+    const parts = {brass: [], glass: []}, at = Rc - .26, y = 2.05;
+    const p = (x, yy, z) => [cc * x - cs * z, yy, cs * x + cc * z];
+    const put = (g, [x, yy, z]) => g.translate(x, yy, z);
+    // Built at corner 0 (along +radial from the axis), then turned to each.
+    parts.brass.push(new THREE.BoxGeometry(.2, .035, .035).rotateY(-cornerAngle).translate(cc * (at + .1), y - .04, cs * (at + .1)),
+      put(new THREE.CylinderGeometry(.055, .035, .05, 8), p(at, y, 0)),
+      put(new THREE.ConeGeometry(.05, .06, 8), p(at, y + .2, 0)));
+    parts.glass.push(put(new THREE.CylinderGeometry(.034, .04, .15, 8), p(at, y + .1, 0)));
+    for (const k of SCONCES) {
+      const turn = new THREE.Matrix4().makeRotationY(-k * step);
+      metal.push(...parts.brass.map(g => g.clone().applyMatrix4(turn)));
+      glow.push(...parts.glass.map(g => g.clone().applyMatrix4(turn)));
+      sconces.push(v3(cc * at, y + .1, cs * at).applyMatrix4(turn));
+    }
+  }
+  const candle = (b, x, top, z, height) => {
+    wax.push(place(new THREE.CylinderGeometry(.021, .024, height, 8).translate(x, top + height / 2, z), b));
+    glow.push(place(new THREE.ConeGeometry(.011, .038, 6).translate(x, top + height + .024, z), b));
+  };
+  for (const b of bays.filter(b => b.kind === 'shelves'))
+    [[-.55, .16], [-.12, .11], [.47, .2]].forEach(([x, h]) => candle(b, x, .9, b.open.depth * .45, h));
+  for (const x of [-.82, .82]) candle(nook, x, nookDesk, nookOpen.depth * .55, .14);
+
   const door = bay('door'), win = bay('window'), mouth = bay('tower');
   return {
     tuning, bays, hw, corner: Rc, archTop, outline,
@@ -468,7 +509,13 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
     door: {...door.open, x: 0, z: door.centre.z, map: door.map},
     nook: {...nook.open, x: nook.centre.x, z: 0, desk: nookDesk, shelf: nookShelf, back: nook.centre.x - nook.open.depth, map: nook.map},
     mouth: {...mouth.open, theta: mouth.theta, out: mouth.out, centre: mouth.centre, map: mouth.map},
-    parts: {walls, windowWall, plinth, timber, metal, vault, lanternGlass, lanternAt: v3(0, lanternTop - .08 - L.height / 2, 0)},
+    // The door's passage floor, from mid-wall to the outer door.
+    passageFloor: place(new THREE.PlaneGeometry(2 * door.open.halfWidth, door.open.depth - T / 2).rotateX(-Math.PI / 2)
+      .translate(0, .0015, T / 4 + door.open.depth / 2), door),
+    passage,
+    parts: {walls, windowWall, doorLeaf, plinth, timber, metal, vault, lanternGlass, lanternAt: v3(0, lanternTop - .08 - L.height / 2, 0), glow, wax},
+    // Where each sconce's glass is (plan), by corner (SCONCES).
+    sconces: Object.fromEntries(SCONCES.map((k, i) => [k, sconces[i]])),
     frame: {geometry: frame, caps, instances},
     beyond, footprint, ceilingAt, furnish, bookPalette: {colours: BOOK_COLOURS, shades: SHADES},
     stats: {bays: sides, cells: sides, instances: sides},

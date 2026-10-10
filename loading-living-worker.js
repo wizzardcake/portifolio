@@ -4,8 +4,28 @@
    CPU/GPU resources belong exclusively to this worker. */
 'use strict';
 const FORMATION = 6.6, ENTRY = {approach:2.6, arrival:2, curtains:1.4, walk:2.6};
-const TAU = Math.PI*2, TOWER = [1.01,0,-.32], CORE = [-.06,1.72,.08];
-const DOOR = {a:.25, spring:-.10, sill:-.78, front:1.04, back:.35};
+const TAU = Math.PI*2, CORE = [-.06,1.72,.08];
+// The building at the scale of the room inside it (room-chamber.js,
+// room-tower.js). Across, 0.246 a metre: the chamber's outer wall (4.35 m
+// from its centre) is the body's widest, 1.07. Up, 0.291 a metre from the
+// door's sill, which is the room's floor.
+const SCALE = {across:.246, up:.291, floor:-.78};
+const at = metres => SCALE.floor + metres*SCALE.up;
+// The stair tower: its drum (1.70 m inside, a 0.35 m wall) stands 5.69 m from
+// the chamber's centre, back right (-30 degrees), and rises to its roof at
+// 7 m; a tall conical roof above.
+const TOWER = [4.926*SCALE.across, 0, -2.844*SCALE.across], TOWER_R = 2.05*SCALE.across, TOWER_BASE = -.5, TOWER_ROOF = at(7), TOWER_TIP = 2.62;
+// The doorway: the room's own pointed door (jambs 1.7 half-widths high, an
+// equilateral arch), a little wider than the room's 0.74 m, through a
+// passage as deep as the room's (the wall and the dark passage, 1.35 m).
+// Its aperture is projected at plane z.
+const DOOR = {a:.20, sill:SCALE.floor, plane:.90, back:.62};
+DOOR.spring = DOOR.sill + 1.7*DOOR.a; DOOR.peak = DOOR.spring + Math.sqrt(3)*DOOR.a;
+// Eye height walking in: the room's (1.7 m), so the walk meets its entry view.
+const EYE = at(1.7);
+// GLSL literals.
+// (Negative values in parentheses: "y--0.5" would read as a decrement.)
+const f = v => (v<0?'('+(+v).toFixed(4)+')':(+v).toFixed(4)), v3 = a => 'vec3('+a.map(f).join(',')+')';
 let gl, pg, meshes, canvas, width=1,height=1,screenW=1,screenH=1,dpr=1;
 let disposed=false, paused=false, reduced=false, first=true, formed=false, flight=null;
 let time=0,last=null,rate=1,handle=0, lastDraw=-100,phase='',statsAt=0;
@@ -42,9 +62,13 @@ function bodyRadius(y){
  return .95*Math.pow(1-u,.68);
 }
 function towerRadius(y){
- if(y>1.58)return .225*Math.pow(clamp((2.54-y)/.96),1.35)+.002;
- const u=clamp((y+.5)/2.08);
- return .275-.07*u+.018*Math.sin(u*TAU*1.5);
+ // The roof: a tall, concave spire flaring out over the drum at its eaves.
+ if(y>TOWER_ROOF)return TOWER_R*1.13*Math.pow(clamp((TOWER_TIP-y)/(TOWER_TIP-TOWER_ROOF)),1.75)+.003;
+ // The drum, narrowing a little as it rises, with a band where the upper
+ // floor is inside (2.85 m) and a cornice under the eaves.
+ const u=clamp((y-TOWER_BASE)/(TOWER_ROOF-TOWER_BASE));
+ const band=.016*Math.exp(-(((y-at(2.85))/.018)**2)),cornice=.024*Math.exp(-(((y-TOWER_ROOF+.035)/.03)**2));
+ return TOWER_R*(1.03-.07*u)+band+cornice;
 }
 function arch(a=DOOR.a,spring=DOOR.spring,sill=DOOR.sill,steps=32){
  const pts=[[-a,sill],[-a,spring]];
@@ -65,7 +89,7 @@ function archMesh(frame=false){
   pts.push(pts[0]);
   for(let i=0;i<pts.length-1;i++){
    const [x,y]=pts[i],[xx,yy]=pts[i+1],b=p.length/3,nn=norm([y-yy,xx-x,0]);
-   p.push(x,y,Math.sqrt(Math.max(.01,bodyRadius(y)**2-x*x))+.01,xx,yy,Math.sqrt(Math.max(.01,bodyRadius(yy)**2-xx*xx))+.01,x,y,.25,xx,yy,.25);for(let k=0;k<4;k++)n.push(...nn);ix.push(b,b+2,b+1,b+1,b+2,b+3);
+   p.push(x,y,Math.sqrt(Math.max(.01,bodyRadius(y)**2-x*x))+.01,xx,yy,Math.sqrt(Math.max(.01,bodyRadius(yy)**2-xx*xx))+.01,x,y,DOOR.back,xx,yy,DOOR.back);for(let k=0;k<4;k++)n.push(...nn);ix.push(b,b+2,b+1,b+1,b+2,b+3);
   }
  }
  return{p,n,ix};
@@ -122,16 +146,16 @@ vec3 deform(vec3 p){
   p.xz*=1.+bodyLife*(.6+ripple);
   p.y+=bodyLife*.55*sin(position.x*2.4+time*.7)*smoothstep(-.78,.2,position.y);
  }else if(part<1.5){
-  vec3 q=p-vec3(1.01,0.,-.32);
-  float h=sat((q.y+.5)/3.04),grow=ease(tower*1.3-h*.3);
+  vec3 q=p-${v3(TOWER)};
+  float h=sat((q.y-${f(TOWER_BASE)})/${f(TOWER_TIP-TOWER_BASE)}),grow=ease(tower*1.3-h*.3);
   float twist=(1.-tower)*5.*h*h+life*7.*h+1.5*h;
   float c=cos(twist),s=sin(twist);
   q.xz=mat2(c,-s,s,c)*q.xz*vec2(1.08,.94)*max(.001,grow);
   q.xz+=vec2(sin(h*7.5+time*.25*rhythm),cos(h*7.5+time*.25*rhythm))*.085*h*h*tower;
   q.y=mix(-.35,q.y,tower);
-  p=q+vec3(1.01,0.,-.32);
+  p=q+${v3(TOWER)};
  }else if(part<3.5){
-  p.x*=max(.001,entry);p.y=mix(-.78,p.y,entry);
+  p.x*=max(.001,entry);p.y=mix(${f(DOOR.sill)},p.y,entry);
  }else if(part<4.5){
   p.x*=max(.001,landing);p.z=mix(.84,p.z,landing);
   float tip=sat((position.z-.84)/1.72);
@@ -141,10 +165,10 @@ vec3 deform(vec3 p){
   p=(p-vec3(-.06,1.72,.08))*pulse+vec3(-.06,1.72,.08);
  }else if(part<7.5){
   float side=part<6.5?-1.:1.;
-  float u=abs(p.x)/.25,v=sat((p.y+.78)/1.12);
+  float u=abs(p.x)/${f(DOOR.a)},v=sat((p.y-${f(DOOR.sill)})/${f(DOOR.peak-DOOR.sill)});
   // Gather each fitted panel toward its own jamb, with a slack scalloped edge.
   float opening=ease(curtains);
-  p.x=side*mix(abs(p.x),.22+abs(p.x)*.21,opening);
+  p.x=side*mix(abs(p.x),${f(DOOR.a*.88)}+abs(p.x)*.21,opening);
   p.y+=opening*.075*(1.-u)*(1.-v);
   p.z+=.018*sin(u*17.+v*1.1)+.012*sin(time*1.5+u*8.+v*3.)*(1.-stillness)*(1.-v);
   p.x+=side*.007*sin(time*1.2+v*5.)*(1.-stillness)*(1.-u)*(1.-v);
@@ -181,11 +205,20 @@ vec3 current(vec3 q,float layer){
  float broad=pow(1.-abs(f),3.);
  float cloud=.5+.5*organic(q*1.12+vec3(3.2,layer,time*.027));
  vec3 tint=mix(vec3(.025,.34,.28),vec3(.15,.07,.28),smoothstep(.3,.9,cloud)*.65);
- return tint*(ribbon*.78+broad*.08)*(.25+.75*cloud)+vec3(.009,.039,.034)*cloud*cloud;
+ return tint*(ribbon*.95+broad*.08)*(.25+.75*cloud)+vec3(.009,.039,.034)*cloud*cloud;
 }
 void main(){
  float entrance=ease((age-4.85)/.65);
- if(part<.5&&(O.z>.20||reveal>.001)&&archSDF(vec2(O.x/max(.001,entrance),O.y),.25,-.1,-.78)<0.)discard;
+ // The doorway is cut through the body's front shell. Once it opens, all
+ // that is seen through it (its passage, the shell behind, the tower) gives
+ // way to the room (loading-gate.js cuts the same arch out of the gate).
+ if(part<.5&&O.z>.20&&archSDF(vec2(O.x/max(.001,entrance),O.y),${f(DOOR.a)},${f(DOOR.spring)},${f(DOOR.sill)})<0.)discard;
+ // Through the door, the visitor is inside: the room takes over the view.
+ if(eye.z<${f(DOOR.plane)}&&part<3.5)discard;
+ if(reveal>.001&&part<3.5&&(part<1.5||part>2.5)){
+  vec3 ray=P-eye;float t=(${f(DOOR.plane)}-eye.z)/ray.z;
+  if(t>0.&&archSDF((eye+ray*t).xy,${f(DOOR.a)},${f(DOOR.spring)},${f(DOOR.sill)})<0.)discard;
+ }
  if(part<1.5&&age<.651)discard;
  if(part>.5&&part<1.5&&age<3.06)discard;
  if(part>1.5&&part<3.5&&age<4.86)discard;
@@ -197,7 +230,7 @@ void main(){
  vec3 n=nn;
  float ndv=max(.0,dot(n,V)),fres=pow(1.-ndv,4.);
  if(part>5.5&&part<7.5){
-  float u=abs(O.x)/.25,v=sat((O.y+.78)/1.12);
+  float u=abs(O.x)/${f(DOOR.a)},v=sat((O.y-${f(DOOR.sill)})/${f(DOOR.peak-DOOR.sill)});
   float pleat=.5+.5*sin(u*17.+v*1.1),rim=pow(1.-ndv,2.);
   float thread=.5+.5*sin(u*380.);
   vec3 silk=mix(vec3(.016,.024,.035),vec3(.052,.073,.082),pleat*.65);
@@ -224,20 +257,32 @@ void main(){
   gl_FragColor=vec4(tonemap(c)*a,a);return;
  }
  vec3 q=O;
- if(part>.5&&part<1.5)q=(O-vec3(1.01,0.,-.32))*vec3(2.8,1.0,2.8);
+ if(part>.5&&part<1.5)q=(O-${v3(TOWER)})*vec3(1.6,1.0,1.6);
+ // The passage through the wall: dark stone, as the room's own door passage.
+ if(part>2.5&&part<3.5){
+  float grain=.5+.5*organic(O*14.);
+  vec3 stone=vec3(.016,.017,.020)*(.75+.5*grain)+vec3(.05,.045,.034)*pow(1.-ndv,3.)*.5;
+  gl_FragColor=vec4(tonemap(stone),1.);return;
+ }
  if(part>3.5&&part<4.5)q=O*vec3(1.,2.,1.);
  vec3 rd=refract(-V,n,.76);
- // Three refracted material layers, no per-pixel volume march.
- vec3 inner=current(q+rd*.06,0.)*.60+current(q+rd*.32,1.)*.27+current(q+rd*.70,2.)*.15;
- inner+=current(q+rd*1.08,3.)*.08+current(q+rd*1.43,4.)*.04;
+ // Refracted material layers, no per-pixel volume march: spread further
+ // apart in depth, so the currents part as the eye moves (depth), the near
+ // ones brighter.
+ vec3 inner=current(q+rd*.05,0.)*.78+current(q+rd*.38,1.)*.34+current(q+rd*.86,2.)*.19;
+ inner+=current(q+rd*1.32,3.)*.10+current(q+rd*1.85,4.)*.05;
  float pocket=.5+.5*organic(q*2.1+vec3(time*.02,3.2,0.));
- inner*=.28+1.12*pocket*pocket;
+ inner*=.30+1.15*pocket*pocket;
  inner+=vec3(.013,.07,.05)*exp(-dot(q-vec3(0.,.35,0.),q-vec3(0.,.35,0.))*1.7);
+ // The glass is thick: where it is seen straight on, light gathers in its
+ // depth; toward its edges it darkens before the rim catches the sky.
+ inner+=vec3(.006,.030,.025)*pow(ndv,1.6);
+ inner*=.72+.28*smoothstep(.05,.55,ndv);
  vec3 L=normalize(vec3(-.65,1.,1.)),H=normalize(L+V);
  float highlight=pow(max(dot(n,H),0.),260.)*.8+pow(max(dot(n,H),0.),48.)*.055;
  vec3 color=inner*(1.-fres*.75)+vec3(.0015,.004,.004);
  color+=vec3(.65,.76,.70)*highlight;
- color+=mix(vec3(.018,.17,.12),vec3(.13,.055,.22),smoothstep(-.6,.6,n.x))*fres*.65;
+ color+=mix(vec3(.018,.17,.12),vec3(.13,.055,.22),smoothstep(-.6,.6,n.x))*fres*.95;
  color+=vec3(.15,.085,.014)*max(0.,dot(n,normalize(vec3(-.06,1.72,.08)-P)))*.085;
  // A restrained band marks the two floors; windows are light beneath glass.
  if(part<.5){
@@ -249,10 +294,11 @@ void main(){
    color+=vec3(.09,.21,.18)*slit*.75;
   }
  }
- if(part>.5&&part<1.5&&O.z>-.22){
+ // The tower's lancets, stepped up with the stair inside (room-tower.js).
+ if(part>.5&&part<1.5&&O.z>${f(TOWER[2]+.12)}){
   for(int i=0;i<3;i++){
-   float y=.93+float(i)*.31;
-   float w=1.-smoothstep(-.007,.012,archSDF(vec2(O.x-1.01,O.y),.04,y,y-.16));
+   float sill=${f(at(1.13))}+float(i)*${f((at(2.46)-at(1.13))/2)},dx=(float(i)-1.)*.13;
+   float w=1.-smoothstep(-.007,.012,archSDF(vec2(O.x-${f(TOWER[0])}+dx,O.y),.042,sill+.36,sill));
    color+=mix(vec3(.07,.23,.18),vec3(.15,.07,.25),float(i)*.35)*w*.8;
   }
  }
@@ -304,11 +350,12 @@ function project(p,m){
 }
 function pose(){
  const rhythm=reduced?0:Math.pow(.5-.5*Math.cos(time*.78),2),settled=reduced?0:1;
- const far=[-.22+Math.sin(time*.21)*.10*rhythm,.56+Math.sin(time*.35)*.055*rhythm,6.7],look=[.09,.58,0];
- const fov=Math.max(.68,2*Math.atan(1.52/(screenW/screenH*6.7)));
+ // (Framed on the body and the tower together.)
+ const far=[-.02+Math.sin(time*.21)*.10*rhythm,.56+Math.sin(time*.35)*.055*rhythm,6.7],look=[.28,.56,0];
+ const fov=Math.max(.68,2*Math.atan(1.86/(screenW/screenH*6.7)));
  if(!flight)return{eye:far,target:look,fov,curtain:0,reveal:0,fade:0};
  const t=time-flight.start,A=ENTRY.approach,B=A+ENTRY.arrival,C=B+ENTRY.curtains,D=C+ENTRY.walk;
- const landing=[0,-.115,2.18],toward=[0,-.12,.1];
+ const landing=[0,EYE,2.18],toward=[0,EYE-.005,.1];
  let eye,target,opening=0,fade=0,reveal=0;
  if(t<A){setPhase('approach');const u=smooth(t/A);eye=lerp(flight.eye,landing,u);target=lerp(flight.target,toward,u);}
  else if(t<B){setPhase('arrival');eye=landing;target=toward;}
@@ -316,7 +363,7 @@ function pose(){
  else{
   setPhase('walk');const u=clamp((t-C)/ENTRY.walk),travel=smooth(u);
   const bob=Math.sin(u*Math.PI)*Math.sin(u*TAU*2.2)*.007;
-  eye=[Math.sin(u*TAU*1.1)*.002*Math.sin(u*Math.PI),-.115+bob,2.18-1.84*travel];target=[0,-.12+bob*.6,-1];
+  eye=[Math.sin(u*TAU*1.1)*.002*Math.sin(u*Math.PI),EYE+bob,2.18-1.84*travel];target=[0,EYE-.005+bob*.6,-1];
   opening=1;reveal=1;fade=smooth((u-.82)/.18);
   if(t>=D&&!flight.done){flight.done=true;send('flown',{time});}
  }
@@ -363,7 +410,7 @@ function render(){
  gl.depthMask(true);gl.disable(gl.BLEND);
  if(measured)ext.endQueryEXT(ext.TIME_ELAPSED_EXT);
  if(camera.reveal){
-  const points=arch().map(([x,y])=>project([x,y,.90],m));
+  const points=arch().map(([x,y])=>project([x,y,DOOR.plane],m));
   const covered=camera.eye[2]<1.00;
   // Coordinates in CSS pixels, keeping the real room visible through this exact arch.
   send('aperture',{points:covered?null:points.map(p=>[+p[0].toFixed(2),+p[1].toFixed(2)]),covered,fade:camera.fade,phase});
@@ -393,7 +440,7 @@ onmessage=({data:d})=>{
    if(!gl||!gl.getExtension('OES_standard_derivatives'))throw Error('Worker WebGL with derivatives unavailable');
    ext=gl.getExtension('EXT_disjoint_timer_query');resize();
    pg={glass:program(VERTEX,FRAGMENT),halo:program(HALO_VS,HALO_FS)};
-   meshes={body:upload(lathe(bodyRadius,1.289,-1.288,144,128)),tower:upload(lathe(towerRadius,2.54,-.50,132,72,TOWER)),
+   meshes={body:upload(lathe(bodyRadius,1.289,-1.288,144,128)),tower:upload(lathe(towerRadius,TOWER_TIP,TOWER_BASE,132,96,TOWER)),
     core:upload(lathe(y=>Math.sqrt(Math.max(0,.17**2-y*y)),.17,-.17,40,64,CORE)),
     feed:upload(lathe(y=>.006+.014*Math.sin((y-1.22)/.38*Math.PI),1.60,1.22,28,24)),
     frame:upload(archMesh(true)),tunnel:upload(archMesh()),platform:upload(platform()),left:upload(curtain(-1)),right:upload(curtain(1))};

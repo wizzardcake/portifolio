@@ -18,7 +18,8 @@
 
    Geometry only. room-scene.js owns the materials, the tower and its stair,
    the lights and everything that moves. The pieces come grouped by material.
-   One bay's columns, ribs and caps are instanced round the room. */
+   One bay's columns, ribs and caps are built once and repeated round the
+   room (frame.instances: one placement per corner). */
 
 export const chamberTuning = {
   sides: 12, apothem: 4.0, wall: .35,
@@ -192,7 +193,7 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
       plinth.push(place(box(z - a, .14, .035, (a + z) / 2, .07, -.0175), b));
   }
 
-  // ---- One bay's frame, instanced round the room: the clustered column at
+  // ---- One bay's frame, repeated round the room: the clustered column at
   // its corner, running up into the diagonal rib to the boss, and the bay's
   // wall rib. Bay 0's corner is the one at angle -105°.
   const cornerAngle = angleOf(0) - half, cc = Math.cos(cornerAngle), cs = Math.sin(cornerAngle);
@@ -367,10 +368,13 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
   // ---- Furnishing, simplified (the concept's bottles and props are left
   // out): books standing along the shelving niches' open shelves, and a
   // banner hung in each blind arch. Placements only; room-scene.js draws
-  // the books as one instanced mesh and the banners as one mesh.
+  // the books and the banners as one mesh each.
+  // Books: a colour and one of a few shades each (bookPalette: room-scene.js
+  // paints them into a small texture).
+  const BOOK_COLOURS = ['#5e1f24', '#2f4a2c', '#23385a', '#5a3a1e', '#7a5a22', '#45264f', '#3b3b33', '#6b2c1a'], SHADES = 4;
   function furnish(random) {
     const books = [], banners = [];
-    const colours = ['#5e1f24', '#2f4a2c', '#23385a', '#5a3a1e', '#7a5a22', '#45264f', '#3b3b33', '#6b2c1a'];
+    const colours = BOOK_COLOURS;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), z = new THREE.Vector3(0, 0, 1);
     for (const b of bays.filter(b => b.kind === 'shelves')) {
       const w = b.open;
@@ -385,7 +389,7 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
           p.set(x + width / 2, y + height / 2 * Math.cos(lean), w.depth - depth / 2 - .02).applyMatrix4(b.matrix);
           q.setFromRotationMatrix(new THREE.Matrix4().extractRotation(b.matrix)).multiply(new THREE.Quaternion().setFromAxisAngle(z, lean));
           books.push({matrix: m.compose(p, q, s.set(width, height, depth)).clone(),
-            colour: new THREE.Color(colours[Math.floor(random() * colours.length)]).multiplyScalar(.7 + random() * .5)});
+            colour: Math.floor(random() * colours.length), shade: Math.round(random() * (SHADES - 1))});
           x += width + .003;
         }
       }
@@ -406,7 +410,7 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
     mouth: {...mouth.open, theta: mouth.theta, out: mouth.out, centre: mouth.centre, map: mouth.map},
     parts: {walls, windowWall, plinth, timber, metal, vault, lanternGlass, lanternAt: v3(0, lanternTop - .08 - L.height / 2, 0)},
     frame: {geometry: frame, caps, instances},
-    beyond, footprint, ceilingAt, furnish,
+    beyond, footprint, ceilingAt, furnish, bookPalette: {colours: BOOK_COLOURS, shades: SHADES},
     stats: {bays: sides, cells: sides, instances: sides},
   };
 }

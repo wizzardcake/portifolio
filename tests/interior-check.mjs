@@ -98,7 +98,7 @@ if(!process.argv.includes('--shots-only')) for(let run=0;run<runs;run++) {
     await b.evaluate(`sceneCamera.go('entry',{instant:true});sceneCamera.update();studyRoom.invalidate();true`);await sleep(400);
     const stats=await b.evaluate(`(()=>{const R=studyRoom,r=R.renderer;
       r.info.autoReset=false;r.info.reset();R.camera.layers.set(0);r.render(R.scene,R.camera);const room={calls:r.info.render.calls,triangles:r.info.render.triangles};r.info.autoReset=true;
-      return {room,memory:{...r.info.memory},programs:r.info.programs.length};})()`);
+      return {room,memory:{...r.info.memory},programs:r.info.programs.length,programKeys:r.info.programs.map(p=>p.name+" "+p.cacheKey)};})()`);
     timing.push({run,before,entered,after,stats,errors:[...b.errors]});
     console.log('run',run,JSON.stringify({ready:before.ready,roomShown:before.roomShown,entered,gateFps:before.fps,gateLongest:before.longestGap,entry:after.entry,stats}));
   } finally {await b.close();}

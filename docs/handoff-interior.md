@@ -365,8 +365,8 @@ after resuming. Files:
 
 | File | Change |
 | --- | --- |
-| `room-chamber.js` (new) | The chamber. Twelve bays at apothem 4.0 m (walls 0.35 m), each a flat wall from the floor into its pointed wall rib, with its opening or niche; a ribbed dome (springing 3.3 m, wall ribs rising 1.35 m, crown 6.4 m) of twelve glass cells; a boss and a hanging lantern; one bay's clustered column, diagonal rib and wall rib instanced round the twelve corners (two draw calls, timber and bronze); cornice, plinth, the nook's and shelving niches' built-ins; the floor's footprint, the cloth's walls (`beyond`), the vault's height (`ceilingAt`) and furnishing placements. |
-| `room-scene.js` | Builds the chamber in place of the box. The tower moves outside the bay at -30° (r 1.15, its circle through that bay's two columns); its stair, lancets, upper floor, lamps, green lights and shafts keep their design, turned 15° and scaled 0.85 about the axis (`fromOld`, `turned`). The window's moon spot, bounce, haze, shafts and redraw rectangle follow the great window. Cloth collision uses the chamber's walls; the cloth's flight goes in front of the new mouth and up the turned stair. The sky is turned 9.3° about the chair's eye so its composition centres on the new window. New: the vault's mosaic glass, the lantern glass, books (instanced), banners and a round rug under the table. Walls lose the brick coursing (dressed stone). |
+| `room-chamber.js` (new) | The chamber. Twelve bays at apothem 4.0 m (walls 0.35 m), each a flat wall from the floor into its pointed wall rib, with its opening or niche; a ribbed dome (springing 3.3 m, wall ribs rising 1.35 m, crown 6.4 m) of twelve glass cells; a boss and a hanging lantern; one bay's clustered column, diagonal rib and wall rib built once and repeated round the twelve corners, merged (two draw calls, timber and bronze; see "Instancing" below); cornice, plinth, the nook's and shelving niches' built-ins; the floor's footprint, the cloth's walls (`beyond`), the vault's height (`ceilingAt`) and furnishing placements. |
+| `room-scene.js` | Builds the chamber in place of the box. The tower moves outside the bay at -30° (r 1.15, its circle through that bay's two columns); its stair, lancets, upper floor, lamps, green lights and shafts keep their design, turned 15° and scaled 0.85 about the axis (`fromOld`, `turned`). The window's moon spot, bounce, haze, shafts and redraw rectangle follow the great window. Cloth collision uses the chamber's walls; the cloth's flight goes in front of the new mouth and up the turned stair. The sky is turned 9.3° about the chair's eye so its composition centres on the new window. New: the vault's mosaic glass, the lantern glass, books (one merged mesh, coloured from a small palette texture), banners and a round rug under the table. Walls lose the brick coursing (dressed stone). |
 | `room-architecture.js` | Takes the window's and the door's plane mappings (`windowMap`, `doorMap`) instead of the alcove; frames the door with the alcove's old profile; a wide window gets two more mullions and four small heads (four lights and an eye). |
 | `room-lamps.js` | `place` overrides: the door lantern's spot and aim, the droplets' shift, the tower lamps' turn and scale, what 'beam' lamps hang from, and rods that reach the vault (`ceilingAt`). Defaults unchanged. |
 | `scene-camera.js` | Entry on the table's axis just inside the door (wide 0, 1.7, 3.4; portrait 0, 1.75, 3.75), looking at the window, with its own lens anchor (the table lower in frame, so the vault shows). Shelf eye in front of the new nook. New trunk and branch. The shelf's look-round reaches 150° (the chair is now about 175° round from the nook), at up to 80°/s. |
@@ -523,3 +523,47 @@ The user reports that clicking the left smoke marker goes to the chair.
    - The door lantern re-aimed, so `lighting-check` passes.
 4. **Stage D: smoke markers and navigation**, as above.
 5. **Full regression and a performance A/B** against `../interior-baseline`.
+
+## Performance A/B (after the merge below)
+
+**Conditions:**
+
+- `interior-check --timing-only`, interleaved: the baseline snapshot, then
+  this branch, four rounds;
+- a cold load each, on mains power, 1440x900, ANGLE D3D11.
+
+| | Baseline 926adf8 (n=4) | Chamber (n=4) |
+| --- | --- | --- |
+| First paint | 0.87 s (0.76–0.88) | 0.98 s (0.78–1.06) |
+| Room shown | 12.8 s (8.7–13.1) | 10.5 s (10.2–11.6) |
+| Site ready | 12.9 s (8.7–13.1) | 10.5 s (10.2–11.7) |
+| In, after pressing on | 15.4 s (11.5–15.9) | 13.2 s (12.9–14.5) |
+| While loading: main-thread fps, longest gap | 1.8; 4.7 s | 2.3; 4.5 s |
+| Entry: fps, p95 | 60.2, 17.2 ms | 59.5, 18.6 ms |
+| Chair: fps, p95 | 60.2, 17.1 ms | 60.1, 16.9 ms |
+| Shelf: fps, p95 | 60.2, 17.1 ms | 60.1, 17.2 ms |
+| Room draw calls, entry | 45 | 34 |
+| Triangles, entry | 24.7 k | 37.9 k |
+| Shader programs | 27 | 28 (the vault's glass) |
+| Geometries, textures | 46, 26 | 51, 29 |
+
+Loading is no slower; the ranges overlap and the medians favour the chamber,
+which no longer draws the brick texture. After entry everything holds the
+display's 60 fps. An earlier A/B (the machine loaded, about 18 s to ready)
+showed the same picture, the chair view then 39 fps on the baseline against
+60 on the chamber.
+
+### Instancing
+
+The brief asked for the ribs and columns to be instanced.
+- **Measured.** Instanced (one `InstancedMesh` each for timber and bronze),
+  they needed three more shader programs: instanced timber, instanced bronze,
+  and the instanced shadows' depth. Books with instanced colour needed a
+  fourth. That is 32 programs against the baseline's 27. Loading was about a
+  second slower.
+- **Now.** The one bay's frame is built once and repeated round the twelve
+  corners into one merged geometry per material: the same single draw call,
+  using the room's existing programs. The books are one merged mesh that
+  takes its colours from an 8x4 palette texture, so it uses the timber's
+  program.
+- **Result.** 28 programs, as in the table above.

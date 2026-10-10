@@ -430,25 +430,36 @@ if (renderer) {
   // they cast no shadow.
   mesh('vault',chamber.parts.vault,vaultGlass,false);
   // Columns and ribs: one bay's frame in timber, its capitals and bases in
-  // bronze, each instanced round the twelve corners (one draw call apiece).
+  // bronze, repeated round the twelve corners and merged, one draw call
+  // apiece. (Instanced, they drew in the same single call but needed three
+  // more shader programs, instanced and their shadows' depth: about a second
+  // more loading, measured. Merged they share the room's own programs.)
   for(const [name,parts,material] of [['columns and ribs',chamber.frame.geometry,timber],['capitals and bases',chamber.frame.caps,architecturalMetal]]) {
-    const instanced=new THREE.InstancedMesh(merge(parts),material,chamber.frame.instances.length);
-    chamber.frame.instances.forEach((matrix,i)=>instanced.setMatrixAt(i,matrix));
-    instanced.name=name;instanced.castShadow=instanced.receiveShadow=true;instanced.computeBoundingSphere();shell.add(instanced);
+    const one=merge(parts);
+    mesh(name,merge(chamber.frame.instances.map(matrix=>one.clone().applyMatrix4(matrix))),material);
   }
   mesh('vault lantern',chamber.parts.lanternGlass,lanternGlass,false);
   // ---- Furnishing, simplified: books on the shelving niches' shelves (one
-  // instanced mesh), a banner in each blind arch, and a round rug under the
+  // merged mesh), a banner in each blind arch, and a round rug under the
   // table, as in the concept. Its own seeded generator, so the room's shared
   // one lays out the cloth as before.
   {
     let s=9173;const draw=()=>((s=Math.imul(s,1664525)+1013904223>>>0)/4294967296);
     const {books,banners}=chamber.furnish(draw);
-    const shelved=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({roughness:.78}),books.length);
-    books.forEach((book,i)=>{shelved.setMatrixAt(i,book.matrix);shelved.setColorAt(i,book.colour);});
-    shelved.name='books';shelved.receiveShadow=true;shelved.computeBoundingSphere();shell.add(shelved);
     const canvas=(w,h,paint)=>{const c=document.createElement('canvas');c.width=w;c.height=h;paint(c.getContext('2d'),w,h);
       const map=new THREE.CanvasTexture(c);map.colorSpace=THREE.SRGBColorSpace;map.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());return map;};
+    // Each book is a box whose texture coordinates all point at one cell of
+    // a small palette (colour across, shade down), so the shelves share the
+    // timber's shader instead of needing instanced colour.
+    const {colours,shades}=chamber.bookPalette;
+    const palette=canvas(colours.length,shades,(g)=>colours.forEach((c,i)=>{for(let j=0;j<shades;j++){
+      g.fillStyle='#'+new THREE.Color(c).multiplyScalar(.7+.5*j/(shades-1)).getHexString();g.fillRect(i,j,1,1);}}));
+    palette.magFilter=palette.minFilter=THREE.NearestFilter;palette.generateMipmaps=false;
+    mesh('books',merge(books.map(book=>{
+      const g=new THREE.BoxGeometry(1,1,1),uv=g.attributes.uv,u=(book.colour+.5)/colours.length,v=1-(book.shade+.5)/shades;
+      for(let i=0;i<uv.count;i++)uv.setXY(i,u,v);
+      return g.applyMatrix4(book.matrix);
+    })),new THREE.MeshStandardMaterial({map:palette,roughness:.78}),false);
     // Deep violet cloth, a gilt border and a crescent over a small star.
     const bannerMap=canvas(128,320,(g,w,h)=>{
       const cloth=g.createLinearGradient(0,0,0,h);cloth.addColorStop(0,'#2c1840');cloth.addColorStop(1,'#1c0f2a');

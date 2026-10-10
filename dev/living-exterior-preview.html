@@ -1,0 +1,16 @@
+﻿<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Living orb architecture — local review</title>
+<link rel="stylesheet" href="../loading-gate.css"><link rel="stylesheet" href="../loading-exterior.css">
+<style>body{margin:0;background:#08060f;color:#dfd4e8;font:13px system-ui}.review{position:fixed;z-index:100002;left:20px;bottom:20px;display:flex;gap:12px;align-items:center;padding:10px;background:#090813cc;border:1px solid #cbc0e52a;border-radius:8px}.review button{background:#172a2c;color:#e3ede9;border:1px solid #82b8ad55;border-radius:4px;padding:8px 12px}.review input{width:180px}.review span{min-width:80px}.review[hidden]{display:none}</style>
+<div class="loading-gate" id="loadingGate"><div class="loading-gate__portal"></div></div>
+<div class="review"><button id="replay">Replay formation</button><button id="pause">Pause</button><button id="enter">Preview entry</button><input id="seek" type="range" min="0" max="20" value="0" step=".05" aria-label="Formation and idle time"><span id="phase">Core</span></div>
+<script type="module">
+import{createLoadingPortal}from'../loading-exterior-3d.js';
+const portal=createLoadingPortal(document.querySelector('.loading-gate__portal'));window.previewPortal=portal;
+addEventListener('loading-exterior-phase',e=>document.querySelector('#phase').textContent=e.detail.phase);
+document.querySelector('#seek').oninput=e=>loadingExterior3d.seek(+e.target.value);
+document.querySelector('#pause').onclick=e=>{const paused=e.target.textContent==='Pause';loadingExterior3d[paused?'pause':'play']();e.target.textContent=paused?'Play':'Pause';};
+document.querySelector('#replay').onclick=()=>location.reload();
+document.querySelector('#enter').onclick=async()=>{await portal.formation;await portal.fly();};
+window.addEventListener('pagehide',()=>portal.dispose(),{once:true});
+</script></html>

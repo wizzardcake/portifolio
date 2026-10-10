@@ -507,7 +507,7 @@ The user reports that clicking the left smoke marker goes to the chair.
 1. **The user's visual review of this architecture.**
    - Preview: run `node <scratchpad>/serve.mjs <worktree> 8765`, or any
      static server from the worktree, and open `http://127.0.0.1:8765/`.
-   - Screenshots: `verification/interior/round4/`.
+   - Screenshots: `verification/interior/review-1/` (`sheet.png` shows them all).
 2. **Stage B: the vertical structure.** The brief asks for two main floors
    with matching footprints, a taller tower and the spiral stair connecting
    them. This needs the user's choice, because a full second floor over the

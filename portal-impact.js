@@ -35,6 +35,8 @@
     const cx = x * W, cy = y * H, s = Math.max(0, Math.min(1, strength));
     window.dispatchEvent(new CustomEvent('portal-impact', {detail: {x, y, strength: s}}));
     const layer = part(screen, 'portal-impact'), surface = part(layer, 'portal-impact-surface');
+    // Its flares face the eye: the layer takes the camera's pitch (scene-camera.js).
+    window.sceneCamera?.facesEye?.(layer);
     const pool = part(surface, 'portal-impact-pool');
     pool.style.background = `radial-gradient(ellipse 55% 70% at ${x * 100}% ${y * 100}%,
       #ffc46b80, #4fd6c25c 30%, #a06ee640 55%, transparent 78%)`;

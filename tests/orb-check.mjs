@@ -363,7 +363,10 @@ async function check() {
     await evaluate(`(() => { dispatchEvent(new CustomEvent('card-portal-arrival'));
       window.__fallbackProject = portalMatter.project('kurs', {target: base => ({...base, x:24, z:base.z+12})}); return true; })()`);
     assert.equal(await evaluate('__fallbackProject'), true);
-    assert.equal(await evaluate("document.querySelector('#screen').style.getPropertyValue('--page-x-offset')"), '24px');
+    // (The page is placed on itself, portal-effects.js placePage: the target's
+    // x moves it sideways.)
+    assert.ok((await evaluate("document.querySelector('.portal-page').style.transform")).includes('calc(-50% + 24px)'),
+      'A supplied page target moves the page: '+await evaluate("document.querySelector('.portal-page').style.transform"));
     assert.ok(await evaluate('Math.abs(portalOrb.stats.pose.z - sceneCamera.reader().z - 12) < .1'));
     await evaluate('portalMatter.restore()');
     assert.equal(errors.filter(e => !/CSS material/.test(JSON.stringify(e))).length, 0, JSON.stringify(errors));

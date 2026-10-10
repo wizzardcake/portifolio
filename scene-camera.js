@@ -278,6 +278,19 @@
   const offset = {x: 0, y: 0, yaw: 0, pitch: 0}, base = {yaw: 0, tilt: 0};
   // What update() last wrote on the page's elements.
   const published = {};
+  // What turns back against the plane to face the eye (the portal's abyss,
+  // its aura, its reaction and impact layers): each takes the camera's pitch
+  // and yaw (--view-pitch, --view-yaw) on itself, for its own children, when
+  // they change. On the plane every element of the portal below it was
+  // restyled each frame the eye moved. state.facesEye(element) enrols one,
+  // state.facesEye(element, false) lets it go (while it is hidden, say).
+  const facing = new Set();
+  const face = el => {
+    const pitch = camera.pitch + 'deg', yaw = camera.yaw + 'deg';
+    if (el.style.getPropertyValue('--view-pitch') !== pitch) el.style.setProperty('--view-pitch', pitch);
+    if (el.style.getPropertyValue('--view-yaw') !== yaw) el.style.setProperty('--view-yaw', yaw);
+  };
+  state.facesEye = (el, on = true) => { if (on) { facing.add(el); face(el); } else facing.delete(el); };
   // The visitor's look (degrees), and where it is being turned to.
   const gaze = {yaw: 0, pitch: 0, goalYaw: 0, goalPitch: 0};
   function update() {
@@ -360,15 +373,19 @@
     // The portal's plane (portal.css .screen) takes its place and turn on
     // itself: a variable changed on the root restyles every element of the
     // page, and while the eye moved that cost 8 to 11 ms a frame (a walk ran
-    // at 31 fps); a transform on the plane restyles the plane alone. What its
-    // own parts read (the pitch, the legs' length) is set only when it
+    // at 31 fps); a transform on the plane restyles the plane alone. What
+    // turns back against it to face the eye takes the pitch and yaw on
+    // itself (facesEye, below), and the legs' length is set only when it
     // changes. (portal.css keeps the same transform from the variables, as
     // the fallback before the first update.)
     const transform = `translate(-50%, -50%) perspective(${focal}px) translate3d(${viewX}px, ${viewY}px, ${focal - viewDistance}px) ` +
       `rotateX(${camera.pitch}deg) rotateZ(${camera.yaw}deg)`;
     if (published.transform !== transform) screen.style.transform = published.transform = transform;
     if (published.top !== originY) { screen.style.top = originY + 'px'; published.top = originY; }
-    if (published.pitch !== camera.pitch) { screen.style.setProperty('--view-pitch', camera.pitch + 'deg'); published.pitch = camera.pitch; }
+    if (published.pitch !== camera.pitch || published.yaw !== camera.yaw) {
+      for (const el of facing) if (el.isConnected) face(el); else facing.delete(el);
+      published.pitch = camera.pitch; published.yaw = camera.yaw;
+    }
     const legLength = state.tableHeight * units;
     if (published.leg !== legLength) { root.style.setProperty('--table-leg-length', legLength + 'px'); published.leg = legLength; }
     screen.classList.toggle('is-behind', behind);

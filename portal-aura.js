@@ -18,6 +18,8 @@ const bounds = {intensity:[0,2],rim:[0,1],haze:[0,.6],particles:[0,1],light:[0,2
 const layer = document.createElement('div');
 layer.className = 'portal-aura'; layer.setAttribute('aria-hidden','true');
 screen.appendChild(layer);
+// Its wisps face the eye: while it shows, the layer takes the camera's pitch
+// (scene-camera.js); hidden, its 46 elements are left alone (sync).
 const part = (className, parent = layer) => {
   const el = document.createElement('i'); el.className = className; parent.appendChild(el); return el;
 };
@@ -155,7 +157,7 @@ function schedule() {
 }
 function sync() {
   wasReduced=motion.matches;const next=enabled&&document.body.classList.contains('intro-done')&&!document.body.classList.contains('table-covered');
-  if(next!==active){active=next;fade=active?(motion.matches?1:0):0;}
+  if(next!==active){active=next;fade=active?(motion.matches?1:0):0;window.sceneCamera?.facesEye?.(layer,active);}
   if(raf){cancelAnimationFrame(raf);raf=0;}
   last=0;
   if(motion.matches&&active)fade=1;

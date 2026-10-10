@@ -21,6 +21,9 @@
   // legs are only ever seen through the opening, so portal-depth.css hides them.
   screen.classList.add('has-portal-interior');
   const abyss=aperture.querySelector('.portal-abyss'),canvas=abyss.querySelector('canvas');
+  // The abyss turns back to face the eye (scene-camera.js gives it the pitch).
+  window.sceneCamera?.facesEye?.(abyss);
+  const sideWalls=aperture.querySelectorAll('.portal-wall--left, .portal-wall--right');
   const plane={element:abyss};
   // Optical depths in aperture heights. Seen through a fixed opening, a layer
   // slides with the pointer in proportion to depth/(eye height + depth).
@@ -75,13 +78,16 @@
   function measure() {
     width=screen.clientWidth;height=screen.clientHeight;sampledDpr=devicePixelRatio||1;
     wallDepthPx=Math.min(48,Math.max(8,height*settings.wallDepth));
-    screen.style.setProperty('--well-depth',wallDepthPx+'px');
+    // (Set on the plane only when they change: everything below it is
+    // restyled. The front cut follows the eye, so it goes on the two side
+    // walls that read it.)
+    if(screen.style.getPropertyValue('--well-depth')!==wallDepthPx+'px')screen.style.setProperty('--well-depth',wallDepthPx+'px');
     // The water stands this far below the rim, leaving a dry band of lining.
     waterDepthPx=wallDepthPx*settings.waterLevel;
-    screen.style.setProperty('--water-depth',waterDepthPx+'px');
+    if(screen.style.getPropertyValue('--water-depth')!==waterDepthPx+'px')screen.style.setProperty('--water-depth',waterDepthPx+'px');
     const {localEyeZ:ez,localEyeY:ey}=camera;
     const frontCut=Math.max(.1,1-wallDepthPx*(ey-height/2)/ez/height-.03);
-    screen.style.setProperty('--wall-front-cut',frontCut*100+'%');
+    for(const wall of sideWalls)if(wall.style.getPropertyValue('--wall-front-cut')!==frontCut*100+'%')wall.style.setProperty('--wall-front-cut',frontCut*100+'%');
     // Preserve the existing table cut exactly; only its inner lining shortens.
     const x=-table.offsetLeft,y=-table.offsetTop,w=table.clientWidth,h=table.clientHeight,c=5;
     if(window.portalTable)window.portalTable.updateWell(wallDepthPx);

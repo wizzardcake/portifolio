@@ -37,6 +37,8 @@
   layer.className='portal-reaction';layer.hidden=true;layer.setAttribute('aria-hidden','true');
   const canvas=document.createElement('canvas');canvas.className='portal-reaction-surface';layer.append(canvas);
   const ctx=canvas.getContext('2d');screen.append(layer);
+  // Its sparks face the eye: the layer takes the camera's pitch and yaw (scene-camera.js).
+  window.sceneCamera?.facesEye?.(layer);
   let width=1,height=1,ratio=1,raf=0,serial=0,orbHit=null;
   const impacts=[];
   const empty=Object.freeze({orbOffset:0,orbInfluence:0,pull:0,wave:0,radius:0,x:.5,y:.5});

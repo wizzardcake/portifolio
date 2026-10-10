@@ -119,6 +119,18 @@
     matter.style.opacity = '1';
   }
 
+  // The page (portal.css .portal-page) is placed on itself: its size, and a
+  // transform that lifts it off the table to face the reader. Its place
+  // follows the eye; as variables on the plane (--page-*, --view-pitch) it
+  // restyled every element of the portal each frame the eye moved.
+  const page = screen.querySelector('.portal-page'), pagePlaced = {};
+  function placePage(width, height, x, y, lift) {
+    if (!page) return;
+    const transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) translateZ(${lift}px) rotateX(${-camera.pitch}deg)`;
+    if (pagePlaced.width !== width) page.style.width = (pagePlaced.width = width) + 'px';
+    if (pagePlaced.height !== height) page.style.height = (pagePlaced.height = height) + 'px';
+    if (pagePlaced.transform !== transform) page.style.transform = pagePlaced.transform = transform;
+  }
   function targetRect(nextMode, w = screen.clientWidth, h = screen.clientHeight) {
     if (nextMode === 'locked') {
       // Dormant: the orb waits unseen inside the shaft, below the aperture,
@@ -138,11 +150,7 @@
     }
     const pageWidth = reader.width, pageHeight = reader.height;
     const pageLift = reader.z, pageYOffset = reader.y;
-    screen.style.setProperty('--page-width', pageWidth + 'px');
-    screen.style.setProperty('--page-size', pageHeight + 'px');
-    screen.style.setProperty('--page-lift', pageLift + 'px');
-    screen.style.setProperty('--page-y-offset', pageYOffset + 'px');
-    screen.style.setProperty('--page-x-offset', reader.x + 'px');
+    placePage(pageWidth, pageHeight, reader.x, pageYOffset, pageLift);
     if (nextMode === 'page') return {x: w / 2 + reader.x, y: h / 2 + pageYOffset, z: pageLift, w: pageWidth, h: pageHeight};
     const d = Math.min(260, h * .68, innerHeight * .30);
     // Keep the footprint at the exact centre. Only world height changes:
@@ -273,8 +281,7 @@
     const screenWidth = screen.clientWidth, screenHeight = screen.clientHeight;
     // One fixed table plane before, during and after the intro. Neither
     // unlocking, projecting a page nor pointer movement tilts the portal.
-    screen.style.setProperty('--view-yaw', camera.yaw + 'deg');
-    screen.style.setProperty('--view-pitch', camera.pitch + 'deg');
+    // (scene-camera.js turns the plane, and what faces the eye, itself.)
     const target = targetRect(mode, screenWidth, screenHeight);
     let t = 1;
     if (transition) {

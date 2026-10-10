@@ -1092,23 +1092,9 @@ D3D11. Baseline `926adf8` against this branch. Medians, with ranges.
 
 ### Open, Phase 3
 
-- **Website-mode walks run at about 35–42 fps headless, on the published
-  baseline as well.**
-  - Baseline `926adf8`, entry → chair: 34.6 fps in a single measurement,
-    38.1 in the A/B.
-  - During a walk the main thread is full, and style recalculation alone
-    takes about 63 % of it.
-  - What is left after fix 15: the portal's variables on `#screen`
-    restyle all of its 382 elements whenever they change.
-    `--view-pitch` changes every frame of a walk, as the view tilts.
-    `--wall-front-cut` changes with every move of the eye
-    (`portal-depth.js` `measure()`).
-  - Only a few elements read them: the depth layers, the abyss and the two
-    side walls.
-  - Proposal: write `--wall-front-cut` on the two walls and the pitch on
-    its readers, or give those readers their transforms from script.
-  - This is the portal's code and older than this branch, so it is left
-    for a separate, measured step.
+- **Website-mode walks** ran at about 35–42 fps headless, on the published
+  baseline as well. This is fixed after the tower; see "Website walks,
+  smoother".
 - **The floor's smoke marks stay visible in game mode, but do nothing**
   there (the sight replaces them). Should they fade while walking? For the
   user.
@@ -1341,6 +1327,65 @@ and are not touched.
 - How dark the drum is at the bottom by the foot, as against the green-lit
   flight.
 - The handedness: the old stair climbed the other way.
+
+## Website walks, smoother (after the tower)
+
+**The problem.** On every walk in website mode the main thread was full,
+and style recalculation alone took about 60 % of it. The published baseline
+behaved the same.
+
+**The cause.** Variables that follow the eye were written on the portal's
+plane (`#screen`), and each change restyled all 382 elements below it:
+
+- `--view-pitch` and `--view-yaw`, from `portal-effects.js` on every
+  frame as well as from `scene-camera.js`;
+- five `--page-*`, on every frame;
+- `--wall-front-cut`.
+
+Only a few elements read them: the abyss, the aura's wisps, the reaction's
+sparks, the impact's flares, the page and the well's two side walls.
+
+**The fix.** Each variable is written where it is read, and only when it
+changes:
+
+- **`sceneCamera.facesEye(element[, on])`** (`scene-camera.js`).
+  Whatever turns back to face the eye enrols itself, and the camera writes
+  the pitch and yaw on it alone:
+  - the abyss (`portal-depth.js`);
+  - the reaction's layer and the impact's layers;
+  - the aura's layer, only while it shows. Hidden, its 46 elements were
+    still restyled.
+- **The page** (`.portal-page`, 237 elements) is placed on itself
+  (`portal-effects.js` `placePage`): its size, and a transform with its
+  offset, lift and pitch. As variables on the plane, every frame restyled
+  all of it.
+- **The well's walls.** `--wall-front-cut` goes on the two side walls;
+  `--well-depth` and `--water-depth` stay on the plane, set only when they
+  change.
+- **`portal.css`** keeps the same rules from the variables, as fallbacks
+  before the first update.
+
+**Measured headless, the same evening and the same machine state:**
+
+| | Before | After |
+| --- | --- | --- |
+| Website walk, entry → chair | 24–34 fps | 42–50 fps |
+| Website walk, entry → shelf | 33–40 fps | 50–53 fps |
+| Style recalculation during a walk | 460–590 ms/s | 170–190 ms/s |
+| Game mode, turning: style per frame | 5.2 ms | 2.6 ms |
+| Game mode, walking straight: style per frame | 7.7 ms | 2.1 ms |
+
+Script (the room's drawing and the portal's effects) now takes the most
+time.
+
+**Tests.**
+
+- `orb-check` checked the old mechanism: that a page target's x landed as
+  `--page-x-offset` on the plane. It now checks the page's own transform.
+- The regression (22 runs) passed after that, `loading-gate-check`
+  included.
+- The page, the orb, the aura and the abyss look as before in
+  `orb-check`'s screenshots (`.qa/orb-page.png`, `.qa/orb-idle.png`).
 
 ## Open, for the user or later
 

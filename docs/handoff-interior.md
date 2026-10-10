@@ -29,6 +29,49 @@ No other branch or worktree holds newer integrated work: `feature/shelf-tools`
 (`ea7c333`), `feature/chair-smoke` (`9f69b27`) and the older `Portifolio-*`
 worktrees are all ancestors of `926adf8` or earlier side branches.
 
+## Current status (read first)
+
+**Stages.** All four stages of the resumed brief are built and committed.
+Commits since `926adf8`, oldest first:
+
+| Commit | Stage |
+| --- | --- |
+| `5d2ef0f` | Stage 1: map, baseline and plan |
+| `ba0c0d6` | Stage A: the chamber |
+| `0695809` | Columns, ribs and books merged |
+| `af5a1fd` | Stage B: the gallery, the straighter entry and the shelf turn |
+| `43951fb` | Stage C: lighting |
+| `a7020ff` | Stage D: the smoke markers and navigation |
+
+**The user's review answers (2026-10-10), all applied:**
+
+1. **Gallery.** A gallery round the room with an open middle under the
+   dome, reached from the spiral stair, left empty.
+2. **Entry.** A straighter camera that shows more of the dome. The test is
+   updated to match.
+3. **Rug.** Quieter and more part of the floor, so the table is the focus.
+4. **Shelf to chair.** A natural turn, not 150°. It is now 90°, from a shelf
+   eye a step toward the window.
+
+**Ownership.** Codex Astra owns the exterior and the loading screen. None of
+their files are touched (`loading-*`, `dev/exterior-*`, `assets/loading/`).
+
+**Not merged, not pushed.** The user asked for a local preview, not a
+merge or a publish.
+
+**Preview:**
+
+- `node <scratchpad>/serve.mjs <this worktree> 8765`, or any static server
+  from this folder;
+- open `http://127.0.0.1:8765/`;
+- screenshots in `verification/interior/final/` (`sheet.png`).
+
+**How to verify:**
+
+- the 19 suite runs as before, plus `tests/navigation-check.mjs`;
+- `tests/interior-check.mjs` for views, clearance and timing;
+- see "Regression, final".
+
 ## References
 
 The brief names `docs/reference/interior-concept.png` and
@@ -393,6 +436,8 @@ after resuming. Files:
 
 ### Exterior fit (for Codex, not changed here)
 
+*Since Stage B the vault springs at 3.9 m and crowns at 6.9 m, about the exterior dome's height at 4.35 m per unit. The inner walls now run vertical higher than the exterior's ellipsoid allows near its springing: about 0.3–0.6 m outside it there. Codex could give the dome a fuller shoulder, or the scale could grow. Noted only.*
+
 - The plan fits the drum: the chamber's outer apothem (4.35 m) corresponds to
   the drum's radius 1.0 at about 4.35 m per unit.
 - The door matches the exterior's equilateral arch and faces +Z. The tower
@@ -430,6 +475,8 @@ calls, 34.3 k triangles at 1920 before the furnishing. The budget is now
 under 40 calls and 50 k triangles.
 
 ### Decisions made in this pass (open for the user's review)
+
+*Superseded by the user's review: see "Current status" and the Stage B section.*
 
 - **Entry tilt.** The entry looks 15.03° down, a hair over the seat's 15°.
   That keeps `portal-check`'s rule that the walk in tilts down once and up
@@ -504,6 +551,8 @@ The user reports that clicking the left smoke marker goes to the chair.
 
 ## Next (from the resumed brief)
 
+*Done since: see "Current status".*
+
 1. **The user's visual review of this architecture.**
    - Preview: run `node <scratchpad>/serve.mjs <worktree> 8765`, or any
      static server from the worktree, and open `http://127.0.0.1:8765/`.
@@ -567,3 +616,183 @@ The brief asked for the ribs and columns to be instanced.
   takes its colours from an 8x4 palette texture, so it uses the timber's
   program.
 - **Result.** 28 programs, as in the table above.
+
+## Stage B: the gallery (`af5a1fd`)
+
+`room-chamber.js` `tuning.gallery`:
+
+| Setting | Value |
+| --- | --- |
+| floor (top) | 2.85 m, level with the tower's upper floor, where the spiral stair arrives |
+| depth | 1.0 m from the wall |
+| slab | 0.15 m |
+| balustrade | 0.95 m |
+
+**What it is:**
+
+- It covers every bay but the window's, which rises through it.
+- Its floor follows the twelve-sided outline, so neighbouring bays meet
+  on the corner lines.
+- A fascia runs under its open edge, and a balustrade of slim balusters
+  between two rails, with a bronze strip on the top rail.
+- The balustrade turns back to the wall either side of the window.
+- A beam under it at each column is part of the repeated frame.
+- Across the tower's mouth it is the bridge to the tower's upper floor. That
+  floor already stops at the mouth's plane, so the two are continuous.
+
+**Proportions changed for it:**
+
+| | Before | Now |
+| --- | --- | --- |
+| Springing | 3.3 m | 3.9 m |
+| Crown | 6.4 m | 6.9 m |
+| Window | shoulder 3.05, peak 4.3 | shoulder 3.6, peak 4.9 |
+| Tower mouth | shoulder 3.0, peak 4.25 | shoulder 3.6, peak 4.85 |
+| Door | half-width 0.8, peak 2.75 | half-width 0.74, peak 2.54 (still the equilateral arch) |
+| Nook, shelving and blind niches | peaks about 3.0 | peaks 2.6, all under the slab |
+
+`ceilingAt` returns the gallery's underside within its band. So the door
+lantern, the nook's droplets and the tower's two mouth lamps hang from it on
+short rods.
+
+**The second floor is empty**, as the user asked. Its walls are plain up to
+the wall ribs.
+
+## Entry, shelf, rug (`af5a1fd`)
+
+- **Entry.**
+  - Wide: eye (0, 1.7, 3.4), looking at (0, 1.1, -3.7), about 5° down,
+    anchor 0.68.
+  - Portrait: (0, 1.75, 3.75), turned 9° left (`a7020ff`), anchor 0.70.
+  - `portal-check`'s tilt rule is now: the entry's pitch is in [75, 90), the
+    tilt dips once to the chair and rises once into the seat's 75°, and the
+    lowest point lies inside the walk.
+- **Shelf.**
+  - Eye (-2.6, 1.8, -0.75), looking at (-4.6, 1.1, 0.3): the nook at about
+    28°, heading 118. Portrait (-1.95, 1.8, -1.1).
+  - `look.yaw` 90 (it was 150, and 75 in the old room).
+  - The chair is about 130° round from the nook's heading, so a 90° turn
+    plus half the field of view brings it in. The `shelf-turned` view in
+    `interior-check` shows it.
+  - **Why not square on.** Square in front of any left-wall nook, the
+    chair (right of the table) is 165–175° behind the visitor.
+- **Trunk.** It runs on to the new shelf eye. The fork is index 5, at
+  (-0.2, 2.58). The branch ends at (1.3, 1.25), so its marker is in view
+  from the entry. The trunk's start runs straight, past the door lantern.
+- **Rug.** Darker plum, faint gilt and teal, its edge fading toward the
+  boards, radius 1.9.
+
+## Stage C: lighting (`43951fb`)
+
+**Sources the visitor can see.** None casts a shadow.
+
+| Light | Source | Values |
+| --- | --- | --- |
+| `vault lantern` | the lantern under the boss | 24 cd, reach 11 m, `#ffb468` |
+| `sconce left`, `sconce right` | two of the six brass column sconces (corners 8 and 4) | 7 cd, reach 4.5 m, `#ffad5c` |
+
+- **Tuning.** `studyRoom.chamberLight.configure({lantern, sconces})`.
+- **The other sconces** (corners 0, 1, 5 and 11) and the candles (on the
+  shelving cabinets and the nook's worktop) are glowing glass and flame
+  only. They share one draw call with the lantern's glass
+  (`lamp and candle glass`). The wax shares the books' mesh and palette.
+- **Window.** `windowBounce` is 3.4 cd with a 4.2 m reach, for the taller
+  window.
+- **Door.**
+  - The lantern hangs 1.2 m out and 0.65 m right of the doorway (as seen
+    from inside), as in the old room, aimed at the doorway's foot.
+  - The passage beyond the wall is dark slate, its walls and floor merged
+    into the floor substrate. It ends in a dark, ironbound oak door
+    (`outer door`).
+  - So the doorway reads from the shelf, and the lantern's pattern lies on
+    the threshold. `lighting-check` passes again. Its threshold ratio is
+    about 0.51 against the required 0.5: close.
+- **Unchanged:** the hemisphere and ambient fill, the table's key light
+  and the portal's lights. `portal-check`'s light-balance assertion is
+  untouched.
+
+## Stage D: smoke markers and navigation (`a7020ff`)
+
+**The bug.**
+
+- The user reported that clicking the left smoke marker went to the chair.
+- **Confirmed on `926adf8`** by `tests/navigation-check.mjs`: at the wide
+  entry, the shelf marker's centre (751, 485) lay under `#goChair` and
+  walked to the chair.
+- **Cause.** The place buttons were screen rectangles, and `#goChair` (the
+  table and chair box, on top) covered the shelf marker behind the table.
+
+**The fix** (`script.js` `cover()`):
+
+- Each button's box still spans its things.
+- A `clip-path` limits clicks to each thing's own outline: the convex hull
+  on screen of the table, the chair, the nook, and each marker's ring,
+  grown 12 px.
+- `room.css` drops the clip for `:focus-visible`, so the keyboard's focus
+  ring still shows.
+
+**Markers.**
+
+- All three standing marks share the same sign (`room-smoke.js`): a fine
+  circle of twelve arcs just outside the mist ring, and eight points
+  turning inside it.
+- The sign breathes, and brightens on hover.
+- The mist ring is unchanged.
+
+**Reach.** `navigation-check` clicks every marker and object in view.
+
+- **Wide, from the entry:** shelf marker, chair marker, chair, table.
+- **Portrait, from the entry:** shelf marker, table.
+- **At the shelf:** a click anywhere walks back.
+
+Each must lead to its own place, and every place must be reachable from the
+entry. All pass.
+
+## Regression, final (`a7020ff`, mains power)
+
+In the full run, 19 of 20 runs passed: the 19 earlier suite runs plus
+`navigation-check`.
+
+- **`impact-check`** failed with `reason: 'motion-preference'`. Run twice
+  more: once failed, once passed. This is the race HANDOFF.md (phase 1)
+  already records as failing now and then, on the baseline too. The
+  interior does not touch the impact.
+- **`loading-gate-check`** passed this time. It is still the race seen on
+  the baseline (above), which belongs to Codex.
+
+## Performance A/B, final (`a7020ff`)
+
+**Conditions:** interleaved, four cold loads each, mains power, 1440x900,
+ANGLE D3D11.
+
+| | Baseline 926adf8 | Chamber |
+| --- | --- | --- |
+| Site ready | 13.8 s (10.6–14.3) | 13.2 s (11.9–13.5) |
+| In, after pressing on | 16.8 s (13.5–17.0) | 15.9 s (14.6–16.2) |
+| While loading: main-thread fps, longest gap | 2.0; 4.7 s | 3.2; 4.8 s |
+| Entry: fps, p95 | 60.0, 17.1 ms | 58.4, 17.6 ms |
+| Chair: fps, p95 | 60.2, 17.1 ms | 60.2, 17.1 ms |
+| Shelf: fps, p95 | 60.2, 17.0 ms | 60.0, 17.1 ms |
+| Room draw calls, triangles (entry) | 45, 24.7 k | 36, 41.8 k |
+| Shader programs | 27 | 28 |
+| Geometries, textures | 46, 26 | 53, 30 |
+
+Loading is no slower, and after entry every view holds about 60 fps with
+the new lights. The entry's 58.4 fps, against 60.0, is within these runs'
+spread (55.8–59.9).
+
+**Clearance:** the eye never comes within 0.44 m of anything solid on any
+walk, in either format. The nearest thing is the door lantern by the
+entry.
+
+**Screenshots:** `verification/interior/final/`, with `sheet.png`.
+
+## Open, for the user or later
+
+- **Exterior fit, for Codex.** The tower is wider, and the vault taller
+  near its springing, than the exterior shows (see "Exterior fit").
+- **`lighting-check`'s threshold ratio** passes at about 0.51 against 0.5.
+  A later lighting change near the door could tip it.
+- **The second floor** (the gallery) is empty, as asked. Its walls above
+  the gallery are plain.
+- **Not seen on a real phone.** Portrait is emulated (390x844).

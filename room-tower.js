@@ -27,18 +27,17 @@ export function towerLayout({apothem: A, wall: T, sides}) {
   tower.mouthDirection = mouthDirection; tower.mouthWidth = mouthWidth;
 
   // The spiral stair along the wall. Step i spans plan angles from - (i+1)*step
-  // .. from - i*step; the step is negative, so it climbs with the angle
-  // (counterclockwise in plan). It starts just inside the mouth on the left
-  // (as seen from the chamber) and climbs rightward round the back wall to the
-  // upper floor, one riser below the gallery's floor: seen from the entry,
-  // the middle of the flight rises across the mouth. A metre-wide tread round an
+  // .. from - i*step (a negative step would turn it the other way round). It
+  // starts just inside the mouth on the right (as seen from the chamber) and
+  // climbs leftward round the back wall to the upper floor, one riser below
+  // the gallery's floor, as the stair always has. A metre-wide tread round an
   // open shaft: at the walking line (1.2 m from the axis) each step is 0.27 m
   // deep for a 0.19 m rise, an ordinary staircase's pitch; the narrowest part
   // anyone walks (beside the handrail) is still 0.23 m deep.
   // soffit: thickness of the flight under the line through the nosings, square
   // to its slope; joint: how far each stone's underside is tucked up at the
   // next one; cap/nosing: each nosing's thickness and how far it overhangs the riser.
-  const stair = {from: mouthDirection + mouthWidth + 7 * deg, step: -13 * deg, rise: .19, inner: .70, count: 14,
+  const stair = {from: mouthDirection - mouthWidth - 7 * deg, step: 13 * deg, rise: .19, inner: .70, count: 14,
     soffit: .15, joint: .018, cap: .045, nosing: .028};
   const tread = i => (i + 1) * stair.rise;
   // The open stairwell in the upper floor: over the flight from where a

@@ -112,7 +112,7 @@ export const lampTuning = {
       {hue: 'purple', shape: 'drop', anchor: 'beam', angle: 128, radius: 1.50, top: 2.45, scale: 0.84, level: 0.97, breath: [4.9, .34, .11]},
       // The upper floor's green source, the stairwell light's own lamp: by the
       // shaft's edge over the top of the flight (room-scene.js aims its light).
-      {hue: 'jade', shape: 'globe', anchor: 'ceiling', angle: 10, radius: .52, top: 3.55, scale: 1.1, level: 1.42, breath: [.9, .18, .07], source: true},
+      {hue: 'jade', shape: 'globe', anchor: 'ceiling', angle: -70, radius: .52, top: 3.55, scale: 1.1, level: 1.42, breath: [.9, .18, .07], source: true},
     ],
   },
 };

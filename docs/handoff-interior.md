@@ -1148,13 +1148,17 @@ coordinates (`turned`, `fromOld`, `tower.was/turn/scale`) are gone.
 | Steps, rise | 14 × 0.19 m | unchanged (2.85 m, the gallery's floor) |
 
 - With 2R + G at 0.65 m, it is an ordinary staircase's pitch.
-- **It climbs the other way round.**
-  - It now starts just inside the mouth on the left (as seen from the hall)
-    and climbs counterclockwise round the back wall.
-  - With the old handedness, the entry saw only the top of the flight. Now
-    the middle of the flight rises across the mouth, as the old tower's did.
-  - In the layout the step is negative. The step faces turn with it, and
-    the skirting is built in sorted order.
+- **It climbs as it always has.** It starts just inside the mouth on the
+  right (as seen from the hall) and climbs clockwise round the back wall.
+  - A mirrored version was tried, so that from the entry the middle of the
+    flight would rise across the mouth. The user had it turned back
+    (2026-10-10). In this direction the entry sees the top of the flight
+    through the mouth.
+  - The code takes either direction: a negative step mirrors it, and the
+    step faces, the skirting, the upper floor's ring, the walk plan
+    (`turn`) and the checks follow.
+  - Walked again in this direction: up in 3.6 s, down in 3.4 s, the camera
+    at least 0.25 m from anything solid; `first-person-check` passes.
 
 **The upper floor.**
 
@@ -1203,7 +1207,8 @@ coordinates (`turned`, `fromOld`, `tower.was/turn/scale`) are gone.
 **`studyRoom.walk`:**
 
 - `tower` gains `shaft` (0.64 m) and `mouth` (`half` 0.93, `depth` 0.35).
-- `stair` gains `turn` (−1: it climbs counterclockwise) and `rail` (0.73).
+- `stair` gains `turn` (+1: it climbs clockwise in plan, as now; −1 the
+  other way) and `rail` (0.73).
   `step` is exported positive.
 - `newel` is the carved post at the foot of the handrail.
 
@@ -1311,22 +1316,21 @@ after the tower, interleaved, three cold loads each.
 - up the shaft;
 - from the gallery into the tower.
 
-### Exterior (for Codex)
+### Exterior
 
 The exterior's tower no longer matches the interior's. The interior's drum
 is wider (1.70 m inside, plus a 0.35 m wall), and its centre stands 5.69 m
-out from the chamber's centre, at −30°. The exterior's files are Codex's
-and are not touched.
+out from the chamber's centre, at −30°. Codex is not continuing: the
+exterior is now Claude's to bring into line (2026-10-10).
 
 ### For visual review
 
-- The view through the mouth from the entry, where the flight rises across
-  it.
+- The view through the mouth from the entry, where the top of the flight
+  shows.
 - The open shaft with its spiral of lamps, from below and from the ring.
 - The ring's balustrade, from the gallery.
 - How dark the drum is at the bottom by the foot, as against the green-lit
   flight.
-- The handedness: the old stair climbed the other way.
 
 ## Website walks, smoother (after the tower)
 
@@ -1389,7 +1393,7 @@ time.
 
 ## Open, for the user or later
 
-- **Exterior fit, for Codex.** The vault is taller near its springing
+- **Exterior fit (now Claude's; Codex is not continuing).** The vault is taller near its springing
   than the exterior shows (see "Exterior fit"). The stair tower is now
   much wider and further out: inside radius 1.70 m, its centre 5.69 m from
   the chamber's centre at −30° (see "The stair tower, enlarged outward").

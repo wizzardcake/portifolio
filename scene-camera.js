@@ -29,10 +29,12 @@
     // down to the chair and up into the seat's 15 degrees. `anchor` sets
     // where the table's centre sits in the frame (a share of the viewport's
     // height; the seat's is `anchorY`'s): lower here, so the vault shows.
-    // Portrait views stand a little further back.
+    // Portrait views stand a little further back and turn nine degrees left,
+    // so their narrow view holds both ways on: the shelf's marker and the
+    // table with its chair.
     entry: {
       wide: {position: [0, 1.7, 3.4], lookAt: [0, 1.1, -3.7], anchor: .68},
-      portrait: {position: [0, 1.75, 3.75], lookAt: [0, 1, -3.7], anchor: .7},
+      portrait: {position: [0, 1.75, 3.75], lookAt: [-1.16, 1, -3.61], anchor: .7},
     },
     // Final seated POV: the eye of someone sitting in the chair centred in
     // front of the table (seat 0.42 m; the table is knee height), looking
@@ -72,7 +74,8 @@
       trunk: [[0, 5.3], [0, 4.75], [.02, 4.1], [.04, 3.55], [.02, 3.05], [-.2, 2.58], [-.62, 2.0],
         [-1.05, 1.45], [-1.5, .85], [-1.95, .2], [-2.3, -.35], [-2.6, -.75], [-3.05, -.62], [-3.45, -.25], [-3.7, .2]],
       fork: 5,
-      branch: [[.12, 2.38], [.58, 2.08], [.96, 1.8], [1.18, 1.5]],
+      // (It ends a step out from the chair, so its marker is in view from the entry.)
+      branch: [[.12, 2.38], [.6, 2.05], [.98, 1.7], [1.3, 1.25]],
       sit: [.55, 1.92],
       chair: [1.14, .64, 56],
     },

@@ -143,29 +143,46 @@
     if (on) placeEntryTargets();
     else if (entryTargets.contains(document.activeElement)) document.activeElement.blur();
   }
-  // A button over the screen box of some world points; hidden while any of
-  // them is behind the eye, or less than a hand's breadth of it is on screen.
-  function cover(button, points) {
+  // A button over what a place shows on screen: `shapes` are lists of world
+  // points (an object's box, the ring of its marker), each covered by its
+  // own outline on screen (the convex hull of its points, grown a little).
+  // The button's box spans them all, but only those outlines take a click
+  // (clip-path), so where two places' boxes overlap, each still gets only
+  // its own things: the old rectangles let the chair's box swallow the
+  // shelf's marker behind the table. A shape partly behind the eye is left
+  // out; the button hides when less than a hand's breadth is on screen.
+  const hull = points => {
+    const p = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]), turn = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const half = list => { const h = []; for (const q of list) { while (h.length > 1 && turn(h[h.length - 2], h[h.length - 1], q) <= 0) h.pop(); h.push(q); } h.pop(); return h; };
+    return p.length < 3 ? p : [...half(p), ...half(p.reverse())];
+  };
+  function cover(button, shapes) {
     if (!button) return;
-    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
-    for (const point of points) {
-      const p = camera.project(...point);
-      if (p.depth < .1) { button.hidden = true; return; }
-      left = Math.min(left, p.x); right = Math.max(right, p.x); top = Math.min(top, p.y); bottom = Math.max(bottom, p.y);
+    const outlines = [];
+    for (const points of shapes) {
+      const screen = points.map(point => camera.project(...point));
+      if (screen.some(p => p.depth < .1)) continue;
+      const outline = hull(screen.map(p => [p.x, p.y])), cx = outline.reduce((n, p) => n + p[0], 0) / outline.length, cy = outline.reduce((n, p) => n + p[1], 0) / outline.length;
+      // Grown by 12 px round its centre, as the old boxes were padded.
+      outlines.push(outline.map(([x, y]) => { const d = Math.hypot(x - cx, y - cy) || 1; return [x + (x - cx) / d * 12, y + (y - cy) / d * 12]; }));
     }
+    const all = outlines.flat();
+    if (!all.length) { button.hidden = true; return; }
+    const left = Math.min(...all.map(p => p[0])), right = Math.max(...all.map(p => p[0])), top = Math.min(...all.map(p => p[1])), bottom = Math.max(...all.map(p => p[1]));
     button.hidden = Math.min(right, innerWidth) - Math.max(left, 0) < 48 || Math.min(bottom, innerHeight) - Math.max(top, 0) < 48;
     // Kept to the viewport: what reaches past an edge (the chair standing
     // out to the right, on a narrow screen) cannot be pointed at anyway.
-    const x0 = Math.max(0, left - 12), y0 = Math.max(0, top - 12), x1 = Math.min(innerWidth, right + 12), y1 = Math.min(innerHeight, bottom + 12);
-    Object.assign(button.style, {left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px'});
+    const x0 = Math.max(0, left), y0 = Math.max(0, top), x1 = Math.min(innerWidth, right), y1 = Math.min(innerHeight, bottom);
+    Object.assign(button.style, {left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px',
+      clipPath: `path('${outlines.map(o => 'M' + o.map(([x, y]) => (x - x0).toFixed(1) + ' ' + (y - y0).toFixed(1)).join('L') + 'Z').join(' ')}')`});
   }
   function placeEntryTargets() {
     if (!entryTargets || entryTargets.hidden) return;
     const halfWidth = camera.tableWidthPx / camera.units / 2 + .05, halfDepth = camera.tableDepthPx / camera.units / 2 + .05;
     // The armchair stands where scene-camera.js says: pushed back and turned
     // until the visitor sits. Its box turns with it.
-    const {x: chairX, z: chairZ, yaw} = camera.chairPose, cos = Math.cos(yaw), sin = Math.sin(yaw), chairPoints = [], nookPoints = [];
-    for (const x of [-halfWidth, halfWidth]) for (const z of [-halfDepth, halfDepth]) chairPoints.push([x, 0, z], [x, camera.tableHeight, z]);
+    const {x: chairX, z: chairZ, yaw} = camera.chairPose, cos = Math.cos(yaw), sin = Math.sin(yaw), tablePoints = [], chairPoints = [], nookPoints = [];
+    for (const x of [-halfWidth, halfWidth]) for (const z of [-halfDepth, halfDepth]) tablePoints.push([x, 0, z], [x, camera.tableHeight, z]);
     for (const across of [-.32, .32]) for (const deep of [-.28, .36]) {
       const x = chairX + across * cos + deep * sin, z = chairZ - across * sin + deep * cos;
       chairPoints.push([x, 0, z], [x, 1.05, z]);
@@ -179,8 +196,8 @@
     // the visitor would stand.
     const ring = ([x, z]) => Array.from({length: 8}, (_, i) => [x + .36 * Math.cos(i * Math.PI / 4), 0, z + .36 * Math.sin(i * Math.PI / 4)]);
     const {branch} = camera.paths, shelfEye = camera.points.shelf.position;
-    cover(goChair, [...chairPoints, ...ring(branch[branch.length - 1])]);
-    if (camera.navigation === 'ENTRY') cover(goShelf, [...nookPoints, ...ring([shelfEye[0], shelfEye[2]])]);
+    cover(goChair, [tablePoints, chairPoints, ring(branch[branch.length - 1])]);
+    if (camera.navigation === 'ENTRY') cover(goShelf, [nookPoints, ring([shelfEye[0], shelfEye[2]])]);
   }
   addEventListener('scene-camera-change', placeEntryTargets);
   // Pointing at a place, or focusing it, lights its mark on the floor.

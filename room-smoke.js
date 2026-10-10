@@ -193,7 +193,10 @@ export function createRoomSmoke(THREE, {trails, marks = [], lights = [], anisotr
   // ---- Where the visitor can stand: a slow ring of the same mist on the
   // floor at each place, `marks` [{name, at: [x, z]}]. Its wisps are drawn
   // round the circle (the noise sampled along a circle, so it has no seam)
-  // and drift round it; a faint veil lies inside. Hovered, it brightens,
+  // and drift round it; a faint veil lies inside. Every mark carries the
+  // same sign, so the places read as one kind of thing: a fine circle of
+  // light just outside the mist, broken into twelve arcs, and eight points
+  // turning slowly inside it, breathing together. Hovered, it brightens,
   // draws in a little and turns faster. It shares the trails' clock, noise
   // and colours.
   const markMaterial = new THREE.ShaderMaterial({
@@ -217,9 +220,19 @@ export function createRoomSmoke(THREE, {trails, marks = [], lights = [], anisotr
         float ring = exp(-pow((r - radius - (wisp - .5) * .14) / (.1 + .05 * fine), 2.));
         float veil = (1. - smoothstep(0., radius, r)) * .22 * wisp;
         float raw = (ring * smoothstep(.25, .75, wisp * .75 + fine * .35) + veil) * (1. + 1.3 * uHover);
+        // The sign: the arcs' circle and the turning points, faintly wavering.
+        float a = atan(vAt.y, vAt.x), breathe = .78 + .22 * sin(uTime * 1.3);
+        float arcs = smoothstep(.1, .2, fract(a / 6.2831853 * 12. + uTime * .015))
+          * exp(-pow((r - .86 - (fine - .5) * .02) / .014, 2.));
+        vec2 q = mat2(cos(-spin * .6), -sin(-spin * .6), sin(-spin * .6), cos(-spin * .6)) * vAt;
+        float cell = fract(atan(q.y, q.x) / 6.2831853 * 8.) - .5;
+        float points = exp(-pow(cell * 7., 2.)) * exp(-pow((r - .44) / .045, 2.));
+        float sign = (arcs * .7 + points * .55) * breathe * (1. + 1.2 * uHover);
         float d = (1. - exp(-1.8 * raw)) * uPresence * smoothstep(1., .9, r);
+        float s = (1. - exp(-1.6 * sign)) * uPresence * smoothstep(1., .94, r);
         vec3 color = mix(uCool, uWarm, .35 * smoothstep(.45, .85, fine)) * uBrightness;
-        gl_FragColor = vec4(color * d, d * .22);
+        vec3 signColor = mix(uCool, vec3(1., .86, .58), .35) * uBrightness * 1.6;
+        gl_FragColor = vec4(color * d + signColor * s, (d + s) * .22);
       }`,
     transparent: true, depthWrite: false, premultipliedAlpha: true,
   });

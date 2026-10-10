@@ -25,6 +25,9 @@ body.intro-active .intro-indicator { pointer-events: auto; }
   background: none; pointer-events: auto; cursor: pointer;
 }
 .entry-target:focus-visible { outline: 2px solid rgba(190, 206, 255, .5); outline-offset: 4px; }
+/* Pointers hit only a place's own outlines (script.js sets the clip-path);
+   with the keyboard its whole box shows the focus ring. */
+.entry-target:focus-visible { clip-path: none !important; }
 /* The chair and the table stand in front of the nook's floor: where their
    areas overlap, the nearer one takes the click. */
 #goChair { z-index: 1; }

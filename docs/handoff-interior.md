@@ -1391,6 +1391,42 @@ time.
 - The page, the orb, the aura and the abyss look as before in
   `orb-check`'s screenshots (`.qa/orb-page.png`, `.qa/orb-idle.png`).
 
+## The way in from outside, one camera (2026-10-11)
+
+The user said the outside and the inside did not match in size, the scene
+change did not match, and it did not feel like walking into the room.
+Through the loading screen's doorway the room was a still picture taken
+from its entry at 72°, which stayed put while the visitor walked. The
+exterior's side is in `LIVING_EXTERIOR_HANDOFF.md` ("The way in, one
+camera"). The room's side is this.
+
+- **`scene-camera.js`.**
+  - `wayIn` / `setWayIn(pose)`: while it is set, the camera takes its
+    pose from the loading screen's flight: {x, y, z} metres, yaw and tilt
+    in degrees, and lens, the view's centre as a share of its height. The
+    flight's eye then *is* the room's camera, from the landing outside the
+    door, through the passage, to the entry. The standing life (sway and
+    lean) stays off meanwhile.
+  - `entryView`: the entry's own view without the standing life, in the
+    same terms. The flight ends on it, so `setWayIn(null)` at the
+    handover changes nothing on screen.
+  - On the way in, `update()` reuses the layout it measured as the way in
+    began (it measures again after a resize). Read for every pose, it laid
+    the page out again each time, about 5 ms.
+  - The entry itself is unchanged.
+- **`room-scene.js`.**
+  - The outer oak door, with its straps (now `parts.doorStraps` in
+    `room-chamber.js`), is hidden while `wayIn` is set: the door stands
+    open as the visitor comes in, and is shut behind them.
+  - While the doorway does not yet fill the view, the room and its
+    foreground draw only within the doorway's bounds (`wayIn.clip`, a
+    scissor).
+  - With the room's first frame, every mesh is drawn once into a single
+    pixel (`prime()`). On Windows (ANGLE/D3D11) a shader is finished only
+    when a new kind of mesh is first drawn. The first view from outside,
+    which shows the door's bay, the passage and what hangs behind the
+    entry, stalled the start of the flight for about 1.1 s.
+
 ## Open, for the user or later
 
 - **Exterior fit (now Claude's; Codex is not continuing).** The vault is taller near its springing

@@ -276,6 +276,8 @@
   // carries of it, applied on top of the path (see the driver). Metres and
   // degrees. `base`: the path's own heading and tilt before them.
   const offset = {x: 0, y: 0, yaw: 0, pitch: 0}, base = {yaw: 0, tilt: 0};
+  // No offset at all: a place's own view.
+  const bare = Object.freeze({x: 0, y: 0, yaw: 0, pitch: 0});
   // What update() last wrote on the page's elements.
   const published = {};
   // What turns back against the plane to face the eye (the portal's abyss,
@@ -293,11 +295,16 @@
   state.facesEye = (el, on = true) => { if (on) { facing.add(el); face(el); } else facing.delete(el); };
   // The visitor's look (degrees), and where it is being turned to.
   const gaze = {yaw: 0, pitch: 0, goalYaw: 0, goalPitch: 0};
+  // The layout update() last read (see there).
+  let measured = null;
   function update() {
-    const width = screen.clientWidth, height = screen.clientHeight;
     // Read layout before publishing camera styles. Navigation hit targets use
     // these same integer dimensions without forcing a second layout afterward.
-    const tableWidthPx = table.clientWidth, tableDepthPx = table.clientHeight;
+    // On the way in (wayIn) a new pose comes with each of the loading screen's
+    // frames, between the page's own: there the sizes measured as it began
+    // serve (anew after a resize), or each pose would lay the page out again.
+    if (!state.wayIn || !measured) measured = {width: screen.clientWidth, height: screen.clientHeight, tableWidthPx: table.clientWidth, tableDepthPx: table.clientHeight};
+    const {width, height, tableWidthPx, tableDepthPx} = measured;
     const units = Math.max(300, width / 2.06);
     const focal = innerHeight / (2 * Math.tan(state.fov * Math.PI / 360));
     const portrait = innerWidth < 900 && innerWidth < innerHeight;
@@ -338,16 +345,23 @@
     const {leg} = state, t = leg.progress, name = leg.from + '>' + leg.to;
     for (const each of Object.keys(state.durations)) state.durations[each] = way(each, format).duration;
     // Standing free (game mode, or website mode after it): the eye's own pose.
-    // Walking from there: the way built for that walk (go()).
-    const free = state.free, route = leg.from === 'free' ? freeRoute : way(name, format);
-    const walk = free ? {position: [free.x, free.y, free.z], yaw: free.yaw, tilt: free.tilt, settle: 0} : route.at(t);
+    // Walking from there: the way built for that walk (go()). Coming in from
+    // outside: the way in's (wayIn, below), with no standing life.
+    const through = state.wayIn, free = state.free, route = leg.from === 'free' ? freeRoute : way(name, format);
+    const walk = through ? {position: [through.x, through.y, through.z], yaw: through.yaw, tilt: through.tilt, settle: 0}
+      : free ? {position: [free.x, free.y, free.z], yaw: free.yaw, tilt: free.tilt, settle: 0} : route.at(t);
     base.yaw = walk.yaw; base.tilt = walk.tilt;
-    const now = pose(walk);
+    const now = pose(walk, through ? bare : offset);
     // (Measured without the visitor's look, so turning never moves the lens.)
     const steady = {...offset, yaw: offset.yaw - gaze.yaw, pitch: offset.pitch - gaze.pitch};
-    const lens = place => place === 'shelf' || place === 'free' ? innerHeight / 2
-      : anchored(pose(aim(points[place]), steady), points[place].anchor ? innerHeight * points[place].anchor : anchorY);
-    const originY = free ? innerHeight / 2 : lens(leg.from) + (lens(leg.to) - lens(leg.from)) * t;
+    const lens = (place, o = steady) => place === 'shelf' || place === 'free' ? innerHeight / 2
+      : anchored(pose(aim(points[place]), o), points[place].anchor ? innerHeight * points[place].anchor : anchorY);
+    const originY = through ? through.lens * innerHeight : free ? innerHeight / 2 : lens(leg.from) + (lens(leg.to) - lens(leg.from)) * t;
+    // The entry's view as it is drawn there, without the standing life: where
+    // the way in ends (loading-living-worker.js), in the same terms as wayIn.
+    const entry = pose(aim(points.entry), bare);
+    state.entryView = {x: entry.x, y: entry.eyeHeight, z: entry.distance, yaw: entry.yawDeg, tilt: 90 - entry.pitchDeg,
+      lens: lens('entry', bare) / innerHeight};
     // Where the chair stands: pushed back and turned (see `paths`), drawn in
     // square to the table as the visitor settles into the seat.
     const [restX, restZ, restYaw] = state.paths.chair, k = walk.settle * walk.settle * (3 - 2 * walk.settle);
@@ -443,9 +457,10 @@
     const dt = last ? Math.min(.1, (now - last) / 1000) : 0;
     last = now;
     // Not behind the loading gate either (loading-gate.js): unseen, it would
-    // only take frames from the way in. There it stops at once, and fades in
-    // as the gate thins.
-    const veiled = !!window.loadingGate?.veiled;
+    // only take frames from the way in; nor on the way in itself (wayIn),
+    // whose eye is the loading screen's. There it stops at once, and fades in
+    // once the visitor stands at the entry.
+    const veiled = !!window.loadingGate?.veiled || !!state.wayIn;
     const live = idling && !still.matches && !document.hidden && !veiled;
     const {idle} = state, ease = response => 1 - Math.exp(-dt / response);
     // The idle life fades in where the visitor stands, and out once a walk starts.
@@ -523,6 +538,20 @@
     settle(); for (const key in offset) offset[key] = 0;
     state.free = pose; update(); announce('FREE');
     return pose;
+  };
+  // ---- The way in (loading-gate.js): from outside the building, up to its
+  // door and through the passage to the entry, the eye is the loading
+  // screen's (loading-living-worker.js), given here in the room's terms:
+  // {x, y, z} metres, yaw and tilt in degrees (tilt down positive), and
+  // lens, where the view's centre sits (a share of the viewport's height).
+  // The room is seen through the doorway from where the visitor really is,
+  // one view with the building round it. The way ends on entryView
+  // (update()); setWayIn(null) gives the camera back to its place there.
+  state.wayIn = null;
+  state.setWayIn = pose => {
+    if (!pose && !state.wayIn) return;
+    state.wayIn = pose ? {...pose} : null;
+    update(); wake();
   };
   // Turn the look back to where the place looks.
   state.resetLook = () => { gaze.goalYaw = gaze.goalPitch = 0; wake(); };
@@ -635,7 +664,8 @@
   };
 
   window.sceneCamera = state;
-  new ResizeObserver(update).observe(screen);
-  addEventListener('resize',update);
+  const remeasure = () => { measured = null; update(); };
+  new ResizeObserver(remeasure).observe(screen);
+  addEventListener('resize', remeasure);
   update();
 })();

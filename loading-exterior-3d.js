@@ -45,10 +45,16 @@ export function createLoadingPortal(container,{reducedMotion,onPhase}={}){
   get flies(){return live;},
   get opening(){const r=container.getBoundingClientRect();return fallback?.opening||{x:r.left+r.width/2,y:r.top+r.height*.6,width:r.width*.13,height:r.height*.22};},
   wake(){return ready;},
-  fly(){
+  // The flight up to the door and in, ending on the room's entry view
+  // ({entry}: scene-camera.js entryView). On the way, onView receives the
+  // eye in the room's terms (scene-camera.js wayIn) and onAperture the
+  // doorway on screen.
+  fly({entry}={}){
    if(!live)return Promise.resolve(false);
-   return new Promise(resolve=>{flightResolve=resolve;post({type:'fly'});});
+   return new Promise(resolve=>{flightResolve=resolve;post({type:'fly',entry});});
   },
+  setEntry(entry){post({type:'entry',entry});},
+  onView:null,
   onAperture:null,
   setApproach(value){fallback?.setApproach(value);},
   pause(){post({type:'pause'});fallback?.pause();},
@@ -65,7 +71,7 @@ export function createLoadingPortal(container,{reducedMotion,onPhase}={}){
     killTimer=setTimeout(()=>{worker?.terminate();worker=null;cleanup.worker=true;},250);
    }else cleanup.worker=true;
    fallback?.dispose();fallback=null;canvas?.remove();canvas=null;element.remove();
-   readyResolve(false);formResolve({disposed:true});flightResolve?.(false);api.onAperture=null;
+   readyResolve(false);formResolve({disposed:true});flightResolve?.(false);api.onAperture=null;api.onView=null;
   }
  };
  try{
@@ -82,6 +88,7 @@ export function createLoadingPortal(container,{reducedMotion,onPhase}={}){
    }else if(data.type==='formed'){formResolve(data);}
    else if(data.type==='phase')setPhase(data);
    else if(data.type==='stats')drawing=data;
+   else if(data.type==='view')api.onView?.(data.view);
    else if(data.type==='aperture')api.onAperture?.(data);
    else if(data.type==='snapshot'){snapshotResolve?.(data.blob);snapshotResolve=null;}
    else if(data.type==='flown'){flightResolve?.(true);flightResolve=null;}

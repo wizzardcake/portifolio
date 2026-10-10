@@ -23,13 +23,15 @@ async function awaitPaintedRoom(){
  });
  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 }
+// The room's camera back at its place, the entry, from following the way in.
+const home=()=>window.sceneCamera?.setWayIn?.(null);
 function unveil(){
  if(!stats.veiled)return;stats.veiled=false;stats.unveiledAt=Math.round(performance.now());dispatchEvent(new Event('site-unveiling'));
 }
 function open(detail){
  if(!canEnter)return;
  blockedEvents.forEach(type=>removeEventListener(type,blockRoomInput,true));
- unveil();stats.exterior=portal?.stats;portal?.dispose();gate?.remove();
+ unveil();home();stats.exterior=portal?.stats;portal?.dispose();gate?.remove();
  siblings.forEach(([el,inert])=>{el.inert=inert;});
  // The main is statically inert to protect the first parsed frame.
  const experience=document.getElementById('experience');if(experience)experience.inert=false;
@@ -49,7 +51,6 @@ if(gate){
   if(retry){retry.textContent='Prøv igjen';retry.hidden=false;}
   if(status){status.textContent=message;status.classList.add('is-visible');}
  };
- const backdrop=document.createElement('div');backdrop.className='loading-gate__backdrop';gate.prepend(backdrop);
  addEventListener('loading-exterior-phase',notePhase);
  let detail;
  try{
@@ -86,31 +87,39 @@ if(gate){
   let previous;
   function sample(now){if(!recording)return;if(previous!==undefined&&stats.frames.length<1500)stats.frames.push(+(now-previous).toFixed(1));previous=now;requestAnimationFrame(sample);}
   requestAnimationFrame(sample);
-  const fade=async(duration)=>{unveil();await gate.animate([{opacity:1},{opacity:0}],{duration,easing:'ease-in-out',fill:'forwards'}).finished;};
+  const fade=async(duration)=>{unveil();home();await gate.animate([{opacity:1},{opacity:0}],{duration,easing:'ease-in-out',fill:'forwards'}).finished;};
   if(media.matches){
    stats.way='fade';await fade(450);
   }else if(portal?.flies){
    stats.way='flight';
-   portal.onAperture=({points,covered,fade:amount})=>{
+   // The room's camera follows the flight's eye from the landing before the
+   // door on (scene-camera.js wayIn): the room is seen through the doorway
+   // from where the visitor is, and the walk in ends on the entry's view,
+   // kept up to date if the window changes on the way.
+   const camera=window.sceneCamera,entryView=()=>camera?.entryView&&{...camera.entryView,fov:camera.fov};
+   const reframe=()=>portal.setEntry?.(entryView());
+   portal.onView=view=>camera?.setWayIn?.(view);
+   // Once the curtains part, the live view draws the void round the building
+   // itself, with the doorway clear through it (loading-living-worker.js):
+   // the gate's own void and stars give way (loading-exterior.css), and the
+   // room behind shows through the doorway. Through it, the gate is
+   // transparent (fade).
+   portal.onAperture=({fade:amount})=>{
     unveil();gate.classList.add('is-revealing');
-    // An even-odd cut in the original background, aligned to the real 3D arch.
-    // The unchanged, prepared room is behind it; curtains are still drawn in front.
-    const outer='M 0 0 H '+innerWidth+' V '+innerHeight+' H 0 Z ';
-    const hole=points?'M '+points.map(p=>p.join(' ')).join(' L ')+' Z':'';
-    gate.style.setProperty('--gate-aperture',covered?'inset(100%)':'path(evenodd, "'+outer+hole+'")');
-    if(amount>0)gate.style.opacity=String(1-amount);
+    const opacity=amount>0?String(1-amount):'';
+    if(gate.style.opacity!==opacity)gate.style.opacity=opacity;
    };
    const change=()=>{if(media.matches){portal.setReducedMotion(true);portal.dispose();}};
-   media.addEventListener('change',change);
+   media.addEventListener('change',change);addEventListener('resize',reframe);
    let flown;
-   try{flown=await portal.fly();}finally{media.removeEventListener('change',change);}
+   try{flown=await portal.fly({entry:entryView()});}finally{media.removeEventListener('change',change);removeEventListener('resize',reframe);}
    if(!flown||media.matches)await fade(450);
   }else{
    stats.way='fade-fallback';await fade(700);
   }
  }catch(error){
   stats.failure=error?.message||String(error);
-  if(canEnter){unveil();await gate.animate([{opacity:1},{opacity:0}],{duration:450,fill:'forwards'}).finished;}
+  if(canEnter){unveil();home();await gate.animate([{opacity:1},{opacity:0}],{duration:450,fill:'forwards'}).finished;}
   else offer('Rommet kunne ikke klargjøres. Prøv å laste siden på nytt.');
  }finally{
   recording=false;clearTimeout(slow);removeEventListener('loading-exterior-phase',notePhase);

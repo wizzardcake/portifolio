@@ -128,13 +128,28 @@ try {
    await shot('ready');
    if(process.argv.includes('--sequence')){
     await until("loadingGate.state==='entering'");
-    await evaluate('loadingExterior3d.pause()');
-    for(const [name,t] of [['approach',1.3],['arrival',2.8],['curtains',5.25],['walk',6.5],['threshold',7.45],['handoff',8.25]]){
-     await evaluate('loadingExterior3d.seekFlight('+t+')');await sleep(250);await shot(name);
+    await evaluate('loadingExterior3d.pause()');await sleep(200);
+    // Along the flight's own timeline (the worker's ENTRY): up to the door,
+    // the curtains, and the walk in, through the doorway and the passage to
+    // the entry, where the room's camera (following it) must be at its place.
+    const E=await evaluate('loadingExterior3d.stats.drawing.entry'),A=E.approach,B=A+E.arrival,C=B+E.curtains,D=C+E.walk;
+    const room="({x:sceneCamera.x,y:sceneCamera.eyeHeight,z:sceneCamera.distance,yaw:sceneCamera.camera.yaw,originY:sceneCamera.originY,wayIn:sceneCamera.wayIn})";
+    const walk=[];
+    for(const [name,t] of [['approach',A/2],['arrival',A+E.arrival/2],['curtains',B+E.curtains*.6],['walk',C+E.walk*.25],['doorway',C+E.walk*.45],['passage',C+E.walk*.58],['inside',C+E.walk*.75],['handoff',D-.02]]){
+     await evaluate('loadingExterior3d.seekFlight('+t+')');await sleep(300);await shot(name);
+     walk.push({name,t,room:await evaluate(room)});
     }
-    await evaluate('loadingExterior3d.seekFlight(8.65)');
+    console.log(JSON.stringify(walk.map(({name,room})=>[name,room.z?.toFixed?.(2),room.wayIn&&room.wayIn.z.toFixed(2)])));
+    await writeFile(resolve(output,'walk.json'),JSON.stringify(walk,null,2));
+    await evaluate('loadingExterior3d.seekFlight('+(D+.05)+')');
    }
    await until(entered);await sleep(500);await shot('entered');await assertEntered('Desktop');
+   // The way in handed the room's camera back at its entry, the outer door
+   // shut behind the visitor.
+   const home=await evaluate("({wayIn:sceneCamera.wayIn,nav:sceneCamera.navigation,x:sceneCamera.x,y:sceneCamera.eyeHeight,z:sceneCamera.distance,entry:sceneCamera.entryView,door:studyRoom.scene.getObjectByName('outer door').visible&&studyRoom.scene.getObjectByName('outer door straps').visible})");
+   assert.equal(home.wayIn,null,'The way in lets the camera go');
+   assert.equal(home.nav,'ENTRY');assert.equal(home.door,true,'The outer door is shut behind the visitor');
+   assert.ok(Math.hypot(home.x-home.entry.x,home.y-home.entry.y,home.z-home.entry.z)<.05,'The camera stands at the entry: '+JSON.stringify(home));
    const report=await evaluate('({gate:loadingGate.stats,events:__gate.events,guard:__guard,phases:__phases,longTasks:__longTasks,exterior:loadingExterior3d.stats})');
    assert.ok(report.guard.filter(f=>f.state!=='entered').every(f=>f.inert),'Input stays blocked until entry completes');
    assert.ok(report.gate.readyAt<report.gate.enteredAt,'Actual readiness precedes entry');

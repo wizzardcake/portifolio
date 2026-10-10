@@ -135,13 +135,11 @@
  animation:living-seed 3.8s ease-in-out infinite;
 }
 @keyframes living-seed{50%{scale:1.06;filter:brightness(1.12)}}
-.loading-gate__backdrop{position:absolute;inset:0;pointer-events:none;background:inherit;}
+/* Once the doorway opens, the live view draws the void and its stars itself,
+   with the doorway clear through them to the room (loading-living-worker.js):
+   the gate's own give way. */
 .loading-gate.is-revealing{background:transparent;}
-.loading-gate.is-revealing .loading-gate__backdrop{
- background:radial-gradient(ellipse 38% 30% at 30% 34%,#1a3a3a1c,transparent 70%),radial-gradient(ellipse 44% 36% at 72% 66%,#33195214,transparent 70%),radial-gradient(ellipse 70% 62% at 50% 52%,#120c22 0%,#08060f 52%,#030206 100%);
- clip-path:var(--gate-aperture);
-}
-.loading-gate.is-revealing::before,.loading-gate.is-revealing::after{clip-path:var(--gate-aperture);}
+.loading-gate.is-revealing::before,.loading-gate.is-revealing::after{visibility:hidden;}
 .loading-gate.is-going .loading-gate__foot{opacity:0;transition:opacity .4s;}
 /* The slow room's message, readable over the building: a small dark panel. */
 .loading-gate__status.is-visible{width:fit-content;max-width:min(88vw,480px);height:auto;clip-path:none;white-space:normal;text-align:center;bottom:178px;left:50%;translate:-50% 0;z-index:3;

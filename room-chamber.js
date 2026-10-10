@@ -142,6 +142,9 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
   // ---- Each bay's wall: from the floor up into its wall rib (in the tower's
   // bay, on up to the tower's roof), with its opening cut through or into it.
   let windowWall = null, doorLeaf = null;
+  // (The outer door's straps are its own: the way in opens the door, leaf and
+  // straps together; room-scene.js.)
+  const doorStraps = [];
   const passage = [];
   function wallShape(b, top) {
     const w = b.open, shape = new THREE.Shape().moveTo(-hw, 0);
@@ -174,7 +177,7 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
     // the back of the niche, in stone.
     if (b.kind === 'door') {
       doorLeaf = place(panel(w, depth), b);
-      for (const y of [.35, 1.0, 1.65]) metal.push(place(box(2 * archHalfAt(w, y + .03) - .04, .035, .012, 0, y, depth - .008), b));
+      for (const y of [.35, 1.0, 1.65]) doorStraps.push(place(box(2 * archHalfAt(w, y + .03) - .04, .035, .012, 0, y, depth - .008), b));
     } else walls.push(place(panel(w, depth), b));
   }
 
@@ -515,7 +518,7 @@ export function createChamber(THREE, {towerTop = 7} = {}, tuning = chamberTuning
     passageFloor: place(new THREE.PlaneGeometry(2 * door.open.halfWidth, door.open.depth - T / 2).rotateX(-Math.PI / 2)
       .translate(0, .0015, T / 4 + door.open.depth / 2), door),
     passage,
-    parts: {walls, windowWall, doorLeaf, plinth, timber, metal, vault, lanternGlass, lanternAt: v3(0, lanternTop - .08 - L.height / 2, 0), glow, wax},
+    parts: {walls, windowWall, doorLeaf, doorStraps, plinth, timber, metal, vault, lanternGlass, lanternAt: v3(0, lanternTop - .08 - L.height / 2, 0), glow, wax},
     // Where each sconce's glass is (plan), by corner (SCONCES).
     sconces: Object.fromEntries(SCONCES.map((k, i) => [k, sconces[i]])),
     frame: {geometry: frame, caps, instances},

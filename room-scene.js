@@ -450,8 +450,12 @@ if (renderer) {
   }
   beamParts.push(...towerRail.timber);
   mesh('timber beams',merge(beamParts),timber);
-  // The outer door at the end of the passage: old, dark, ironbound oak.
-  mesh('outer door',merge([chamber.parts.doorLeaf]),new THREE.MeshStandardMaterial({color:'#4c3828',map:woodMap,roughness:.9}),false);
+  // The outer door at the end of the passage: old, dark, ironbound oak. It
+  // stands open while the visitor comes in from outside (scene-camera.js
+  // wayIn: the room seen through the doorway from where they walk), and is
+  // shut behind them.
+  const outerDoor=[mesh('outer door',merge([chamber.parts.doorLeaf]),new THREE.MeshStandardMaterial({color:'#4c3828',map:woodMap,roughness:.9}),false),
+    mesh('outer door straps',merge(chamber.parts.doorStraps),architecturalMetal,false)];
 
   // The tower's roof, far above the vault's springing (the part over the
   // chamber hides above its vault).
@@ -1421,6 +1425,26 @@ if (renderer) {
     if(!cameraOnly) shadowsStale=true;
     if(!pending&&!document.hidden&&!lost){pending=true;requestAnimationFrame(draw);}
   }
+  // Coming in from outside (scene-camera.js wayIn), the room is seen only
+  // through the doorway until it fills the view: only that part of it, and
+  // of its foreground, is drawn (clip, CSS pixels from the top left).
+  function clipped(target,clip,render) {
+    if(clip){target.setScissor(clip.x,innerHeight-clip.y-clip.height,clip.width,clip.height);target.setScissorTest(true);}
+    render();
+    if(clip) target.setScissorTest(false);
+  }
+  // The way in (scene-camera.js wayIn) sees from outside and from the passage
+  // what the entry never shows: the door's bay and passage, what hangs behind
+  // the entry. The GPU finishes a material's shaders for each new kind of
+  // mesh only when one is first drawn, which would stall the flight up to the
+  // door for a second; so with the room's first frame every mesh is drawn
+  // once, into a single pixel the frame then covers.
+  let primed=false;
+  function prime() {
+    const culled=[];scene.traverse(o=>{if(o.frustumCulled){o.frustumCulled=false;culled.push(o);}});
+    renderer.setScissor(0,0,1,1);renderer.setScissorTest(true);renderer.render(scene,camera);renderer.setScissorTest(false);
+    for(const o of culled) o.frustumCulled=true;
+  }
   function draw() {
     pending=false;if(document.hidden||lost||!warmed)return;
     // The camera moves physically (scene-camera.js), never the room's scale.
@@ -1430,7 +1454,8 @@ if (renderer) {
     renderer.shadowMap.needsUpdate=shadowsStale;shadowsStale=false;
     camera.setViewOffset(innerWidth,innerHeight,0,innerHeight*.5-view.originY,innerWidth,innerHeight);
     camera.updateProjectionMatrix();camera.updateMatrixWorld();
-    camera.layers.set(0);renderer.render(scene,camera);host.classList.add('is-ready');
+    camera.layers.set(0);if(!primed){primed=true;prime();}
+    clipped(renderer,view.wayIn?.clip,()=>renderer.render(scene,camera));host.classList.add('is-ready');
     // The table model now stands in the drawn room: the CSS table's top and
     // feet step aside (until then they stand in for it, whole).
     const screenEl=document.getElementById('screen');
@@ -1482,7 +1507,7 @@ if (renderer) {
     if(!front||frontLost||!warmed) return;
     // Without the room's background colour, so only the chair and cloth are opaque.
     const background=scene.background;scene.background=null;camera.layers.set(1);
-    front.render(scene,camera);
+    clipped(front,view.wayIn?.clip,()=>front.render(scene,camera));
     scene.background=background;camera.layers.set(0);frontHost.classList.add('is-ready');
   }
   // The inscription's glow breathes and drifts, and the hem sways, while the
@@ -1685,7 +1710,11 @@ if (renderer) {
   }
   // A dolly frame only changes the projection; geometry and canvas allocation
   // are refreshed only when the viewport or responsive table dimensions change.
-  addEventListener('scene-camera-change',()=>{if(sizeKey()!==layoutKey)resize();else invalidate(true);});
+  addEventListener('scene-camera-change',()=>{
+    const open=!!view.wayIn;
+    if(outerDoor[0].visible===open) for(const part of outerDoor) part.visible=!open;
+    if(sizeKey()!==layoutKey)resize();else invalidate(true);
+  });
   new MutationObserver(()=>invalidate()).observe(stage,{attributes:true,attributeFilter:['class','data-approach']});
   document.addEventListener('visibilitychange',()=>invalidate());
   canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();lost=true;host.classList.remove('is-ready');document.getElementById('screen').classList.remove('has-table-model');});

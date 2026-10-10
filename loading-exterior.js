@@ -3,7 +3,9 @@
    The art is rendered offline (dev/exterior-art.html, exported to
    assets/loading/ by dev/exterior-export.mjs) at three moments of the
    glass's inner flow; here they are layered and crossfaded, the building
-   floats and its halo and entrance breathe. Every motion is a CSS animation
+   floats, its halo and entrance breathe, now and then a drop lets go of the
+   bead under its neck and falls into the void, and the spire's tip glints.
+   Every motion is a CSS animation
    on the compositor (loading-exterior.css): the page's main thread is busy
    building the room meanwhile, and anything drawn there would stall.
    Reduced motion: one still image.
@@ -12,8 +14,12 @@
    createLoadingPortal(container) -> {element, opening, doorwayGrowth,
    setApproach, pause, play, setReducedMotion, stats, dispose}. */
 const LAYERS = ['assets/loading/exterior-a.webp', 'assets/loading/exterior-b.webp', 'assets/loading/exterior-c.webp'];
-// The entrance on the image, in fractions (dev/exterior-export.mjs prints it).
-const DOOR = {x: .5204, y: .6191, width: .0882, height: .1548};
+const DROP = 'assets/loading/exterior-drop.webp';
+// Places on the image, in fractions (dev/exterior-export.mjs prints them):
+// the entrance, the bead under the neck, the spire's tip, and the falling
+// drop's own image size.
+const DOOR = {x: .5194, y: .5958, width: .0835, height: .1465};
+const NECK = {x: .4805, y: .8706}, SPIRE = {x: .6146, y: .0893}, DROP_SIZE = .121;
 
 export function createLoadingPortal(container, {reducedMotion} = {}) {
   if (!(container instanceof Element)) throw new TypeError('A mount element is required');
@@ -23,7 +29,9 @@ export function createLoadingPortal(container, {reducedMotion} = {}) {
   element.setAttribute('aria-hidden', 'true');
   element.innerHTML = '<div class="loading-exterior__building"><div class="loading-exterior__halo"></div>'
     + LAYERS.map((src, i) => `<img class="loading-exterior__layer loading-exterior__layer--${'abc'[i]}" src="${new URL(src, document.baseURI).href}" alt="" decoding="async" draggable="false">`).join('')
-    + '<div class="loading-exterior__door"></div></div>';
+    + '<div class="loading-exterior__door"></div>'
+    + `<div class="loading-exterior__fall" style="left:${(NECK.x - DROP_SIZE / 2) * 100}%;top:${(NECK.y - DROP_SIZE / 2) * 100}%;width:${DROP_SIZE * 100}%"><img src="${new URL(DROP, document.baseURI).href}" alt="" decoding="async" draggable="false"></div>`
+    + `<div class="loading-exterior__glint" style="left:${SPIRE.x * 100}%;top:${SPIRE.y * 100}%"></div></div>`;
   container.append(element);
   const building = element.querySelector('.loading-exterior__building');
   const base = element.querySelector('.loading-exterior__layer--a');

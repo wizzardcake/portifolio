@@ -1,7 +1,8 @@
 /* The loading screen's exterior (loading-exterior.js): the building of orb
    glass floating in the void. Compositor-only motion: the inner flow is three
    renders crossfaded over a fixed base, the building floats, the halo and the
-   light in the entrance breathe. */
+   light in the entrance breathe, a drop falls from the neck now and then, and
+   the spire's tip glints. */
 .loading-exterior {
   --exterior-approach: 0;
   position: relative;
@@ -52,10 +53,10 @@
 /* The room's light in the entrance, a little alive; brighter as the view nears. */
 .loading-exterior__door {
   position: absolute;
-  left: 47.6%;
-  top: 56%;
-  width: 8.8%;
-  height: 12%;
+  left: 47.8%;
+  top: 53.6%;
+  width: 8.4%;
+  height: 11.6%;
   border-radius: 50% 50% 18% 18%;
   background: radial-gradient(ellipse 60% 50% at 50% 72%, #ffb35c55, transparent 72%);
   mix-blend-mode: screen;
@@ -63,9 +64,45 @@
   animation: exterior-door 5.3s ease-in-out infinite;
 }
 @keyframes exterior-door { 0%, 100% { scale: .96; } 50% { scale: 1.04; } }
+/* A drop lets go of the bead under the neck: it swells a little as it
+   parts, then falls, faster and faster, into the void and is gone. */
+.loading-exterior__fall {
+  position: absolute;
+  aspect-ratio: 1;
+  opacity: 0;
+  animation: exterior-fall 7.8s cubic-bezier(.5, 0, .9, .6) 2.4s infinite;
+}
+.loading-exterior__fall img { display: block; width: 100%; height: 100%; }
+@keyframes exterior-fall {
+  0%, 52% { opacity: 0; translate: 0 0; scale: 1 1; }
+  58% { opacity: 1; translate: 0 2%; scale: .96 1.08; }
+  64% { opacity: 1; translate: 0 14%; scale: .9 1.16; }
+  92% { opacity: .55; translate: 0 420%; scale: .82 1.22; }
+  100% { opacity: 0; translate: 0 560%; scale: .8 1.2; }
+}
+/* The spire's tip catches the light now and then: a small four-pointed glint. */
+.loading-exterior__glint {
+  position: absolute;
+  width: 2.6%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background:
+    radial-gradient(circle, #ffffffd0 0 6%, #c8f5ec66 14%, transparent 34%),
+    linear-gradient(90deg, transparent 0 46%, #e0fff8aa 50%, transparent 54% 100%) center / 100% 6% no-repeat,
+    linear-gradient(0deg, transparent 0 46%, #e0fff8aa 50%, transparent 54% 100%) center / 6% 100% no-repeat;
+  mix-blend-mode: screen;
+  opacity: 0;
+  animation: exterior-glint 6.4s ease-in-out 1.2s infinite;
+}
+@keyframes exterior-glint {
+  0%, 70%, 100% { opacity: 0; scale: .4; rotate: 0deg; }
+  80% { opacity: 1; scale: 1; rotate: 20deg; }
+  90% { opacity: .2; scale: .7; rotate: 35deg; }
+}
 .loading-exterior.is-paused *,
 .loading-exterior[data-reduced-motion="true"] * { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
-  .loading-exterior__building, .loading-exterior__layer, .loading-exterior__halo, .loading-exterior__door { animation: none; }
+  .loading-exterior__building, .loading-exterior__layer, .loading-exterior__halo, .loading-exterior__door,
+  .loading-exterior__fall, .loading-exterior__glint { animation: none; }
   .loading-exterior__layer--b, .loading-exterior__layer--c { opacity: 0; }
 }

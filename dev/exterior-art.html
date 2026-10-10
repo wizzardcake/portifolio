@@ -17,42 +17,58 @@
    One floating building grown from the portal orb's material
    (portal-orb-material.js): a dark translucent shell whose inside turns in
    layers, with the orb's teal heart, its sparse curved currents, mist and
-   glow pockets, a Fresnel skin and light wrapping its edges green and
-   violet. An orb-derived dome on a short drum with one pointed entrance,
-   a liquid drop beneath, and a tower grown from the same glass, ending in a
-   pointed spire.
+   glow pockets, a Fresnel skin with a thin film's violet and green at the
+   edges, and light wrapping its edges. The glass is molten, never machine
+   perfect. An orb-derived dome on a short drum with one pointed entrance;
+   beneath, the glass gathers into a drop on a narrowing neck, and runs off
+   the drum's lower lip in a few drips; a tower grown from the same glass,
+   with a current spiralling up inside it, drawn up into a pointed spire.
+   Its windows are light inside the glass, not holes cut in it.
 
-   window.exteriorArt.render({size, time, layer}) draws one layer and
-   resolves with a WebP data URL; .door gives the entrance's place in the
-   image (fractions), for the way in. dev/exterior-export.mjs writes the
-   layers to assets/loading/. */
+   window.exteriorArt.render({size, time, subject, samples}) draws one layer
+   (subject 'building', or 'drop': the drop that falls from the neck) and
+   resolves with a canvas; .encode(canvas) gives WebP; .points gives the
+   entrance, the neck's tip and the spire's tip in the image (fractions).
+   dev/exterior-export.mjs writes the layers to assets/loading/. */
 const canvas = document.getElementById('art');
 const gl = canvas.getContext('webgl', {alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: false});
 
 // The camera: a little below and to the left of the entrance, looking a
 // touch up at it; a long lens, so the building is not distorted.
-const CAMERA = {target: [0.1, 0.5, 0], distance: 11.8, yaw: -0.2, pitch: -0.07, fov: 0.405};
+const CAMERA = {target: [0.1, 0.42, 0], distance: 12.4, yaw: -0.2, pitch: -0.07, fov: 0.405};
+// The falling drop, alone and close.
+const DROP_CAMERA = {target: [0, 0, 0], distance: 1.5, yaw: -0.2, pitch: -0.07, fov: 0.405};
 // The entrance: centre of its pointed arch, half-width, springing line and sill.
 const DOOR = {x: 0, a: 0.2, spring: -0.1, sill: -0.44};
+const TOWER = [.84, 0, -.52];
+const NECK_TIP = [0, -1.45, 0];
 
 const fragment = `precision highp float;
 uniform vec2 resolution;
 uniform vec2 jitter;
 uniform float time;
-uniform float layer;       // 0: everything; 1: the shell without its inner light
+uniform float subject;     // 0: the building; 1: the falling drop alone
 uniform vec3 camPos, camFwd, camRight, camUp;
 uniform float camScale;
 
-const vec3 UP = vec3(0., 1., 0.);
 const vec3 DOME = vec3(0., .14, 0.);
-const vec3 TOWER = vec3(.84, 0., -.52);
+const vec3 TOWER = vec3(${TOWER.join(', ')});
 const float DOOR_X = ${DOOR.x.toFixed(3)}, DOOR_A = ${DOOR.a.toFixed(3)}, DOOR_SPRING = ${DOOR.spring.toFixed(3)}, DOOR_SILL = ${DOOR.sill.toFixed(3)};
+
+// ---- Noise ------------------------------------------------------------------
+float hash3(vec3 p) { p = fract(p * vec3(.1031, .1030, .0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
+float vnoise(vec3 p) {
+  vec3 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
+  return mix(mix(mix(hash3(i), hash3(i + vec3(1., 0., 0.)), f.x), mix(hash3(i + vec3(0., 1., 0.)), hash3(i + vec3(1., 1., 0.)), f.x), f.y),
+    mix(mix(hash3(i + vec3(0., 0., 1.)), hash3(i + vec3(1., 0., 1.)), f.x), mix(hash3(i + vec3(0., 1., 1.)), hash3(i + vec3(1., 1., 1.)), f.x), f.y), f.z);
+}
 
 // ---- Shape -----------------------------------------------------------------
 float smin(float a, float b, float k) { float h = clamp(.5 + .5 * (b - a) / k, 0., 1.); return mix(b, a, h) - k * h * (1. - h); }
+float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 float sdEllipsoid(vec3 p, vec3 r) { float k0 = length(p / r), k1 = length(p / (r * r)); return k0 * (k0 - 1.) / k1; }
 float sdCylinder(vec3 p, float r, float h, float rr) { vec2 d = vec2(length(p.xz) - r + rr, abs(p.y) - h + rr); return min(max(d.x, d.y), 0.) + length(max(d, 0.)) - rr; }
-// A cone along y between y = a (radius ra) and y = b (radius rb), rounded.
+// A rounded cone along y: radius ra at y = 0, rb at y = h (|ra - rb| < h).
 float sdRoundCone(vec3 p, float ra, float rb, float h) {
   vec2 q = vec2(length(p.xz), p.y);
   float b = (ra - rb) / h, a = sqrt(1. - b * b), k = dot(q, vec2(-b, a));
@@ -61,74 +77,85 @@ float sdRoundCone(vec3 p, float ra, float rb, float h) {
   return dot(q, vec2(a, b)) - ra;
 }
 // A pointed (equilateral) arch in the xy plane: half-width a, springing at y0,
-// straight sides down to ys. Inside is negative.
+// straight sides down to ys. Inside is negative. (The two circles' lens below
+// the springing line lies within the sides, so it is cut only at the sill.)
 float sdArch(vec2 p, float a, float y0, float ys) {
-  // The two circles' lens below the springing line lies within the sides,
-  // so it needs no cut there (a cut at y0 leaves a seam); only at the sill.
   float upper = max(max(length(p - vec2(a, y0)) - 2. * a, length(p - vec2(-a, y0)) - 2. * a), ys - p.y);
   vec2 d = abs(p - vec2(0., (y0 + ys) * .5)) - vec2(a, (y0 - ys) * .5);
   float lower = min(max(d.x, d.y), 0.) + length(max(d, 0.));
   return min(upper, lower);
 }
-// The scene: distance, and the part hit (0 shell, 1 entrance walls, 2 the
-// light inside the entrance, 3 a window's light).
+// The drips that run off the drum's lower lip: where round it (radians from
+// +x toward the viewer), how long, and whether a bead has gathered at the end.
+float dripAngle(int i) { if (i == 0) return .42; if (i == 1) return 1.12; if (i == 2) return 1.98; if (i == 3) return 2.46; return 2.92; }
+float dripLength(int i) { if (i == 0) return .26; if (i == 1) return .46; if (i == 2) return .16; if (i == 3) return .58; return .3; }
+float dripBead(int i) { return (i == 1 || i == 3) ? 1. : 0.; }
+
+// The scene: distance, and the part hit (0 glass, 1 the entrance's walls,
+// 2 the light inside the entrance).
 vec2 scene(vec3 p) {
+  if (subject > .5) {
+    // The drop: a round belly drawn up into a short point, as it leaves the neck.
+    float belly = sdEllipsoid(p - vec3(0., -.02, 0.), vec3(.085, .095, .085));
+    float tip = sdRoundCone(p - vec3(0., .02, 0.), .06, .004, .13);
+    return vec2(smin(belly, tip, .05), 0.);
+  }
   // The body: an orb-derived dome, swelling a little over a short drum.
   float dome = sdEllipsoid(p - DOME, vec3(1.04, .86, 1.04));
-  // The dome drawn up at its crown into a short point, as the spire is.
   float crown = sdRoundCone(p - vec3(0., .82, 0.), .16, .003, .5);
   dome = smin(dome, crown, .14);
   float drum = sdCylinder(p - vec3(0., -.2, 0.), 1., .3, .06);
   float body = smin(dome, drum, .06);
-  // Two smooth lips of the same glass: where the dome meets the drum, and
-  // where the drum meets the drop.
+  // Two smooth lips of the same glass.
   float lipTop = length(vec2(length(p.xz) - 1.02, p.y - .1)) - .035;
-  float lipLow = length(vec2(length(p.xz) - .99, p.y + .5)) - .04;
-  body = min(body, min(lipTop, lipLow));
-  // Beneath: the material gathers into a drop, as the orb's neck does.
-  // (A round cone's sides must slope less than 45 degrees: |ra - rb| < h.)
+  float lipLow = length(vec2(length(p.xz) - .995, p.y + .5)) - .045;
+  body = smin(body, min(lipTop, lipLow), .045);
+  // The glass runs off the lower lip in a few drips of its own lengths.
+  float drips = 1e3;
+  for (int i = 0; i < 5; i++) {
+    float a = dripAngle(i), len = dripLength(i);
+    // Each runs down the bowl's curve as it falls: in toward the axis a
+    // little with every step down.
+    vec3 dir = vec3(cos(a), 0., sin(a));
+    vec3 q = p - vec3(0., -.5, 0.);
+    float down = clamp(-q.y, 0., len);
+    q -= dir * (1. - .3 * down / .36 * down / .36 * .36);
+    q.y = p.y + .5;
+    float drip = sdRoundCone(q - vec3(0., -len, 0.), .014, .05, len);
+    if (dripBead(i) > .5) drip = smin(drip, length(q - vec3(0., -len - .006, 0.)) - .032, .025);
+    drips = min(drips, drip);
+  }
+  body = smin(body, drips, .06);
+  // Beneath: the glass gathers into a drop on a narrowing neck, as the orb's
+  // own neck forms; a bead is about to leave its tip.
   float bowl = sdEllipsoid(p - vec3(0., -.52, 0.), vec3(.94, .36, .94));
-  float keel = sdRoundCone(p - vec3(0., -1.22, 0.), .03, .6, .8);
-  body = smin(body, smin(bowl, keel, .25), .12);
-  float drip = length(p - vec3(.01, -1.42, .01)) - .045;
-  body = min(body, drip);
-  // The tower grows out of the same glass, slightly tapering, to a spire.
+  float neck = sdRoundCone(p - vec3(0., -1.33, 0.), .018, .56, .79);
+  float bead = sdEllipsoid(p - vec3(${NECK_TIP.map(v => v.toFixed(3)).join(', ')}), vec3(.082, .092, .082));
+  body = smin(body, smin(smin(bowl, neck, .25), bead, .035), .12);
+  // The tower grows out of the same glass: a shaft, a slow swell where it
+  // gathers itself, and the spire drawn out of it like a drop pulled upward.
   vec3 t = p - TOWER;
-  // Grown, not built: a glass shaft with a slow swell, a bulb where it
-  // gathers itself, and the spire drawn out of the bulb like a drop pulled
-  // upward to a point.
   float shaft = sdRoundCone(t - vec3(0., -.7, 0.), .27, .2, 2.04);
   float bulb = sdEllipsoid(t - vec3(0., 1.36, 0.), vec3(.215, .3, .215));
   float spire = sdRoundCone(t - vec3(0., 1.42, 0.), .18, .003, 1.28);
   float tower = smin(smin(shaft, bulb, .12), spire, .14);
-  float towerFoot = sdRoundCone(t - vec3(0., -1.05, 0.), .02, .26, .4);
+  float towerFoot = sdRoundCone(t - vec3(0., -1.12, 0.), .016, .24, .44);
+  towerFoot = smin(towerFoot, length(t - vec3(0., -1.13, 0.)) - .03, .02);
   tower = smin(tower, towerFoot, .12);
   float shape = smin(body, tower, .24);
+  // Molten: the glass is never machine-perfect.
+  shape += (vnoise(p * 2.6 + 3.1) - .5) * .02 + (vnoise(p * 7.3 + 1.7) - .5) * .006;
 
-  // The entrance: a shallow frame, then the deep pointed opening.
+  // The entrance: a shallow frame, then the deep pointed opening, both with
+  // softened edges.
   vec2 dp = vec2(p.x - DOOR_X, p.y);
   float frame = max(sdArch(dp, DOOR_A + .045, DOOR_SPRING, DOOR_SILL - .035), .93 - p.z);
   float opening = max(sdArch(dp, DOOR_A, DOOR_SPRING, DOOR_SILL), .42 - p.z);
-  float d = max(shape, -frame);
-  d = max(d, -opening);
+  float d = smax(shape, -frame, .018);
+  d = smax(d, -opening, .014);
   float part = 0.;
-  if (frame < .004 || opening < .004) part = 1.;
-  // The light inside: the far wall of the opening.
+  if (frame < .006 || opening < .006) part = 1.;
   if (opening < .004 && p.z < .46) part = 2.;
-  // Windows: two small ones on the drum, two slits up the tower.
-  for (int i = 0; i < 2; i++) {
-    float side = i == 0 ? -1. : 1.;
-    float w = max(sdArch(vec2(p.x - side * .6, p.y), .032, -.06, -.26), .72 - p.z);
-    d = max(d, -w);
-    if (w < .004) part = p.z < .75 ? 3. : 1.;
-  }
-  vec3 tf = t; // the tower's front faces the camera (+z)
-  for (int i = 0; i < 2; i++) {
-    float y0 = i == 0 ? .9 : 1.24;
-    float w = max(sdArch(vec2(tf.x + .02, tf.y), .036, y0, y0 - .18), .14 - tf.z);
-    d = max(d, -w);
-    if (w < .004) part = tf.z < .17 ? 3. : 1.;
-  }
   return vec2(d, part);
 }
 vec3 normalAt(vec3 p) {
@@ -137,12 +164,6 @@ vec3 normalAt(vec3 p) {
 }
 
 // ---- The orb's material (portal-orb-material.js) ---------------------------
-float hash3(vec3 p) { p = fract(p * vec3(.1031, .1030, .0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
-float vnoise(vec3 p) {
-  vec3 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
-  return mix(mix(mix(hash3(i), hash3(i + vec3(1., 0., 0.)), f.x), mix(hash3(i + vec3(0., 1., 0.)), hash3(i + vec3(1., 1., 0.)), f.x), f.y),
-    mix(mix(hash3(i + vec3(0., 0., 1.)), hash3(i + vec3(1., 0., 1.)), f.x), mix(hash3(i + vec3(0., 1., 1.)), hash3(i + vec3(1., 1., 1.)), f.x), f.y), f.z);
-}
 vec3 spinAbout(vec3 p, float angle) { float c = cos(angle), s = sin(angle); return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z); }
 // The lights of the void: a cool key from above left, green and violet from
 // behind (as in the room), a restrained warmth from below the entrance.
@@ -170,18 +191,18 @@ vec3 voidLight(vec3 R) {
 vec3 display(vec3 c) { c = 1. - exp(-c * 1.15); return mix(c * 12.92, 1.055 * pow(c, vec3(1. / 2.4)) - .055, step(vec3(.0031308), c)); }
 
 // The inside of the glass, as the orb's: layers turning about up at different
-// rates; mist absorbs; the heart, currents and glow pockets emit.
+// rates; mist absorbs; the heart, currents and glow pockets emit. Up the
+// tower a current spirals toward the spire.
 vec3 inside(vec3 P, vec3 rd, out float T) {
   vec3 inner = vec3(0.); T = 1.;
   vec3 hueA = vec3(.04, .34, .31), hueB = vec3(.24, .12, .50);
-  float swirl = time * .21, dt = .055;
-  for (int i = 0; i < 22; i++) {
+  float swirl = time * .21, dt = .05;
+  for (int i = 0; i < 26; i++) {
     vec3 q = P + rd * (float(i) + .5) * dt;
     if (scene(q).x > .01) break;
-    // The tower turns about its own axis, the rest about the dome's.
     bool inTower = length((q - TOWER).xz) < .34 && q.y > -.2;
-    vec3 c = inTower ? vec3(TOWER.x, clamp(q.y, .1, 1.7), TOWER.z) : DOME;
-    float scale = inTower ? .36 : 1.;
+    vec3 c = subject > .5 ? vec3(0.) : inTower ? vec3(TOWER.x, clamp(q.y, .1, 1.7), TOWER.z) : DOME;
+    float scale = subject > .5 ? .1 : inTower ? .36 : 1.;
     vec3 lq = (q - c) / scale * .93;
     float r = length(lq);
     vec3 a = spinAbout(lq, swirl * (1.35 - r * .6) + r * 1.6);
@@ -190,10 +211,21 @@ vec3 inside(vec3 P, vec3 rd, out float T) {
     float dens = smoothstep(.35, .75, mist);
     float current = smoothstep(.4, .75, vnoise(w * .9 + vec3(-time * .02, .6, time * .015)));
     float vein = pow(1. - abs(vnoise(a * 2.4 + vec3(1.7, -time * .035, .4)) * 2. - 1.), 12.) * current;
+    float fine = pow(1. - abs(vnoise(a * 5.3 + vec3(-.4, time * .05, 2.2)) * 2. - 1.), 18.) * current;
     float pocket = smoothstep(.62, .9, vnoise(w * 1.25 + vec3(time * .03, 1.1, -time * .02)));
-    float heart = exp(-r * r * (inTower ? 4. : 8.)) * (inTower ? .2 : .42) * (1. + .3 * sin(time * .46));
+    float heart = exp(-r * r * (inTower ? 4. : 8.)) * (inTower ? .16 : .42) * (1. + .3 * sin(time * .46));
+    // The heart's light has sunk into the drop: a second, smaller glow low in
+    // the bowl and down the neck.
+    if (!inTower && subject < .5) heart += exp(-dot(q - vec3(0., -.86, 0.), q - vec3(0., -.86, 0.)) * 9.) * .3 * (1. + .3 * sin(time * .46 + 1.4));
     vec3 hue = mix(hueA, hueB, smoothstep(-.55, .55, a.x + .35 * a.y));
-    vec3 glow = hue * (dens * .02 + vein * .95 + pocket * .16) + vec3(.14, .82, .64) * heart * .62;
+    vec3 glow = hue * (dens * .02 + vein * 1.05 + fine * .5 + pocket * .16) + vec3(.14, .82, .64) * heart * .62;
+    if (inTower && subject < .5) {
+      // The spiral: a thin current winding up the tower near its glass.
+      vec3 tq = q - TOWER;
+      float ang = atan(tq.z, tq.x), rad = length(tq.xz);
+      float helix = pow(max(0., cos(ang * 2. - tq.y * 6.2 + time * .5)), 30.) * smoothstep(.08, .2, rad);
+      glow += mix(vec3(.08, .62, .52), vec3(.42, .2, .74), smoothstep(.2, 2.2, tq.y)) * helix * .9;
+    }
     inner += T * glow * dt * 2.;
     T *= exp(-(.95 + dens * 4.2) * dt);
   }
@@ -210,6 +242,22 @@ vec3 roomThrough(vec3 p) {
   vec3 deep = mix(vec3(.03, .035, .04), vec3(.006, .014, .018), smoothstep(.15, .85, u.y));
   return (warm + sides + deep) * (1. - .55 * smoothstep(.55, 1., abs(u.x)));
 }
+// The windows: light held inside the glass, not holes in it; soft-edged.
+vec3 windowLight(vec3 P) {
+  vec3 c = vec3(0.);
+  if (P.z > .55) for (int i = 0; i < 2; i++) {
+    float side = i == 0 ? -1. : 1.;
+    float w = sdArch(vec2(P.x - side * .6, P.y), .03, -.06, -.26);
+    c += mix(vec3(.08, .5, .44), vec3(.36, .18, .62), .35) * (smoothstep(.006, -.012, w) * .9 + smoothstep(.06, -.01, w) * .18);
+  }
+  vec3 tf = P - TOWER;
+  if (tf.z > .04) for (int i = 0; i < 2; i++) {
+    float y0 = i == 0 ? .9 : 1.24;
+    float w = sdArch(vec2(tf.x + .02, tf.y), .032, y0, y0 - .18);
+    c += mix(vec3(.08, .5, .44), vec3(.4, .2, .7), float(i)) * (smoothstep(.006, -.012, w) * .9 + smoothstep(.06, -.01, w) * .18);
+  }
+  return c;
+}
 
 void main() {
   vec2 frag = gl_FragCoord.xy + jitter;
@@ -217,11 +265,11 @@ void main() {
   vec3 rd = normalize(camFwd + (uv.x * camRight + uv.y * camUp) * camScale);
   vec3 ro = camPos;
   float t = 0.; vec2 h = vec2(1e3, 0.); bool hit = false;
-  for (int i = 0; i < 200; i++) {
+  for (int i = 0; i < 240; i++) {
     h = scene(ro + rd * t);
-    if (h.x < .0006) { hit = true; break; }
-    t += h.x * .9;
-    if (t > 20.) break;
+    if (h.x < .0005) { hit = true; break; }
+    t += h.x * .85;
+    if (t > 24.) break;
   }
   if (!hit) { gl_FragColor = vec4(0.); return; }
   vec3 P = ro + rd * t, N = normalAt(P), V = -rd;
@@ -229,14 +277,12 @@ void main() {
   float fresnel = .04 + .96 * pow(edge, 5.);
   vec3 color;
   if (h.y > 1.5) {
-    // Light seen through an opening.
-    vec3 glow = h.y > 2.5 ? mix(vec3(.05, .3, .27), vec3(.27, .13, .47), smoothstep(-.1, .2, P.y - .3)) * (P.y < .2 ? .22 : .38) : roomThrough(P);
-    color = display(glow * (layer > .5 ? .55 : 1.));
+    color = display(roomThrough(P));
   } else {
     vec3 rd2 = refract(rd, N, .76);
     if (dot(rd2, rd2) < .01) rd2 = rd;
     float T;
-    vec3 inner = layer > .5 ? vec3(0.) : inside(P, rd2, T);
+    vec3 inner = inside(P, rd2, T);
     // The skin, as the orb's.
     vec3 diffuse = vec3(0.), specular = vec3(0.), wrap = vec3(0.);
     for (int i = 0; i < 5; i++) {
@@ -250,16 +296,27 @@ void main() {
     }
     vec3 skin = diffuse * vec3(.002, .0035, .0035) + specular + voidLight(reflect(-V, N)) * fresnel + wrap * .55;
     skin += mix(vec3(.006, .05, .042), vec3(.035, .016, .075), smoothstep(-.6, .6, N.x)) * pow(edge, 4.);
-    // The entrance's walls catch the room's warm light near the back.
-    if (h.y > .5) {
-      float back = smoothstep(.95, .45, P.z);
-      skin = skin * .45 + roomThrough(vec3(P.x * .7, P.y, P.z)) * .16 * back;
-      inner *= .25;
+    // A thin film on the glass: violet, green and aqua where it turns away.
+    vec3 film = .5 + .5 * cos(6.2832 * (edge * 1.5 + vec3(0., .33, .67)) + 1.2);
+    skin += film * vec3(.14, .13, .2) * pow(edge, 2.6) * .38;
+    if (subject < .5) {
+      // The room's warm light spills out of the entrance onto the glass round it.
+      vec3 toL = vec3(DOOR_X, -.22, 1.18) - P;
+      float dist = length(toL);
+      skin += vec3(.9, .5, .22) * max(0., dot(N, toL / dist)) * exp(-dist * dist * 4.5) * .55 * (1. - step(.5, h.y));
+      skin += windowLight(P);
+      // The entrance's walls: darker glass, warm near the back.
+      if (h.y > .5) {
+        float back = smoothstep(.95, .45, P.z);
+        skin = skin * .4 + roomThrough(vec3(P.x * .7, P.y, P.z)) * .17 * back;
+        inner *= .22;
+      }
     }
-    // A faint body colour, so the glass never reads as empty where the
-    // inside is quiet.
     vec3 body = vec3(.004, .012, .012) * (.6 + .4 * ndv);
-    color = display(inner * (1. - fresnel) + skin + body);
+    // Where the glass is thin (drips, the neck, the spire) the light behind it
+    // comes through: teal low, violet high, as the orb's edges.
+    vec3 through = mix(vec3(.03, .12, .11), vec3(.08, .045, .13), smoothstep(-1.4, 2.4, P.y)) * T * T;
+    color = display(inner * (1. - fresnel) + skin + body + through);
   }
   gl_FragColor = vec4(color, 1.);
 }`;
@@ -287,11 +344,11 @@ const sub = (a, b) => a.map((v, i) => v - b[i]);
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const norm = a => { const l = Math.hypot(...a); return a.map(v => v / l); };
 const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
-function camera() {
-  const {target, distance, yaw, pitch} = CAMERA;
+function camera(setup = CAMERA) {
+  const {target, distance, yaw, pitch} = setup;
   const pos = [target[0] + distance * Math.sin(yaw) * Math.cos(pitch), target[1] + distance * Math.sin(pitch), target[2] + distance * Math.cos(yaw) * Math.cos(pitch)];
   const fwd = norm(sub(target, pos)), right = norm(cross(fwd, [0, 1, 0])), up = cross(right, fwd);
-  return {pos, fwd, right, up, scale: Math.tan(CAMERA.fov / 2) * 2};
+  return {pos, fwd, right, up, scale: Math.tan(setup.fov / 2) * 2};
 }
 // Where a point lands in the image, as fractions from the top left.
 function project(p) {
@@ -300,41 +357,72 @@ function project(p) {
 }
 
 // Renders in tiles (each a short draw, well within the GPU's watchdog) and
-// several jittered passes averaged, for clean edges.
-async function render({size = 1400, time = 0, layer = 'full', samples = 4, background = null} = {}) {
+// several jittered passes averaged, for clean edges; then a soft bloom from
+// the brightest light (the entrance, the windows, the highlights), and a
+// faint dither so the dark gradients do not band.
+async function render({size = 1400, time = 0, subject = 'building', samples = 4, background = null, bloom = true} = {}) {
   canvas.width = canvas.height = size;
-  const c = camera();
+  const c = camera(subject === 'drop' ? DROP_CAMERA : CAMERA);
   gl.viewport(0, 0, size, size);
   gl.uniform2f(u('resolution'), size, size);
   gl.uniform1f(u('time'), time);
-  gl.uniform1f(u('layer'), layer === 'shell' ? 1 : 0);
+  gl.uniform1f(u('subject'), subject === 'drop' ? 1 : 0);
   gl.uniform3fv(u('camPos'), c.pos); gl.uniform3fv(u('camFwd'), c.fwd);
   gl.uniform3fv(u('camRight'), c.right); gl.uniform3fv(u('camUp'), c.up);
   gl.uniform1f(u('camScale'), c.scale);
   const acc = document.createElement('canvas'); acc.width = acc.height = size;
   const ctx = acc.getContext('2d', {willReadFrequently: true});
   const sum = new Float32Array(size * size * 4);
-  const offsets = [[.25, .25], [.75, .75], [.75, .25], [.25, .75], [.5, .5], [.1, .6], [.6, .1], [.9, .9]].slice(0, samples);
+  const offsets = [[.25, .25], [.75, .75], [.75, .25], [.25, .75], [.5, .5], [.1, .6], [.6, .1], [.9, .9], [.4, .9], [.9, .4], [.1, .1], [.6, .6]].slice(0, samples);
+  const tile = 160;
   gl.enable(gl.SCISSOR_TEST);
   for (const [jx, jy] of offsets) {
     gl.uniform2f(u('jitter'), jx - .5, jy - .5);
-    for (let y = 0; y < size; y += 200) for (let x = 0; x < size; x += 200) {
-      gl.scissor(x, y, 200, 200); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    for (let y = 0; y < size; y += tile) for (let x = 0; x < size; x += tile) {
+      gl.scissor(x, y, tile, tile); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       gl.finish(); await new Promise(r => setTimeout(r));
     }
     ctx.clearRect(0, 0, size, size); ctx.drawImage(canvas, 0, 0);
     const data = ctx.getImageData(0, 0, size, size).data;
+    // Premultiplied sums.
     for (let i = 0; i < data.length; i += 4) {
       const a = data[i + 3] / 255;
       sum[i] += data[i] * a; sum[i + 1] += data[i + 1] * a; sum[i + 2] += data[i + 2] * a; sum[i + 3] += a;
     }
   }
   gl.disable(gl.SCISSOR_TEST);
+  const n = offsets.length;
+  for (let i = 0; i < sum.length; i++) sum[i] /= n;   // premultiplied rgb (0..255), alpha 0..1
+  if (bloom) {
+    // The bright pass, blurred twice and added back (premultiplied).
+    const bright = ctx.createImageData(size, size);
+    for (let i = 0; i < sum.length; i += 4) {
+      const lum = (.2126 * sum[i] + .7152 * sum[i + 1] + .0722 * sum[i + 2]) / 255;
+      const k = Math.max(0, lum - .42) / .58;
+      bright.data[i] = sum[i] * k; bright.data[i + 1] = sum[i + 1] * k; bright.data[i + 2] = sum[i + 2] * k; bright.data[i + 3] = 255;
+    }
+    const src = document.createElement('canvas'); src.width = src.height = size;
+    src.getContext('2d').putImageData(bright, 0, 0);
+    const blurred = radius => {
+      const b = document.createElement('canvas'); b.width = b.height = size;
+      const bx = b.getContext('2d', {willReadFrequently: true});
+      bx.fillStyle = '#000'; bx.fillRect(0, 0, size, size);
+      bx.filter = `blur(${radius}px)`; bx.drawImage(src, 0, 0);
+      return bx.getImageData(0, 0, size, size).data;
+    };
+    const near = blurred(size / 160), far = blurred(size / 48);
+    for (let i = 0; i < sum.length; i += 4) {
+      const g = [near[i] * .55 + far[i] * .4, near[i + 1] * .55 + far[i + 1] * .4, near[i + 2] * .55 + far[i + 2] * .4];
+      sum[i] += g[0]; sum[i + 1] += g[1]; sum[i + 2] += g[2];
+      // The glow beyond the glass carries its own (additive) coverage.
+      sum[i + 3] = Math.min(1, Math.max(sum[i + 3], Math.max(g[0], g[1], g[2]) / 255));
+    }
+  }
   const out = ctx.createImageData(size, size);
   for (let i = 0; i < sum.length; i += 4) {
-    const a = sum[i + 3];
-    if (a > 0) { out.data[i] = sum[i] / a; out.data[i + 1] = sum[i + 1] / a; out.data[i + 2] = sum[i + 2] / a; }
-    out.data[i + 3] = Math.round(a / offsets.length * 255);
+    const a = sum[i + 3], dither = Math.random() - .5;
+    if (a > 0) for (let k = 0; k < 3; k++) out.data[i + k] = Math.min(255, Math.max(0, sum[i + k] / a + dither));
+    out.data[i + 3] = Math.round(a * 255);
   }
   ctx.putImageData(out, 0, 0);
   if (background) { const b = document.createElement('canvas'); b.width = b.height = size; const bx = b.getContext('2d'); bx.fillStyle = background; bx.fillRect(0, 0, size, size); bx.drawImage(acc, 0, 0); window.lastRender = b; return b; }
@@ -343,13 +431,19 @@ async function render({size = 1400, time = 0, layer = 'full', samples = 4, backg
 }
 async function encode(acc, type = 'image/webp', quality = .9) { return acc.toDataURL(type, quality).split(',')[1]; }
 
-// The entrance on the image: the centre of the opening and its size.
+// The entrance, the neck's tip and the spire's tip on the image.
 const doorZ = Math.sqrt(.95 * .95 - DOOR.x * DOOR.x);
 const apex = DOOR.spring + DOOR.a * Math.sqrt(3);
 const [cx, cy] = project([DOOR.x, (DOOR.sill + apex) / 2, doorZ]);
 const [lx] = project([DOOR.x - DOOR.a, (DOOR.sill + apex) / 2, doorZ]), [rx] = project([DOOR.x + DOOR.a, (DOOR.sill + apex) / 2, doorZ]);
 const [, ty] = project([DOOR.x, apex, doorZ]), [, by] = project([DOOR.x, DOOR.sill, doorZ]);
-window.exteriorArt = {render, encode, door: {x: cx, y: cy, width: rx - lx, height: by - ty}, camera: CAMERA};
+const [nx, ny] = project(NECK_TIP), [sx, sy] = project([TOWER[0], 1.42 + 1.28, TOWER[2]]);
+// The falling drop's image, as a fraction of the building's: the same lens,
+// so its frame is to the building's as the two distances.
+window.exteriorArt = {render, encode, camera: CAMERA,
+  points: {door: {x: cx, y: cy, width: rx - lx, height: by - ty}, neck: {x: nx, y: ny}, spire: {x: sx, y: sy},
+    dropSize: DROP_CAMERA.distance / CAMERA.distance}};
+window.exteriorArt.door = window.exteriorArt.points.door;
 document.body.dataset.ready = 'yes';
 </script>
 </body>

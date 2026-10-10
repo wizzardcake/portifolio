@@ -1,4 +1,4 @@
-// node dev/exterior-export.mjs [--preview=out.png --time=0 --layer=full --size=900 --samples=1]
+// node dev/exterior-export.mjs [--preview=out.png --time=0 --subject=building|drop --size=900 --samples=1 --bloom=yes]
 // node dev/exterior-export.mjs --assets
 // Renders dev/exterior-art.html in a local Chrome (GPU) and writes the
 // loading screen's exterior layers to assets/loading/ (--assets), or one
@@ -12,13 +12,15 @@ import {spawn} from 'node:child_process';
 const root = resolve(import.meta.dirname, '..');
 const arg = (name, fallback) => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=')[1] ?? fallback;
 // The layers the site uses: the building at three moments of its inner
-// flow, crossfaded in turn by loading-exterior.css.
+// flow, crossfaded in turn by loading-exterior.css, and the drop that falls
+// from its neck.
 const ASSETS = [
-  {file: 'assets/loading/exterior-a.webp', time: 3, layer: 'full'},
-  {file: 'assets/loading/exterior-b.webp', time: 11, layer: 'full'},
-  {file: 'assets/loading/exterior-c.webp', time: 19, layer: 'full'},
+  {file: 'assets/loading/exterior-a.webp', time: 3, subject: 'building', size: 1600, samples: 8},
+  {file: 'assets/loading/exterior-b.webp', time: 11, subject: 'building', size: 1600, samples: 8},
+  {file: 'assets/loading/exterior-c.webp', time: 19, subject: 'building', size: 1600, samples: 8},
+  {file: 'assets/loading/exterior-drop.webp', time: 5, subject: 'drop', size: 256, samples: 12},
 ];
-const SIZE = 1200, SAMPLES = 6, QUALITY = .86;
+const QUALITY = .9;
 
 const server = createServer(async (req, res) => {
   const file = resolve(root, '.' + decodeURIComponent(new URL(req.url, 'http://localhost').pathname));
@@ -69,12 +71,12 @@ try {
     console.log('wrote', file, Math.round(data.length * .75 / 1024) + ' KB');
   };
   if (process.argv.includes('--assets')) {
-    for (const {file, time, layer} of ASSETS) await write(file, {size: SIZE, time, layer, samples: SAMPLES}, 'image/webp');
+    for (const {file, ...params} of ASSETS) await write(file, params, 'image/webp');
   } else {
     await write(arg('preview', 'verification/exterior-entry/art-preview.png'),
-      {size: +arg('size', 900), time: +arg('time', 0), layer: arg('layer', 'full'), samples: +arg('samples', 1), background: arg('background', '#07060d')}, 'image/png');
+      {size: +arg('size', 900), time: +arg('time', 0), subject: arg('subject', 'building'), samples: +arg('samples', 1), background: arg('background', '#07060d'), bloom: arg('bloom', 'yes') === 'yes'}, 'image/png');
   }
-  console.log('door', JSON.stringify(await evaluate('exteriorArt.door')));
+  console.log('points', JSON.stringify(await evaluate('exteriorArt.points')));
 } finally {
   ws?.close(); server.close(); chrome.kill();
   await rm(profile, {recursive: true, force: true, maxRetries: 8, retryDelay: 250}).catch(() => {});

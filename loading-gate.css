@@ -140,10 +140,11 @@
 .loading-gate__enter {
   margin-bottom: 84px;
   padding: 10px 22px;
-  border: 1px solid #cdbfe655;
+  border: 1px solid #cdbfe688;
   border-radius: 999px;
-  background: #0d081799;
-  color: inherit;
+  /* Opaque enough to read over the glass building behind it. */
+  background: #120b1ee8;
+  color: #efe7fb;
   font: 500 15px/1.2 Inter, system-ui, sans-serif;
   letter-spacing: .04em;
   cursor: pointer;

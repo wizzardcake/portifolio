@@ -1529,9 +1529,57 @@ layoutHand();
 // ==========================================================================
 const PROJECT_DETAILS = {
   motvind: {
-    meta: 'RVK · Posisjoneringsstrategi',
+    meta: 'RVK2101 · Gruppeoppgave · Min del: research og innsikt',
     title: 'Motvind Norge',
-    tagline: 'Strategi bygget på Cialdini og Bourdieu — skrevet alene, fra feltarbeid til ferdig levering.',
+    tagline: 'Fra kommentarfelt og lederprofiler til én innsikt som ble fundamentet for gruppens posisjoneringsstrategi.',
+    bullets: [
+      'Gruppeoppgave på fire. Jeg stod for researchen og innsiktsarbeidet.',
+      'Innsikten: Motvind kjemper ikke for en energikilde, men for retten til natur.',
+    ],
+    sections: [
+      {
+        heading: 'Oppgaven',
+        text: 'I faget Reklame og visuell kommunikasjon var vi et byrå på fire, med Motvind Norge som kunde. Spørsmålet: hvordan kan kjernekraft posisjoneres mot en målgruppe som er åpen, men ikke fullt overbevist? Støtten til vindkraft på land har falt fra 74 til 39 prosent siden 2010, mens støtten til kjernekraft har steget fra 11 til 56 prosent (Kantar, 2025). Debatten er i bevegelse, og det var det vi skulle lese.',
+      },
+      {
+        heading: 'Min del',
+        text: 'Researchen er min egen, kartlagt og tolket i Obsidian:',
+        items: [
+          'Fire organisasjoner i debatten (Norsk Kjernekraft, Fornybar Norge, Motvind Norge og Naturvernforbundet) sammenlignet på første inntrykk, lederne og historien hver av dem forteller.',
+          'Analyse av Motvinds Instagram og kommentarfelt: hvem som engasjerer seg, hva som får sterk respons og hvilken stemning det skaper.',
+          'Målgruppekart i Bourdieus sosiale rom, med tre personaer plassert i kartet.',
+        ],
+      },
+      {
+        heading: 'Fra observasjon til valg',
+        text: 'Ferdigheten jeg er mest stolt av her er kjeden fra rådata til beslutning. Tre eksempler:',
+        chain: [
+          {
+            obs: 'Kommentarfeltene fylles av fiskere, jegere, turgåere, båtfolk og naturfotografer. Samer er synlig til stede.',
+            tolk: 'For dem er natur identitet, ikke fritid. Å se turbiner i urørt natur treffer noe som er langt dypere enn estetikk.',
+            valg: 'Kampanjen treffer følelsen først, det emosjonelle bildet av tapt natur. Fakta om arealbruk og energisikkerhet kommer etterpå.',
+          },
+          {
+            obs: 'Lokallederen i Naturvernforbundet i Nes sa ja til kjernekraft og ble raskt korrigert av sentralledelsen.',
+            tolk: 'De to partene snakker forbi hverandre: lokallederen argumenterer med arealbruk, sentralledelsen med avfall og risiko.',
+            valg: 'Naturvernargumentet er ikke forbeholdt motstanderne av kjernekraft. Det er en sprekk Motvind kan bruke.',
+          },
+          {
+            obs: 'Motvinds leder viser seg i hverdagsklær, sier «vi» fremfor «jeg» og lytter til lokallagene.',
+            tolk: 'Han er rolig og prinsipiell i et miljø der sinne er gruppemarkøren. Han kanaliserer sinnet i stedet for å spille aktivist.',
+            valg: 'Tonen skal være faglig og åpen om dilemmaer. Målgruppen ser raskt gjennom alt som lukter reklame.',
+          },
+        ],
+      },
+      {
+        heading: 'Innsikten',
+        text: 'Energidebatten ser ut som et spørsmål om teknologi og økonomi, men i bunn og grunn handler den om naturens plass i folks identitet. Motvind kjemper ikke for en energikilde. De kjemper for retten til natur, og kjernekraft blir løsningen som fjerner behovet for de andre.',
+      },
+      {
+        heading: 'Hva det ble til',
+        text: 'Research og tolkning ble fundamentet for gruppens posisjoneringsstrategi: system 1 først, med følelsen av tapt natur og felles identitet, og system 2 etterpå, med de rasjonelle argumentene. Kanalene er Instagram og TikTok, der målgruppen allerede oppdager ting selv. Teoriene (Kahneman, Cialdini og Bourdieu) var verktøy for å forklare valgene, ikke selve poenget.',
+      },
+    ],
   },
   husflid: {
     meta: 'Skoleprosjekt',
@@ -1559,15 +1607,43 @@ const projectListEl = document.querySelector('[data-project-list]');
 const projectDetailEl = document.querySelector('[data-project-detail]');
 const detailContentEl = document.getElementById('detailContent');
 
+// Renders one case section: a heading, an optional paragraph, an optional
+// list and an optional observation -> interpretation -> choice chain. All
+// strings come from PROJECT_DETAILS above (our own static copy).
+function renderCaseSection(section) {
+  const list = section.items
+    ? `<ul class="case-list">${section.items.map((t) => `<li>${t}</li>`).join('')}</ul>`
+    : '';
+  const chain = section.chain
+    ? `<ol class="case-chain">${section.chain.map((step) => `
+        <li class="case-chain-step">
+          <p><span class="case-chain-label">Observasjon</span>${step.obs}</p>
+          <p><span class="case-chain-label">Tolkning</span>${step.tolk}</p>
+          <p><span class="case-chain-label">Valg</span>${step.valg}</p>
+        </li>`).join('')}</ol>`
+    : '';
+  return `
+    <section class="case-section">
+      <h4 class="case-heading">${section.heading}</h4>
+      ${section.text ? `<p>${section.text}</p>` : ''}
+      ${list}
+      ${chain}
+    </section>`;
+}
+
 function showProjectDetail(id) {
   const data = PROJECT_DETAILS[id];
   if (!data) return;
+  const body = data.sections
+    ? data.sections.map(renderCaseSection).join('')
+    : '<p class="detail-placeholder">Mer om prosessen kommer her.</p>';
   detailContentEl.innerHTML = `
     <span class="project-meta">${data.meta}</span>
     <h3>${data.title}</h3>
     ${data.tagline ? `<p>${data.tagline}</p>` : ''}
-    <p class="detail-placeholder">Mer om prosessen kommer her.</p>
+    ${body}
   `;
+  detailContentEl.scrollTop = 0;
   projectListEl.hidden = true;
   projectDetailEl.hidden = false;
 }
@@ -1639,8 +1715,9 @@ function buildDeck() {
       <h3 class="project-title">${data.title}</h3>
       <div class="deck-card-image" aria-hidden="true"></div>
       <ul class="deck-card-bullets">
-        <li>${data.tagline}</li>
-        <li class="detail-placeholder">Mer om prosessen kommer her.</li>
+        ${data.bullets
+          ? data.bullets.map((b) => `<li>${b}</li>`).join('')
+          : `<li>${data.tagline}</li><li class="detail-placeholder">Mer om prosessen kommer her.</li>`}
       </ul>
     `;
     card.addEventListener('click', () => {

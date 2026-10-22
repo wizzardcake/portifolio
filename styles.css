@@ -1299,6 +1299,54 @@ body.intro-active .screen {
   opacity: 0.6;
 }
 
+/* ---- Case sections (Motvind and later cases) ---- */
+.case-section {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(var(--relic-gold-rgb), 0.35);
+}
+.case-heading {
+  font-family: var(--font-heading);
+  font-size: 1.05em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 0 0 8px;
+}
+.case-section p { margin: 0 0 10px; }
+.case-list {
+  margin: 0;
+  padding-left: 1.2em;
+  line-height: 1.6;
+}
+.case-list li + li { margin-top: 6px; }
+
+.case-chain {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.case-chain-step {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--relic-gold-rgb), 0.4);
+  background: rgba(var(--relic-gold-rgb), 0.07);
+}
+.case-chain-step p { margin: 0; line-height: 1.55; }
+.case-chain-step p + p { margin-top: 8px; }
+.case-chain-label {
+  display: block;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.7em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: 2px;
+}
+
 /* ==========================================================================
    ARBEIDSERFARING
    ========================================================================== */

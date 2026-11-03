@@ -1825,8 +1825,8 @@ const PACK_PILE = {
   label: 'Prosjekter',
   cards: [
     {id: 'motvind', title: 'Motvind Norge', meta: PROJECT_DETAILS.motvind.meta, glow: '--relic-gold-rgb'},
-    {id: 'husflid', title: 'Norges Husflidslag', meta: PROJECT_DETAILS.husflid.meta, glow: '--relic-teal-rgb'},
     {id: 'dukkehjem', title: 'Et dukkehjem', meta: PROJECT_DETAILS.dukkehjem.meta, glow: '--relic-burgundy-rgb'},
+    {id: 'husflid', title: 'Norges Husflidslag', meta: PROJECT_DETAILS.husflid.meta, glow: '--relic-teal-rgb'},
   ],
 };
 

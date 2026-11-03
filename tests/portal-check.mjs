@@ -194,7 +194,7 @@ try {
         beside:${beside} && faces.every(r=>r.right<=front.left),inside:faces.every(r=>r.left>=0 && r.right<=innerWidth),
         once:document.querySelector('#prosjektPakke .pack-open').disabled};
     })()`);
-    assert.deepEqual(state,{spent:true,closed:true,pile:'motvind,husflid,dukkehjem',wired:false,beside,inside:true,once:true},
+    assert.deepEqual(state,{spent:true,closed:true,pile:'motvind,dukkehjem,husflid',wired:false,beside,inside:true,once:true},
       'Opened, the pack leaves a pile of its own and the Prosjekter card is spent');
   }
   if (process.argv.includes('--cloth-only')) {

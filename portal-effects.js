@@ -142,7 +142,9 @@
     // table rotation at a modest camera-space depth; the same coordinates
     // drive both the orb's morph target and the HTML page. This replaces
     // the old fixed 600px lift, which depended on a heavily zoomed-out stage.
-    const base = window.sceneCamera.reader();
+    // A page with its own presentation (Verktøy) keeps the original reader
+    // size and scales that; the plain content pages get the roomy one.
+    const base = window.sceneCamera.reader(!presentation && innerWidth >= 900);
     const supplied = typeof pageTarget === 'function' ? pageTarget({...base}) : pageTarget;
     const reader = {...base, x: 0};
     for (const key of ['width', 'height', 'x', 'y', 'z']) {

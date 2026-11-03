@@ -432,13 +432,20 @@
   };
   // Convert a desired reader-facing viewport rectangle back into portal-local
   // coordinates, so the orb morph and HTML reader continue to share one target.
-  state.reader = () => {
+  // `roomy` asks for the larger reader the content pages (Prosjekter,
+  // Arbeidserfaring, Kurs, Om meg) use on a desktop viewport: it follows the
+  // screen instead of stopping at 1000 x 620, and sits a little lower so the
+  // taller page still clears the top bar and the held cards.
+  state.reader = (roomy = false) => {
     const depth = state.focal * .14, scale = state.focal / (state.focal - depth);
-    const y = (innerHeight * .35 - state.originY) / scale - state.viewY;
+    const centre = roomy ? .41 : .35;
+    const y = (innerHeight * centre - state.originY) / scale - state.viewY;
     const z = depth - (state.focal - state.viewDistance);
     const p = camera.pitch * Math.PI / 180;
-    return {width: Math.min(1000,innerWidth*.88)/scale,
-      height: Math.min(620,innerHeight*.56)/scale,
+    const width = roomy ? Math.min(1400, innerWidth * .9) : Math.min(1000, innerWidth * .88);
+    const height = roomy ? Math.min(940, innerHeight * .72) : Math.min(620, innerHeight * .56);
+    return {width: width / scale,
+      height: height / scale,
       y: y*Math.cos(p)+z*Math.sin(p), z: -y*Math.sin(p)+z*Math.cos(p)};
   };
 

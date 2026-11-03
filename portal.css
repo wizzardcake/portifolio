@@ -331,6 +331,32 @@ body:not(.intro-done) .theme-toggle { visibility: hidden; }
 .portal-retrieve { z-index: 7; bottom: 7%; border-color: #8a9c8155; background: #18221ff2; transform: translateZ(6px); }
 .portal-retrieve:hover { transform: translate3d(0, -2px, 6px); }
 body.scene-interacting .device { animation-play-state: paused; }
+/* Desktop: the content pages are given room (the page itself is larger —
+   scene-camera.js reader(true)), so the inside breathes too. */
+@media (min-width: 900px) {
+  .screen .app-view { inset: 3.5% 3%; }
+  .screen .app-header { padding: 28px 48px; gap: 24px; }
+  .screen .app-header h2 { font-size: 1.6em; }
+  .screen .back-btn { padding: 10px 22px; }
+  .screen .app-content { padding: 44px 56px 40px; }
+  .screen .app-view .app-content { padding-bottom: 92px; }
+  .screen .project-list:not([hidden]) { gap: 40px; align-items: center; }
+  .screen .deck { max-width: min(480px, 40dvh); margin: 28px auto 24px; }
+  .screen .deck-card { padding: 26px 30px; }
+  .screen .deck-card-image { margin: 16px 0; }
+  .screen .deck-card-bullets { font-size: 0.95em; line-height: 1.6; }
+  .screen .deck-card-bullets li + li { margin-top: 10px; }
+  .screen .deck-tags { gap: 14px; margin: 8px 0 0; }
+  .screen .deck-tag { padding: 9px 20px; font-size: 0.88em; }
+  .screen .more-link { align-self: center; padding: 10px 0; margin-top: 8px; }
+  .screen .more-projects:not([hidden]) { gap: 28px; width: 100%; }
+  .screen .project-card { padding: 26px 30px; }
+  .screen .project-card--minor { padding: 20px 26px; }
+  .screen .detail-content { padding: 36px 44px; }
+  .screen .experience-list { gap: 28px; }
+  .screen .experience-item { padding: 26px 32px; }
+  .screen .chip-group { gap: 14px; margin-bottom: 28px; }
+}
 @keyframes projected-content {
   from { opacity: 0; filter: blur(5px); transform: translateY(15px); }
   to { opacity: 1; filter: blur(0); transform: translateY(0); }

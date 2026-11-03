@@ -36,6 +36,7 @@
     <button data-view="figma" aria-pressed="false">Figma</button>
     <button data-view="grimoire" aria-pressed="false">Grimoire</button>
     <button data-view="crystal" aria-pressed="false">Crystal</button>
+    <button data-view="obsidian" aria-pressed="false">Obsidian</button>
     <button id="simulate" aria-pressed="false">Hover all</button>
     <button id="room-light" aria-pressed="false" title="The nook's own light, and its frontal shelf view">Room light</button>
     <label><input id="still" type="checkbox"> Reduce motion</label>
@@ -46,7 +47,7 @@
   </footer>
   <script type="module">
     import * as THREE from './vendor/three/three.module.js';
-    import {createFigmaObject,createGrimoireObject,createCrystalBallObject} from './tools-shelf.js';
+    import {createFigmaObject,createGrimoireObject,createCrystalBallObject,createObsidianObject} from './tools-shelf.js';
     import {createShelfSound} from './tools-sound.js';
 
     const canvas=document.querySelector('#preview');
@@ -68,8 +69,8 @@
     soundButton.addEventListener('click',()=>setSound(!soundOn));
     showSound();if(soundOn)addEventListener('pointerdown',()=>{if(soundOn&&!sound.enabled)sound.setEnabled(true);},{once:true});
     const options={camera,reducedMotion:()=>still.checked,sound};
-    const objects=[createFigmaObject(options),createGrimoireObject(options),createCrystalBallObject(options)];
-    objects.forEach((object,i)=>{object.group.position.x=(i-1)*.48;scene.add(object.group);object.group.userData.toolIndex=i;});
+    const objects=[createFigmaObject(options),createGrimoireObject(options),createCrystalBallObject(options),createObsidianObject(options)];
+    objects.forEach((object,i)=>{object.group.position.x=(i-(objects.length-1)/2)*.48;scene.add(object.group);object.group.userData.toolIndex=i;});
 
     scene.add(new THREE.HemisphereLight('#8390c4','#4c3a2c',.5),new THREE.AmbientLight('#d8bc99',.06));
     const key=new THREE.PointLight('#ffbf82',4.2,4,2);key.position.set(-.4,.90,.8);key.castShadow=true;key.shadow.mapSize.set(1024,1024);key.shadow.bias=-.00025;key.shadow.normalBias=.002;key.shadow.camera.near=.05;key.shadow.radius=3;scene.add(key);
@@ -118,14 +119,15 @@
     canvas.addEventListener('pointerleave',()=>{if(!dragging)pointer.set(4,4);});
     canvas.addEventListener('wheel',e=>{e.preventDefault();desired.radius=THREE.MathUtils.clamp(desired.radius*Math.exp(e.deltaY*.001),.36,3.7);},{passive:false});
     const copy={
-      all:['01 — 03 / the collection','Tools for a little alchemy','Five floating inlays. A book of blue light. A small, restless sky under glass.'],
+      all:['01 — 04 / the collection','Tools for a little alchemy','Five floating inlays. A book of blue light. A small, restless sky under glass. A stone of violet glass.'],
       figma:['01 / shape & colour','Floating enamel','Five beveled pieces circle a stone plinth. Bring them together with a hover.'],
       grimoire:['02 / logic & language','The blue grimoire','Worn leather, curved parchment and luminous marks. Hover to lift the writing from the page.'],
       crystal:['03 / thought & possibility','A sky held in glass','Teal and violet currents gather inside a bronze-mounted crystal. Hover to stir the mist.'],
+      obsidian:['04 / notes & connections','The Obsidian stone','Violet volcanic glass, cut as the mark is, floating over the shelf. Hover to lift it and turn it once.'],
     };
     function focus(name){
-      camera.fov=38;camera.updateProjectionMatrix();view=name;const i=['figma','grimoire','crystal'].indexOf(name);target.set(i<0?0:objects[i].group.position.x,i===1?.10:.16,0);
-      desired.radius=i<0?(innerWidth<760?2.5:2.08):.67;desired.phi=i===1?.93:1.20;desired.theta=i<0?.10:.32;
+      camera.fov=38;camera.updateProjectionMatrix();view=name;const i=['figma','grimoire','crystal','obsidian'].indexOf(name);target.set(i<0?0:objects[i].group.position.x,i===1?.10:i===3?.20:.16,0);
+      desired.radius=i<0?(innerWidth<760?3.1:2.5):.67;desired.phi=i===1?.93:1.20;desired.theta=i<0?.10:.32;
       document.querySelectorAll('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===name)));
       ['number','object-title','description'].forEach((id,j)=>document.getElementById(id).textContent=copy[name][j]);
       aim(true);
@@ -150,7 +152,7 @@
       objects.forEach((object,i)=>object.setHover(forced==='all'||forced===i||(forced===null&&hovered===i)));
       if(!paused){time+=dt;objects.forEach(o=>o.update(time,dt));}
       renderer.render(scene,camera);
-      document.querySelector('#hover-state').textContent=forced==='all'?'All objects awake':hovered>=0?['Assembling the five inlays','The writing rises','The mist quickens'][hovered]:'';
+      document.querySelector('#hover-state').textContent=forced==='all'?'All objects awake':hovered>=0?['Assembling the five inlays','The writing rises','The mist quickens','The stone lifts and turns'][hovered]:'';
       canvas.style.cursor=dragging?'grabbing':hovered>=0?'pointer':'grab';
       frames++;if(now-fpsAt>=1000){const fps=frames*1000/(now-fpsAt);samples.push(fps);if(samples.length>30)samples.shift();document.querySelector('#fps').textContent=`${fps.toFixed(0)} fps · ${renderer.info.render.triangles.toLocaleString()} triangles`;fpsAt=now;frames=0;}
     }
@@ -161,7 +163,7 @@
       advance(seconds){for(let t=0;t<seconds;t+=1/60){time+=1/60;objects.forEach(o=>o.update(time,1/60));}renderer.render(scene,camera);},
       get stats(){return {fps:samples.slice(),drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,hovered,view,reducedMotion:still.checked};},
       bounds(){return objects.map(o=>{const b=new THREE.Box3().setFromObject(o.group);return {name:o.group.name,min:b.min.toArray(),max:b.max.toArray(),size:b.getSize(new THREE.Vector3()).toArray()};});},
-      point(i){const p=new THREE.Vector3(0,i===1?.11:.23,0);objects[i].group.localToWorld(p);p.project(camera);return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};},
+      point(i){const p=new THREE.Vector3(0,i===1?.11:i===3?.20:.23,0);objects[i].group.localToWorld(p);p.project(camera);return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};},
       orbit(theta,phi){desired.theta=theta;desired.phi=phi;aim(true);},
       setLighting,roomView,sound,setSound,
     };

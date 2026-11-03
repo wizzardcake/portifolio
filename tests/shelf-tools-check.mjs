@@ -67,7 +67,7 @@ try{
   const shot=async name=>{const {data}=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(resolve(output,name+'.png'),Buffer.from(data,'base64'));};
   await evaluate("toolsPreview.setHover(-1);toolsPreview.advance(2);toolsPreview.setPaused(true)");
   await shot('all-idle');
-  for(const [i,name] of ['figma','grimoire','crystal'].entries()){
+  for(const [i,name] of ['figma','grimoire','crystal','obsidian'].entries()){
     await evaluate(`toolsPreview.focus('${name}');toolsPreview.setHover(-1);toolsPreview.advance(2)`);await sleep(180);await shot(name+'-idle');
     await evaluate(`toolsPreview.setHover(${i});toolsPreview.advance(2)`);await sleep(180);await shot(name+'-hover');
     await evaluate('toolsPreview.orbit(.85,1.12)');await sleep(150);await shot(name+'-side');
@@ -77,13 +77,13 @@ try{
   for(const b of bounds){assert.ok(b.min[1]>=-.001,`${b.name}: base penetrates shelf`);assert.ok(b.size[2]<=.26,`${b.name}: too deep for shelf`);assert.ok(b.size[0]<=.32,`${b.name}: too wide`);}
   // Real mouse raycast, including the object under the cursor after camera orbit.
   const hoverHits=[];
-  for(let i=0;i<3;i++){
-    await evaluate(`toolsPreview.setHover(null);toolsPreview.focus('${['figma','grimoire','crystal'][i]}')`);
+  for(let i=0;i<4;i++){
+    await evaluate(`toolsPreview.setHover(null);toolsPreview.focus('${['figma','grimoire','crystal','obsidian'][i]}')`);
     const point=await evaluate(`toolsPreview.point(${i})`);
     await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:point.x,y:point.y});await sleep(200);
     hoverHits.push(await evaluate('toolsPreview.stats.hovered'));
   }
-  assert.deepEqual(hoverHits,[0,1,2],'Mouse hover raycasting');
+  assert.deepEqual(hoverHits,[0,1,2,3],'Mouse hover raycasting');
   await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:10,y:980});
   // OS preference is reused; phase and geometry stop changing after transition.
   await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});await sleep(100);

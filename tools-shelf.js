@@ -1045,3 +1045,76 @@ export function createCrystalBallObject(options = {}) {
   group.userData.footprint={width:.23,depth:.23,height:.316};
   return {group,update,setHover:a.setHover,dispose(){options.sound?.hold('crystal-hum',0);a.dispose();}};
 }
+
+/** The stone of the Obsidian mark, floating: four lit faces as the logo has them. */
+export function createObsidianObject(options = {}) {
+  const a=artifact('Obsidian / floating stone',options),{group,mesh,own}=a;
+  // The mark seen face on (x right, y up, z toward the eye; the stone about 2
+  // units tall), and where its four faces meet: J where the bright face, the
+  // left and the bottom meet, K where the bright face, the right and the
+  // bottom meet, S along the curve between the bright face and the right.
+  const P={apex:[.17,.95,.02],shoulder:[-.50,.58,.10],flank:[-.56,.17,.18],corner:[-.77,-.39,.02],heel:[-.38,-.84,.08],
+    keel:[.11,-.80,.16],toe:[.50,-.84,.05],notch:[.56,-.58,.14],cheek:[.77,-.25,.02],brow:[.52,.50,.06],
+    J:[-.22,-.21,.42],K:[.09,-.17,.46],S:[.02,.41,.36],backHigh:[.02,.30,-.40],backLow:[.05,-.45,-.38]};
+  // Each face: its outline as a fan, and its colours, sampled from the mark
+  // (light lavender glowing toward its lower seam, a shade cooler than the
+  // mark's so the amber lamp does not wash it out; the right face lightening
+  // downward; the deep left; the dark bottom). The back is darker still.
+  const faces=[
+    {fan:['S','apex','shoulder','flank','J','K'],colors:{S:'#b8a2f3',apex:'#a98ff0',shoulder:'#b39cf1',flank:'#bba6f3',J:'#c9b6f6',K:'#c4b0f5'}},
+    {fan:['S','K','notch','cheek','brow','apex'],colors:{S:'#9469ea',K:'#a988ef',notch:'#b192f0',cheek:'#a07aed',brow:'#8f63ea',apex:'#8456e8'}},
+    {fan:['J','flank','corner','heel'],colors:{J:'#6f43ca',flank:'#6331c7',corner:'#6a38c9',heel:'#7347cb'}},
+    {fan:['J','heel','keel','toe','notch','K'],colors:{J:'#5f33b7',heel:'#6a3fc2',keel:'#6b40c0',toe:'#7c51d1',notch:'#7a4fcf',K:'#6a3fc4'}},
+    {fan:['backHigh','shoulder','apex','brow','cheek'],colors:{}},
+    {fan:['backLow','cheek','notch','toe','keel','heel','corner'],colors:{}},
+    {fan:['backHigh','cheek','backLow'],colors:{}},{fan:['backHigh','backLow','corner','flank','shoulder'],colors:{}},
+  ];
+  const scale=[.09,.106,.12],at=name=>new THREE.Vector3(...P[name]).multiply(new THREE.Vector3(...scale));
+  const centre=new THREE.Vector3(0,0,.02*scale[2]),position=[],normal=[],color=[],tint=new THREE.Color();
+  for(const face of faces){
+    const points=face.fan.map(at),tris=[];
+    for(let i=1;i<points.length-1;i++)tris.push([0,i,i+1]);
+    // Wound outward; one normal for the whole face, so each reads as one plane.
+    const n=new THREE.Vector3();
+    for(const t of tris){
+      const [p,q,r]=t.map(i=>points[i]),m=new THREE.Vector3().subVectors(q,p).cross(new THREE.Vector3().subVectors(r,p));
+      if(m.dot(p.clone().add(q).add(r).multiplyScalar(1/3).sub(centre))<0){[t[1],t[2]]=[t[2],t[1]];m.negate();}
+      n.add(m);
+    }
+    n.normalize();
+    for(const t of tris)for(const i of t){
+      const p=points[i];position.push(p.x,p.y,p.z);normal.push(n.x,n.y,n.z);
+      tint.set(face.colors[face.fan[i]]??(p.y>0?'#4a2a8f':'#3b1f78'));color.push(tint.r,tint.g,tint.b);
+    }
+  }
+  const geometry=new THREE.BufferGeometry();
+  geometry.setAttribute('position',new THREE.Float32BufferAttribute(position,3));
+  geometry.setAttribute('normal',new THREE.Float32BufferAttribute(normal,3));
+  geometry.setAttribute('color',new THREE.Float32BufferAttribute(color,3));
+  // Volcanic glass: glossy, its colours lit a little from within so the mark
+  // keeps its violet under the nook's amber lamp; more so when woken.
+  const glow={value:.46};
+  const glass=own(new THREE.MeshPhysicalMaterial({vertexColors:true,color:'#6a6a6a',roughness:.34,metalness:0,clearcoat:.8,clearcoatRoughness:.14}));
+  glass.onBeforeCompile=shader=>{shader.uniforms.uGlow=glow;
+    shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nuniform float uGlow;')
+      .replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n\ttotalEmissiveRadiance+=vColor.rgb*uGlow;');};
+  glass.customProgramCacheKey=()=>'obsidian-stone';
+  const holder=new THREE.Group();group.add(holder);
+  const stone=mesh(geometry,glass,holder);stone.name='obsidian stone';
+  // It floats over the shelf, rising and falling a little and turning to and
+  // fro about the mark's face; woken, it lifts, brightens and turns once.
+  const rest=.20;let turn=0,goal=0,wasAwake=false;
+  function update(time,delta) {
+    const s=a.step(time,delta);if(!s)return;
+    if(s.awake&&!wasAwake&&!s.reduced)goal+=TAU;wasAwake=s.awake;
+    if(!s.reduced)turn+=(goal-turn)*(1-Math.exp(-s.dt*2.2));
+    const lift=s.hover*s.hover*(3-2*s.hover);
+    holder.position.y=rest+(s.reduced?0:.0055*Math.sin(s.t*1.25))+.012*lift;
+    holder.rotation.y=(s.reduced?0:.32*Math.sin(s.t*.42))+turn;
+    holder.rotation.z=s.reduced?0:.045*Math.sin(s.t*.61);
+    glow.value=.46+.3*lift;
+  }
+  update(0,0);
+  group.userData.footprint={width:.15,depth:.11,height:.31};
+  return {group,update,setHover:a.setHover,dispose:a.dispose};
+}

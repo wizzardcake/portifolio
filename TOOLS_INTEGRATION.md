@@ -268,3 +268,63 @@ automated Chrome/CDP screenshots and checks.
 - Override `CHROME_PATH` if Chrome is installed elsewhere.
 
 See `TOOLS_VERIFICATION.md` for image paths, measurements and limitations.
+
+## In the room: the shelf and the desk (2026-11-03)
+
+**What changed.** The user asked for a new arrangement of the nook's objects
+(`room-scene.js`, `shelfPlaces`):
+
+| Object | Where | Shelf frame x, y, z (m) |
+| --- | --- | --- |
+| Figma, enamel | the shelf, left (unchanged) | −0.48, 0, 0 |
+| Obsidian, the stone | floating over the shelf, right | 0.48, 0, 0 |
+| VS Code, the grimoire | the desk below, left | −0.42, −0.6975, 0.24 |
+| AI, the crystal ball | the desk below, right | 0.46, −0.6975, 0.22 |
+
+- The shelf frame has x to the visitor's right, y up from the shelf's top,
+  and z out toward the room.
+- The desk's top and front edge come from the chamber (`nook.desk`, and
+  `nook.x + .07`), not from fixed numbers.
+- The grimoire is turned to face the middle of the desk's front edge.
+
+**The Obsidian stone** (`createObsidianObject`, `tools-shelf.js`).
+
+- **Shape.** The mark's stone, seen face on, built as one small faceted
+  solid. Its four faces are those of the logo (Obsidian's own `icon.png`):
+  - a bright lavender face at the upper left, glowing toward its lower seam;
+  - the violet right face;
+  - the deep left;
+  - the dark bottom.
+  The back is darker still.
+- **Colour.** Each face has one normal, so it reads as one plane. Its
+  colours are vertex colours sampled from the mark, with the bright face a
+  shade cooler so the amber lamp does not wash it out.
+- **Material.** Glossy volcanic glass (`MeshPhysicalMaterial` with
+  clearcoat). The colours are also lit a little from within (`uGlow`), so
+  the violet holds under the nook's warm light.
+- **Motion.** It floats 0.2 m over the shelf (its base 0.125 m above it).
+  It rises and falls a little and turns to and fro about the mark's face.
+  Woken, it lifts, brightens and turns once. With reduced motion it holds
+  still.
+- **Sound.** It has none yet. A sound would go through the existing
+  `createShelfSound` and the corner toggle.
+
+**Cost.** The stone is one mesh: one draw call and 26 triangles. The
+nook's objects now cost 17 calls and 7,505 triangles; `portal-check`
+allows up to 17 calls and under 8,000 triangles. Measured in the room:
+16 calls and 7,479 triangles before.
+
+**Verified** (headless Chrome, on mains power). Four suites pass:
+
+- `shelf-tools-check`, now with the stone in `tools-preview.html`:
+  - hover hits on all four objects;
+  - bounds;
+  - static under reduced motion;
+  - every factory's resources disposed exactly once, and no lights.
+- `first-person-check`: website and game mode both reach the nook's
+  objects.
+- `portal-check`: the budget, and the walk to the shelf and back.
+- `navigation-check`.
+
+The room's shelf view was also captured, before and after, on desktop and
+mobile (`verification/shelf-desk-obsidian/`, gitignored).

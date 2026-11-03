@@ -338,10 +338,10 @@ body.scene-interacting .device { animation-play-state: paused; }
   .screen .app-header { padding: 28px 48px; gap: 24px; }
   .screen .app-header h2 { font-size: 1.6em; }
   .screen .back-btn { padding: 10px 22px; }
-  .screen .app-content { padding: 44px 56px 40px; }
+  .screen .app-content { padding: 32px 56px 40px; }
   .screen .app-view .app-content { padding-bottom: 92px; }
   .screen .project-list:not([hidden]) { gap: 40px; align-items: center; }
-  .screen .deck { max-width: min(480px, 40dvh); margin: 28px auto 24px; }
+  .screen .deck { max-width: min(440px, 33dvh); margin: 20px auto 22px; }
   .screen .deck-card { padding: 26px 30px; }
   .screen .deck-card-image { margin: 16px 0; }
   .screen .deck-card-bullets { font-size: 0.95em; line-height: 1.6; }

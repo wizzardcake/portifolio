@@ -783,7 +783,13 @@ body.intro-active .screen {
   position: absolute; inset: 0; width: 100%; height: 100%;
   display: block; padding: 0; z-index: 60; pointer-events: none;
 }
-.desktop-icons { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* The hand's card size and how far it sinks below the viewport, shared
+   with the piles that lie beside it. */
+.desktop-icons {
+  --hand-card-w: clamp(150px, 25dvh, 240px);
+  --hand-card-sink: clamp(42px, 6dvh, 64px);
+  position: absolute; inset: 0; width: 100%; height: 100%;
+}
 .hand-card .sub-card { pointer-events: auto; }
 
 
@@ -956,9 +962,9 @@ body.intro-active .screen {
 
 .hand-card {
   position: absolute;
-  bottom: calc(-1 * clamp(42px, 6dvh, 64px));
+  bottom: calc(-1 * var(--hand-card-sink));
   left: calc(50% - 32px);
-  width: clamp(150px, 25dvh, 240px);
+  width: var(--hand-card-w);
   transform-origin: bottom center;
   translate:
     calc(-50% + var(--stack-i, 0) * 16px)
@@ -1005,6 +1011,53 @@ body.intro-active .screen {
   justify-content: space-between;
 }
 .sub-card--ommeg .sub-card-footer { margin-top: auto; }
+
+/* ---- Piles (script.js createPile): a stack of cards of its own, lying
+   left of the hand. The hand mirrored and a little smaller: the front card
+   (--stack-i: 0) reads, the rest lean out to the left behind it. Visual
+   only for now; hover lifts a card, nothing more. Its own stacking context
+   keeps it under the hand where the two meet. ---- */
+.card-pile {
+  --pile-card-w: calc(var(--hand-card-w) * .84);
+  --pile-gap: clamp(36px, 5vw, 80px);
+  --pile-step-x: -18px;
+  --pile-step-y: -10px;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.pile-card {
+  position: absolute;
+  bottom: calc(-1 * var(--hand-card-sink));
+  /* The hand's front card is centred 32px left of the middle. */
+  left: calc(50% - 32px - var(--hand-card-w) / 2 - var(--pile-gap) - var(--pile-card-w) / 2);
+  width: var(--pile-card-w);
+  /* The stack's offset; the deal (script.js) flies the card with the
+     individual translate/rotate/scale, which apply outside this. */
+  transform:
+    translateX(-50%)
+    translate(calc(var(--stack-i, 0) * var(--pile-step-x)), calc(var(--stack-i, 0) * var(--pile-step-y)))
+    rotate(calc(5deg - var(--stack-i, 0) * 5deg));
+  /* The container its lettering is sized to. */
+  container-type: inline-size;
+}
+
+.pile-card .sub-card { pointer-events: auto; cursor: default; animation: none; }
+.sub-card--pile { font-size: clamp(9px, 7.5cqw, 14px); }
+/* At the top: the card's lower part sinks below the viewport, as the hand's. */
+.sub-card--pile .sub-card-footer {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 8%;
+  font-size: 0.68em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+@container (max-width: 120px) {
+  .sub-card--pile .sub-card-footer { display: none; }
+}
 
 /* ---- The portal's own glow, driven by the same .screen-tunnel used
    during boot. Three states — off (a faint, always-there hint — see the
@@ -1105,6 +1158,8 @@ body.intro-active .screen {
 .back-btn:hover { background: var(--gold); color: var(--card-bg); }
 .back-btn:active { transform: scale(0.97); }
 .back-btn.small { font-size: 0.8em; padding: 6px 14px; margin-bottom: 18px; }
+/* Held while the Prosjekter pack bursts (script.js). */
+.back-btn:disabled, .portal-retrieve:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
 
 .app-content {
   flex: 1;
@@ -1257,6 +1312,179 @@ body.intro-active .screen {
   background: var(--burgundy);
   border-color: var(--burgundy);
   color: var(--card-bg);
+}
+
+/* ---- Prosjekt-pakke (script.js): the sealed pack on the Prosjekter page.
+   A gold top crimped over a teal body, the three cards it holds peeking out
+   behind it. The page is its size container, so the pack is sized to fit it
+   without a scroll; a page too short for that (a phone on its side) has
+   the button beside the pack. ---- */
+#app-prosjekter .app-content { container-type: size; }
+
+.pack-stage:not([hidden]) {
+  --pack-h: clamp(110px, 62cqh, 330px);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(14px, 4cqh, 26px);
+  min-height: 100%;
+}
+/* Too short a page to stack them: the button beside the pack, at its top,
+   clear of the retrieval button along the page's foot. */
+@container (max-height: 200px) {
+  .pack-stage:not([hidden]) { --pack-h: 100px; flex-direction: row; align-items: flex-start; }
+  .pack-open { padding: 7px 18px; }
+}
+
+.pack {
+  position: relative;
+  flex-shrink: 0;
+  height: var(--pack-h);
+  aspect-ratio: 5 / 7;
+  /* Room above for the cards that peek out over its top. */
+  margin-top: calc(var(--pack-h) * .14);
+}
+
+.pack-peek {
+  position: absolute;
+  left: 50%;
+  bottom: 52%;
+  width: 64%;
+  aspect-ratio: 3 / 4;
+  transform-origin: 50% 100%;
+  translate: calc(-50% + var(--peek-i) * 24%) calc(var(--peek-i) * var(--peek-i) * 6%);
+  rotate: calc(var(--peek-i) * 17deg);
+  border-radius: 7px;
+  border: 2px solid rgb(var(--card-glow-rgb));
+  background: linear-gradient(180deg, rgba(var(--card-glow-rgb), 0.35), transparent 45%), var(--card-bg);
+  box-shadow: 0 0 12px 2px rgba(var(--card-glow-rgb), 0.55), 0 -2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.pack-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 5px 5px 9px 9px;
+  background:
+    linear-gradient(112deg, transparent 32%, rgba(255, 255, 255, 0.16) 44%, transparent 56%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 6px),
+    linear-gradient(180deg, transparent 55%, rgba(0, 0, 0, 0.35)),
+    radial-gradient(ellipse 90% 70% at 50% 60%, rgb(var(--relic-teal-rgb)) 0%, var(--relic-bg-teal) 70%);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--teal-rgb), 0.55),
+    0 0 28px rgba(var(--teal-rgb), 0.35),
+    0 18px 28px rgba(0, 0, 0, 0.5);
+}
+
+/* The crimped seam along the bottom. */
+.pack-wrap::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6%;
+  border-top: 1px solid rgba(var(--teal-rgb), 0.4);
+  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.28) 0 2px, rgba(255, 255, 255, 0.06) 2px 5px);
+}
+
+.pack-top {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 20%;
+  display: grid;
+  place-items: center;
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0 2px, rgba(255, 255, 255, 0.12) 2px 5px) top / 100% 22% no-repeat,
+    linear-gradient(180deg, rgb(var(--gold-rgb)) 0%, rgb(var(--relic-gold-rgb)) 100%);
+  border-bottom: 1px solid rgba(var(--gold-rgb), 0.9);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.pack-label {
+  padding-top: 6%;
+  font-family: var(--font-accent);
+  font-weight: 600;
+  font-size: calc(var(--pack-h) * .06);
+  letter-spacing: 0.14em;
+  color: var(--interlude-text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 8px rgba(var(--relic-gold-rgb), 0.9);
+}
+
+.pack-seal {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  width: 36%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid rgba(var(--gold-rgb), 0.85);
+  background: radial-gradient(circle, rgba(var(--gold-rgb), 0.3), transparent 68%);
+  box-shadow:
+    inset 0 0 0 5px rgba(var(--relic-teal-rgb), 0.9),
+    inset 0 0 0 6px rgba(var(--gold-rgb), 0.5),
+    0 0 18px rgba(var(--gold-rgb), 0.35);
+}
+
+.pack-seal::after {
+  content: '✦';
+  color: var(--gold);
+  font-size: calc(var(--pack-h) * .09);
+  text-shadow: 0 0 10px rgba(var(--gold-rgb), 0.8);
+}
+
+.pack-open {
+  flex-shrink: 0;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.95em;
+  padding: 10px 26px;
+  border-radius: 999px;
+  border: 1px solid var(--gold);
+  background: var(--card-bg);
+  color: var(--text);
+  box-shadow: 0 0 16px rgba(var(--gold-rgb), 0.35);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease, opacity 0.3s ease;
+}
+.pack-open:hover { background: var(--gold); color: var(--card-bg); }
+.pack-open:active { transform: scale(0.97); }
+.pack-open:disabled { opacity: 0; pointer-events: none; }
+
+/* The burst: a flash, sparks and mist, centred on the pack by script.js,
+   which animates each one and removes it. */
+.pack-flash, .pack-spark, .pack-mist {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.pack-flash {
+  width: calc(var(--pack-h) * 1.3);
+  aspect-ratio: 1;
+  opacity: 0;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(var(--gold-rgb), 0.6) 22%, rgba(var(--teal-rgb), 0.25) 45%, transparent 68%);
+  mix-blend-mode: screen;
+}
+.pack-spark {
+  width: 6px;
+  height: 6px;
+  background: #fff;
+  box-shadow: 0 0 6px 2px rgba(var(--gold-rgb), 0.95), 0 0 14px 4px rgba(var(--gold-rgb), 0.5);
+}
+.pack-mist {
+  width: calc(var(--pack-h) * .5);
+  aspect-ratio: 1;
+  opacity: 0;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.28), rgba(var(--teal-rgb), 0.22) 40%, transparent 70%);
+  filter: blur(6px);
 }
 
 .more-link {

@@ -134,7 +134,25 @@
       </header>
       <div class="app-content">
 
-        <div class="project-list" data-project-list>
+        <!-- The sealed pack the Prosjekter card opens onto (script.js,
+             PROSJEKT-PAKKE): opened once, its three cards become a pile of
+             their own beside the hand and the Prosjekter card is spent. -->
+        <div class="pack-stage" id="prosjektPakke">
+          <div class="pack" role="img" aria-label="Forseglet pakke: prosjekter">
+            <span class="pack-peek" style="--peek-i: -1; --card-glow-rgb: var(--relic-teal-rgb)"></span>
+            <span class="pack-peek" style="--peek-i: 1; --card-glow-rgb: var(--relic-burgundy-rgb)"></span>
+            <span class="pack-peek" style="--peek-i: 0; --card-glow-rgb: var(--relic-gold-rgb)"></span>
+            <span class="pack-wrap">
+              <span class="pack-top"><span class="pack-label">prosjekter</span></span>
+              <span class="pack-seal"></span>
+            </span>
+          </div>
+          <button class="pack-open" type="button">Åpne pakke</button>
+        </div>
+
+        <!-- The former deck, kept for the project pages to come; the pack
+             has taken its place on the page. -->
+        <div class="project-list" data-project-list hidden>
 
           <div class="deck" id="prosjekterDeck"></div>
           <div class="deck-tags" id="prosjekterTags"></div>

@@ -271,7 +271,7 @@ body.portal-unlocked .portal-hint { opacity: 0; }
 body:has(.screen.portal-active) .desktop { pointer-events: none; }
 body:has(.screen.portal-active) .hand-card .sub-card { pointer-events: auto; }
 /* Only the thrown card's lifecycle hides it. Keep the rest of the hand. */
-body:not(.intro-done) .hand-card { visibility: hidden; pointer-events: none; }
+body:not(.intro-done) .hand-card, body:not(.intro-done) .card-pile { visibility: hidden; pointer-events: none; }
 body:not(.intro-done) .theme-toggle { visibility: hidden; }
 .portal-flight {
   position: fixed !important; z-index: 200; margin: 0 !important; pointer-events: none !important;
@@ -368,7 +368,7 @@ body.scene-interacting .device { animation-play-state: paused; }
 @media (max-width: 899px) {
   .screen, body.intro-active .screen { width: 66vw; aspect-ratio: 4 / 5; font-size: 14px; }
   .portal-table { --rim-front: .35; }
-  .hand-card { width: clamp(130px, 22dvh, 180px); }
+  .desktop-icons { --hand-card-w: clamp(130px, 22dvh, 180px); }
   .hand-card .sub-card { font-size: 12px; }
   .device-topbar { inset: 18px 16px auto; }
   .screen .app-view { inset: 4%; }
@@ -383,5 +383,12 @@ body.scene-interacting .device { animation-play-state: paused; }
 @media (max-width: 899px) and (min-aspect-ratio: 1/1) {
   .screen, body.intro-active .screen { width: min(68vw, 136dvh); aspect-ratio: 8 / 5; }
   .portal-table { --rim-front: .096; }
-  .hand-card { width: 25dvh; bottom: -6dvh; }
+  .desktop-icons { --hand-card-w: 25dvh; --hand-card-sink: 6dvh; }
+}
+/* A phone held upright has no room beside the hand: a small pile keeps to
+   the left edge, and the hand moves over a little to make room for it. */
+@media (max-width: 899px) and (max-aspect-ratio: 1/1) {
+  .card-pile { --pile-card-w: clamp(70px, 10dvh, 86px); --pile-step-x: -9px; --pile-step-y: -7px; }
+  .pile-card { left: calc(var(--pile-card-w) / 2 + 26px); bottom: -16px; }
+  body:has(.card-pile) .card-hand { translate: 44px 0; }
 }

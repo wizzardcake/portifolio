@@ -926,6 +926,9 @@ const DESKTOP_MODE = window.matchMedia('(min-width: 900px)');
 // whichever card is inside the portal instead of leaving its state stuck
 // out of sync with a view it closed some other way.
 let retrieveParkedCard = null;
+// Also set by the portal mechanic: closes the portal on the card inside it
+// without returning it to the hand (the Prosjekter pack spends its card).
+let consumeParkedCard = null;
 
 function openApp(appId) {
   const target = document.getElementById(`app-${appId}`);
@@ -1027,6 +1030,14 @@ function moveHandCardTo(id, index) {
   const clamped = Math.max(0, Math.min(index, rest.length));
   rest.splice(clamped, 0, id);
   handOrder = rest;
+  layoutHand();
+}
+
+// Takes a card out of the hand for good (one the portal has consumed); the
+// rest close up behind the new front card.
+function removeHandCard(id) {
+  handOrder = handOrder.filter((x) => x !== id);
+  document.querySelector(`.hand-card--${id}`)?.remove();
   layoutHand();
 }
 
@@ -1522,6 +1533,16 @@ layoutHand();
     deactivate();
     return true;
   };
+
+  // The portal closes as on retrieval, but its card stays where the throw
+  // left it, hidden: the caller takes it out of the hand. Returns the
+  // card's id, or null if the portal held none.
+  consumeParkedCard = function () {
+    if (!activeCard) return null;
+    const id = activeCard.dataset.app;
+    deactivate();
+    return id;
+  };
 })();
 
 // ==========================================================================
@@ -1731,6 +1752,183 @@ moreLink.addEventListener('click', () => {
   moreProjects.hidden = !isHidden;
   moreLink.textContent = isHidden ? 'Mer, for de nysgjerrige ↑' : 'Mer, for de nysgjerrige ↓';
 });
+
+// ==========================================================================
+// PILES — stacks of cards of their own, lying on the table left of the
+// hand. A pile is an id and a list of cards; the first is the projects the
+// Prosjekter pack held. Visual only for now: its cards carry no data-app,
+// so the hand's drag and throw (wired to every .sub-card[data-app]) leave
+// them alone.
+// ==========================================================================
+const piles = new Map();
+
+// cards: [{id, title, meta, glow}], glow naming a --relic-*-rgb token; the
+// first card lies in front.
+function createPile(id, cards, label = '') {
+  const el = document.createElement('div');
+  el.className = 'card-pile';
+  el.dataset.pile = id;
+  el.setAttribute('role', 'group');
+  if (label) el.setAttribute('aria-label', label);
+  cards.forEach((card, i) => {
+    const slot = document.createElement('div');
+    slot.className = 'pile-card';
+    slot.dataset.card = card.id;
+    slot.style.setProperty('--stack-i', i);
+    slot.style.setProperty('--card-glow-rgb', `var(${card.glow})`);
+    slot.style.zIndex = String(cards.length - i);
+    slot.innerHTML = `
+      <div class="sub-card sub-card--pile">
+        <span class="sub-card-title">${card.title}</span>
+        ${card.meta ? `<span class="sub-card-footer">${card.meta}</span>` : ''}
+      </div>
+    `;
+    el.appendChild(slot);
+  });
+  // Before the hand, so the hand is the one in front where the two meet.
+  const hand = document.querySelector('.card-hand');
+  hand.parentElement.insertBefore(el, hand);
+  const pile = {id, cards: cards.map((card) => card.id), el};
+  piles.set(id, pile);
+  return pile;
+}
+
+// Sends a pile's cards out of the portal's centre to where they rest, the
+// back card first so the front one lands on top, 120 ms apart.
+function dealPile(pile, {delay = 0} = {}) {
+  const origin = document.querySelector('.portal-origin').getBoundingClientRect();
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cards = [...pile.el.querySelectorAll('.pile-card')].reverse();
+  return Promise.all(cards.map((card, i) => {
+    // The stack's own offset is the card's `transform`; the flight uses the
+    // individual properties, which apply outside it, in viewport pixels.
+    const r = card.getBoundingClientRect();
+    const dx = origin.left - (r.left + r.width / 2);
+    const dy = origin.top - (r.top + r.height / 2);
+    return card.animate([
+      {translate: `${dx}px ${dy}px`, scale: .05, rotate: '-35deg', opacity: 0, filter: 'blur(4px)'},
+      {translate: `${dx * .5}px ${dy * .5 - 90}px`, scale: .75, rotate: '-12deg', opacity: 1, filter: 'blur(0px)', offset: .5},
+      {translate: '0px 0px', scale: 1, rotate: '0deg', opacity: 1, filter: 'blur(0px)'},
+    ], {duration: reduced ? 80 : 1000, delay: reduced ? 0 : (delay + i * .12) * 1000,
+      easing: 'cubic-bezier(.16,.65,.3,1)', fill: 'backwards'}).finished;
+  }));
+}
+
+// ==========================================================================
+// PROSJEKT-PAKKE — the Prosjekter card no longer opens onto the deck: its
+// page holds a sealed pack. Opened (once, for now) the pack charges, bursts
+// and dissolves like mist; the portal then closes on the card for good, and
+// the three projects fly out of it to a pile of their own.
+// ==========================================================================
+const PACK_PILE = {
+  id: 'prosjekter',
+  label: 'Prosjekter',
+  cards: [
+    {id: 'motvind', title: 'Motvind Norge', meta: PROJECT_DETAILS.motvind.meta, glow: '--relic-gold-rgb'},
+    {id: 'husflid', title: 'Norges Husflidslag', meta: PROJECT_DETAILS.husflid.meta, glow: '--relic-teal-rgb'},
+    {id: 'dukkehjem', title: 'Et dukkehjem', meta: PROJECT_DETAILS.dukkehjem.meta, glow: '--relic-burgundy-rgb'},
+  ],
+};
+
+(function () {
+  const stage = document.getElementById('prosjektPakke');
+  if (!stage) return;
+  const pack = stage.querySelector('.pack');
+  const openBtn = stage.querySelector('.pack-open');
+  // While the pack bursts, its card must stay in the portal.
+  const holds = [document.querySelector('#app-prosjekter [data-close]'), document.getElementById('portalRetrieve')];
+  let opened = false;
+
+  const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const vanish = (el, animation) => animation.finished.then(() => el.remove(), () => el.remove());
+
+  // An effect centred on the pack, on the stage: the pack's own fade must
+  // not take the flash and sparks with it.
+  function effect(className, x = 0, y = 0) {
+    const el = document.createElement('span');
+    el.className = className;
+    el.style.left = pack.offsetLeft + pack.offsetWidth / 2 + x + 'px';
+    el.style.top = pack.offsetTop + pack.offsetHeight / 2 + y + 'px';
+    stage.appendChild(el);
+    return el;
+  }
+
+  function flash() {
+    const glare = effect('pack-flash');
+    vanish(glare, glare.animate([
+      {opacity: 0, transform: 'translate(-50%, -50%) scale(.3)'},
+      {opacity: 1, transform: 'translate(-50%, -50%) scale(1)', offset: .25},
+      {opacity: 0, transform: 'translate(-50%, -50%) scale(1.5)'},
+    ], {duration: 650, easing: 'ease-out'}));
+    for (let i = 0; i < 18; i++) {
+      const spark = effect('pack-spark');
+      const turn = Math.PI * 2 * (i / 18 + Math.random() * .04);
+      const reach = pack.offsetWidth * (.6 + Math.random() * .8);
+      vanish(spark, spark.animate([
+        {opacity: 1, transform: 'translate(-50%, -50%) scale(1)'},
+        {opacity: 0, transform: `translate(calc(-50% + ${Math.cos(turn) * reach}px), calc(-50% + ${Math.sin(turn) * reach}px)) scale(.2)`},
+      ], {duration: 600 + Math.random() * 450, easing: 'cubic-bezier(.1,.7,.3,1)'}));
+    }
+  }
+
+  function mist() {
+    for (let i = 0; i < 7; i++) {
+      const puff = effect('pack-mist', (Math.random() - .5) * pack.offsetWidth * .8, (Math.random() - .5) * pack.offsetHeight * .7);
+      vanish(puff, puff.animate([
+        {opacity: 0, transform: 'translate(-50%, -50%) scale(.4)'},
+        {opacity: .85, offset: .3},
+        {opacity: 0, transform: `translate(calc(-50% + ${(Math.random() - .5) * 70}px), calc(-50% - ${30 + Math.random() * 50}px)) scale(1.7)`},
+      ], {duration: 1100 + Math.random() * 400, delay: i * 40, easing: 'ease-out'}));
+    }
+  }
+
+  // The charge (the pack trembles harder and burns brighter), the flash and
+  // sparks, then the mist it dissolves into. Resolves once it is gone.
+  async function burst() {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      await pack.animate([{opacity: 1}, {opacity: 0}], {duration: 150, fill: 'forwards'}).finished;
+      return;
+    }
+    const gold = token('--gold-rgb');
+    const charge = [];
+    for (let i = 0; i <= 18; i++) {
+      const p = i / 18, shake = 5 * p * p, side = i % 2 ? 1 : -1;
+      charge.push({
+        transform: `translate(${side * shake}px, ${Math.sin(i * 2.3) * shake * .5}px) rotate(${-side * shake * .5}deg) scale(${1 + .05 * p})`,
+        filter: `brightness(${1 + .6 * p}) drop-shadow(0 0 ${6 + 30 * p}px rgba(${gold}, ${.3 + .6 * p}))`,
+      });
+    }
+    await pack.animate(charge, {duration: 950, easing: 'ease-in', fill: 'forwards'}).finished;
+    flash();
+    mist();
+    await pack.animate([
+      {opacity: 1, transform: 'scale(1.05)', filter: `brightness(1.8) blur(0px) drop-shadow(0 0 36px rgba(${gold}, .9))`},
+      {opacity: 0, transform: 'translateY(-18px) scale(1.2)', filter: `brightness(2.2) blur(18px) drop-shadow(0 0 36px rgba(${gold}, 0))`},
+    ], {duration: 850, easing: 'cubic-bezier(.2,.6,.3,1)', fill: 'forwards'}).finished;
+  }
+
+  openBtn.addEventListener('click', async () => {
+    if (opened) return;
+    opened = true;
+    const keyboard = openBtn.matches(':focus-visible');
+    openBtn.disabled = true;
+    holds.forEach((button) => { if (button) button.disabled = true; });
+    await burst();
+    holds.forEach((button) => { if (button) button.disabled = false; });
+    const spent = consumeParkedCard?.();
+    if (!spent) {
+      // The card left the portal meanwhile (a reset): the pack stays sealed.
+      pack.getAnimations().forEach((animation) => animation.cancel());
+      openBtn.disabled = false;
+      opened = false;
+      return;
+    }
+    removeHandCard(spent);
+    // Out of the portal as its page draws back into the orb.
+    dealPile(createPile(PACK_PILE.id, PACK_PILE.cards, PACK_PILE.label), {delay: .35});
+    if (keyboard) document.querySelector(`.hand-card--${handOrder[0]} .sub-card`)?.focus({preventScroll: true});
+  });
+})();
 
 // ==========================================================================
 // CHIP GROUPS (Kurs & Fag / Om meg) — generic placeholder behavior

@@ -164,6 +164,39 @@ try {
   async function assertRemainingHand() {
     assert.equal(await evaluate(`[...document.querySelectorAll('.hand-card .sub-card')].filter(e=>getComputedStyle(e).visibility==='visible' && +getComputedStyle(e).opacity>0).length`),4,'Exactly the active card leaves the hand');
   }
+  // The Prosjekter page holds the sealed pack in place of the deck, and the
+  // pack and its button fit the page above the retrieval button.
+  async function assertSealedPack() {
+    const pack=await evaluate(`(() => {
+      const button=document.querySelector('#prosjektPakke .pack-open').getBoundingClientRect(),retrieve=document.querySelector('#portalRetrieve').getBoundingClientRect();
+      return {pack:!!document.querySelector('#prosjektPakke .pack').offsetParent,deck:!!document.querySelector('#prosjekterDeck').offsetParent,
+        clear:button.height>0 && button.bottom<=retrieve.top};
+    })()`);
+    assert.deepEqual(pack,{pack:true,deck:false,clear:true},'The Prosjekter page shows the sealed pack, not the deck');
+  }
+  // Opened, the pack spends the Prosjekter card: the portal closes without
+  // returning it, and its three projects lie as a pile of their own (visual
+  // only, not wired to the throw), left of the hand where there is room.
+  async function openPack({beside=true}={}) {
+    // Read in the page as the click bubbles past the button: the reduced
+    // burst is over before a round trip could look.
+    await evaluate(`window.packHeld=null;addEventListener('click',()=>{window.packHeld=document.querySelector('#portalRetrieve').disabled && document.querySelector('#app-prosjekter [data-close]').disabled},{once:true})`);
+    await click('#prosjektPakke .pack-open');
+    assert.equal(await evaluate(`window.packHeld`),true,'The card stays in the portal while the pack bursts');
+    await until(`!!document.querySelector('.card-pile') && !document.querySelector('.card-pile').getAnimations({subtree:true}).length`,15000);
+    const state=await evaluate(`(() => {
+      const pile=document.querySelector('.card-pile'),cards=[...pile.querySelectorAll('.pile-card')];
+      const faces=cards.map(c=>c.querySelector('.sub-card').getBoundingClientRect());
+      const front=document.querySelector('.hand-card--'+handOrder[0]+' .sub-card').getBoundingClientRect();
+      return {spent:!handOrder.includes('prosjekter') && handOrder.length===4 && !document.querySelector('.hand-card--prosjekter'),
+        closed:!document.querySelector('.app-view.active') && !document.querySelector('#screen').classList.contains('portal-active') && document.querySelector('#portalRetrieve').hidden,
+        pile:cards.map(c=>c.dataset.card).join(),wired:!!pile.querySelector('[data-app]'),
+        beside:${beside} && faces.every(r=>r.right<=front.left),inside:faces.every(r=>r.left>=0 && r.right<=innerWidth),
+        once:document.querySelector('#prosjektPakke .pack-open').disabled};
+    })()`);
+    assert.deepEqual(state,{spent:true,closed:true,pile:'motvind,husflid,dukkehjem',wired:false,beside,inside:true,once:true},
+      'Opened, the pack leaves a pile of its own and the Prosjekter card is spent');
+  }
   if (process.argv.includes('--cloth-only')) {
     for(const [width,height] of [[1440,1000],[390,844]]) {
       await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
@@ -339,14 +372,26 @@ try {
         await assertRemainingHand(); await assertViewport();
         const page=await bounds('.portal-page');
         assert.ok(page.top>0 && page.bottom<height && page.left>=0 && page.right<=width,'Reader fits at '+width+'x'+height);
-        if (width===1920) {
-          await click('.deck-card[data-project="motvind"] .project-title');
-          assert.equal(await evaluate(`document.querySelector('[data-project-detail]').hidden`),false,'Project details still open');
-          await click('[data-project-back]');
-          assert.equal(await evaluate(`document.querySelector('[data-project-list]').hidden`),false,'Returning to the project deck still works');
-        }
+        // A phone on its side has a page too short for the pack; it scrolls.
+        if (height>400) await assertSealedPack();
         await click('#portalRetrieve'); await sleep(650);
         assert.equal(await evaluate(`!!document.querySelector('.app-view.active')`),false);
+        if (width===1920) {
+          // Thrown in again and its pack opened: the hand carries on without it.
+          await evaluate(`document.querySelector('.hand-card--prosjekter .sub-card').focus({preventScroll:true})`);
+          await cdp('Input.dispatchKeyEvent', {type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+          await cdp('Input.dispatchKeyEvent', {type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+          await until(`document.querySelector('#app-prosjekter').classList.contains('active')`);
+          await sleep(350); await openPack(); await assertViewport();
+          await shot('foundation-pile-' + width);
+          const front=await evaluate(`handOrder[0]`);
+          await evaluate(`document.querySelector('.hand-card--${front} .sub-card').focus({preventScroll:true})`);
+          await cdp('Input.dispatchKeyEvent', {type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+          await cdp('Input.dispatchKeyEvent', {type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+          await until(`document.querySelector('#app-${front}').classList.contains('active')`);
+          await click('#portalRetrieve'); await sleep(650);
+          assert.equal(await evaluate(`!!document.querySelector('.app-view.active')`),false,'The hand still throws and retrieves after the pack');
+        }
       console.log('PASS: composition, retained hand, keyboard activation and retrieval at',width,height);
     }
     // Resize a running scene rather than only checking fresh page loads.
@@ -667,11 +712,13 @@ try {
   await until(`document.querySelector('#app-prosjekter').classList.contains('active')`);
   await sleep(650); await shot('06-projected');
   await assertRemainingHand(); await assertViewport();
-  // Content alone scrolls; wheel events must not move the table or the hand.
+  // The page holds the sealed pack, sized to fit it without a scroll; wheel
+  // events over it must not move the table or the hand either.
+  await assertSealedPack();
   const reader=await bounds('.app-view.active .app-content');
   await cdp('Input.dispatchMouseEvent',{type:'mouseWheel',x:reader.right-12,y:reader.y,deltaX:0,deltaY:700});
   await sleep(300);
-  assert.ok(await evaluate(`document.querySelector('.app-view.active .app-content').scrollTop>0`),'Project content retains its own scroll');
+  assert.ok(await evaluate(`(c => c.scrollHeight<=c.clientHeight)(document.querySelector('#app-prosjekter .app-content'))`),'The sealed pack fits the page without a scroll');
   await assertViewport();
   const page = await bounds('.portal-page');
   assert.ok(page.top > 0 && page.bottom < 1000, 'The whole emitted page must fit in the viewport');
@@ -687,10 +734,28 @@ try {
     // real pointer at its back button, as in the first projection above.
     await sleep(700);
     await assertRemainingHand();
+    if (id === 'ommeg') {
+      // Content alone scrolls; wheel events must not move the table or the hand.
+      const content=await bounds('#app-ommeg .app-content');
+      await cdp('Input.dispatchMouseEvent',{type:'mouseWheel',x:content.right-12,y:content.y,deltaX:0,deltaY:700});
+      await sleep(300);
+      assert.ok(await evaluate(`document.querySelector('#app-ommeg .app-content').scrollTop>0`),'Page content retains its own scroll');
+      await assertViewport();
+    }
     await click(`#app-${id} [data-close]`); await sleep(1050);
     assert.equal(await evaluate(`!!document.querySelector('.app-view.active')`), false, 'Back must close ' + id);
   }
   console.log('PASS: all five cards, projection, click rejection, and retrieval');
+  // The pack opened at full motion: it charges, bursts and dissolves, and
+  // the three projects fly out of the portal to their pile.
+  await evaluate(`bringHandCardToFront('prosjekter')`); await sleep(400);
+  await drag('.hand-card--prosjekter .sub-card', await bounds('#screen'));
+  await until(`document.querySelector('#app-prosjekter').classList.contains('active') && !document.querySelector('#screen').classList.contains('is-projecting')`);
+  await sleep(700); await shot('06b-pack');
+  await openPack();
+  await sleep(300); await shot('06c-pile');
+  await assertViewport();
+  console.log('PASS: the Prosjekter pack opens once into a pile of its own');
   await drag('.hand-card--ommeg .sub-card', await bounds('#screen'));
   await sleep(600); await click('#introBack'); await sleep(2000);
   assert.equal(await evaluate(`!!document.querySelector('.app-view.active')`), false);
@@ -724,6 +789,10 @@ try {
   await cdp('Input.dispatchKeyEvent', {type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
   await until(`document.querySelector('#app-prosjekter').classList.contains('active')`);
   await sleep(450); await assertRemainingHand();
+  // An upright phone has no room beside the hand: the pile keeps to the
+  // left edge, inside the viewport, and nothing overflows.
+  await openPack({beside:false}); await assertViewport();
+  await shot('09b-mobile-pile');
   await click('#introBack'); await sleep(300);
   assert.equal(await evaluate(`document.querySelector('#portalMatter').dataset.state`), 'locked');
   // Verify the CSS material path independently of WebGL availability.

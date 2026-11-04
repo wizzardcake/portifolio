@@ -929,6 +929,9 @@ let retrieveParkedCard = null;
 // Also set by the portal mechanic: closes the portal on the card inside it
 // without returning it to the hand (the Prosjekter pack spends its card).
 let consumeParkedCard = null;
+// Also set by the portal mechanic: gives a card outside the hand (a pile's
+// card, see createPile) the same drag, aim and throw into the portal.
+let wireThrowCard = null;
 
 function openApp(appId) {
   const target = document.getElementById(`app-${appId}`);
@@ -1096,6 +1099,7 @@ layoutHand();
   const ACTIVATE_RADIUS = 140; // px — release within this distance = thrown in
   const CARD_GLOW = {
     prosjekter: 'var(--relic-gold-rgb)',
+    motvind: 'var(--relic-gold-rgb)',
     arbeidserfaring: 'var(--relic-gold-rgb)',
     kurs: 'var(--relic-teal-rgb)',
     verktoy: 'var(--relic-teal-rgb)',
@@ -1194,9 +1198,17 @@ layoutHand();
   // spectral ghost while aiming, or the real card itself in flight (the one
   // in the hand is hidden meanwhile, so it is the same card to the eye).
   function detachedCard(subCard, className) {
-    const handCard = subCard.closest('.hand-card');
+    // The hand's wrapper, or a pile's slot: either holds the card's tilt and glow.
+    const handCard = subCard.closest('.hand-card, .pile-card');
     const r = subCard.getBoundingClientRect(), w = subCard.offsetWidth, h = subCard.offsetHeight;
-    const turn = element => parseFloat(element && getComputedStyle(element).rotate) || 0;
+    // The hand tilts with the `rotate` property; a pile's slot tilts inside its `transform`.
+    const turn = element => {
+      if (!element) return 0;
+      const style = getComputedStyle(element), rotate = parseFloat(style.rotate);
+      if (!Number.isNaN(rotate)) return rotate;
+      const m = style.transform.match(/^matrix\(([^)]+)\)$/)?.[1].split(',').map(Number);
+      return m ? Math.atan2(m[1], m[0]) * 180 / Math.PI : 0;
+    };
     const copy = subCard.cloneNode(true);
     copy.removeAttribute('id');
     copy.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
@@ -1205,6 +1217,12 @@ layoutHand();
     copy.inert = true;
     const style = getComputedStyle(subCard);
     copy.style.setProperty('--card-glow-rgb', getComputedStyle(handCard || subCard).getPropertyValue('--card-glow-rgb'));
+    // A pile's card hides its footer when narrow (a container query the
+    // copy, outside the pile, no longer sits in): keep it hidden.
+    const footers = subCard.querySelectorAll('.sub-card-footer');
+    copy.querySelectorAll('.sub-card-footer').forEach((footer, i) => {
+      if (footers[i] && getComputedStyle(footers[i]).display === 'none') footer.style.display = 'none';
+    });
     // Padding is a percentage of the containing block: resolved here, or the
     // viewport-fixed copy would take 10% of the whole viewport.
     Object.assign(copy.style, {width: w + 'px', height: h + 'px', padding: style.padding, font: style.font, color: style.color,
@@ -1278,7 +1296,7 @@ layoutHand();
       // also as a fraction of the portal's on-screen bounds (approximate).
       const bounds = screenEl.getBoundingClientRect();
       window.dispatchEvent(new CustomEvent('card-portal-arrival', {detail: {
-        appId: subCard.dataset.app, card: subCard,
+        appId: subCard.dataset.app || subCard.dataset.pileApp, card: subCard,
         screen: {x: target.x, y: target.y}, velocity: result.velocity,
         aperture: {x: (target.x - bounds.left) / bounds.width, y: (target.y - bounds.top) / bounds.height},
       }}));
@@ -1294,8 +1312,18 @@ layoutHand();
   // other card (or the front card released short of the portal) re-sorts
   // the stack instead, landing on whichever slot the drag distance
   // actually reaches (see endDrag below).
-  document.querySelectorAll('.sub-card[data-app]').forEach((subCard) => {
-    const glowVar = CARD_GLOW[subCard.dataset.app] || null;
+  // `pile`: a card lying in a pile (createPile) rather than in the hand. It
+  // is always aimed (a pile has no front card to wait for) and a miss just
+  // lets it settle, since there is no stack to re-sort.
+  function wireCard(subCard, {pile = false} = {}) {
+    const appId = subCard.dataset.app || subCard.dataset.pileApp;
+    const glowVar = CARD_GLOW[appId] || null;
+    if (pile) {
+      subCard.classList.add('is-throwable');
+      subCard.tabIndex = 0;
+      subCard.setAttribute('role', 'button');
+      subCard.setAttribute('aria-label', `${subCard.querySelector('.sub-card-title')?.textContent ?? appId} — kast inn i portalen`);
+    }
     // The stack's rotate/scale live on this wrapper. Dragging sets
     // `translate` on the card in viewport pixels — inside a rotated/scaled
     // ancestor that translate would be composed *after* those and come out
@@ -1347,7 +1375,7 @@ layoutHand();
       startY = e.clientY;
       // Only the front card can be thrown: it is aimed with a ghost. Any
       // other card is picked up and moved itself, to re-sort the hand.
-      aiming = handOrder[0] === subCard.dataset.app;
+      aiming = pile || handOrder[0] === appId;
       if (aiming) dragScale = 1; // the ghost moves in plain viewport pixels
       const grabbed = subCard.getBoundingClientRect();
       grabbedCenter = {x: grabbed.left + grabbed.width / 2, y: grabbed.top + grabbed.height / 2};
@@ -1403,7 +1431,7 @@ layoutHand();
       // Only the front card's approach toward the portal lights it up —
       // a peeking card being dragged is re-sorting the hand, not aiming
       // for the portal.
-      if (handOrder[0] === subCard.dataset.app) {
+      if (handOrder[0] === appId) {
         const r = subCard.getBoundingClientRect();
         const c = portalCenter();
         setIntensity(Math.hypot(r.left + r.width / 2 - c.x, r.top + r.height / 2 - c.y));
@@ -1426,6 +1454,8 @@ layoutHand();
       subCard.style.scale = '';
       subCard.style.opacity = '';
       window.setTimeout(() => { if (!dragging && activeCard !== subCard) subCard.style.animation = ''; }, 570);
+      // A pile's card comes back the way the pack dealt it: out of the portal.
+      if (pile) flyFromPortal(subCard.closest('.pile-card'), 0, 700);
       if (handCard) {
         handCard.style.transition = 'rotate 0.4s ease, scale 0.4s ease';
         handCard.style.rotate = '';
@@ -1442,7 +1472,7 @@ layoutHand();
       subCard.style.animation = 'none';
       if (handCard) handCard.classList.add('is-thrown');
       flickIntoPortal(subCard).then(arrived => {
-        if (arrived && activeCard === subCard && activationGen === generation) activate(subCard.dataset.app, subCard, glowVar);
+        if (arrived && activeCard === subCard && activationGen === generation) activate(appId, subCard, glowVar);
       });
       return true;
     }
@@ -1454,8 +1484,8 @@ layoutHand();
       if (!moved) { document.body.classList.remove('scene-interacting'); return; }
       subCard.dataset.justDragged = '1';
 
-      const id = subCard.dataset.app;
-      const isFront = handOrder[0] === id;
+      const id = appId;
+      const isFront = pile || handOrder[0] === id;
       let nearPortal = false;
       if (aiming && ghost) {
         const c = portalCenter();
@@ -1479,7 +1509,14 @@ layoutHand();
         settleCard();
       }
 
-      {
+      if (pile) {
+        // Not thrown: the card has settled back into its pile.
+        subCard.style.transition = 'translate 0.35s ease, rotate 0.35s ease';
+        subCard.style.translate = `${baseX}px ${baseY}px`;
+        subCard.style.animation = '';
+        resetIntensity();
+        document.body.classList.remove('scene-interacting');
+      } else {
         // Not thrown (missed the portal, one was already occupied, or this
         // wasn't the front card to begin with) — re-sort the stack instead.
         // Project the drag onto the stack's own offset axis (16px right,
@@ -1516,10 +1553,12 @@ layoutHand();
     subCard.addEventListener('keydown', event => {
       if (!['Enter', ' '].includes(event.key) || activeCard || !document.body.classList.contains('intro-done')) return;
       event.preventDefault();
-      if (handOrder[0] !== subCard.dataset.app) { bringHandCardToFront(subCard.dataset.app); return; }
+      if (!pile && handOrder[0] !== appId) { bringHandCardToFront(appId); return; }
       throwIn();
     });
-  });
+  }
+  document.querySelectorAll('.sub-card[data-app]').forEach((subCard) => wireCard(subCard));
+  wireThrowCard = wireCard;
 
   retrieveBtn.addEventListener('click', () => {
     if (!activeCard) return;
@@ -1678,18 +1717,27 @@ function renderCaseSection(section) {
     </section>`;
 }
 
-function showProjectDetail(id) {
-  const data = PROJECT_DETAILS[id];
-  if (!data) return;
+function caseMarkup(data) {
   const body = data.sections
     ? data.sections.map(renderCaseSection).join('')
     : '<p class="detail-placeholder">Mer om prosessen kommer her.</p>';
-  detailContentEl.innerHTML = `
+  return `
     <span class="project-meta">${data.meta}</span>
     <h3>${data.title}</h3>
     ${data.tagline ? `<p>${data.tagline}</p>` : ''}
     ${body}
   `;
+}
+
+// The Motvind case has a page of its own in the portal: the pile's card is
+// thrown in and the page it opens (#app-motvind) holds the whole case.
+const motvindCaseEl = document.getElementById('motvindCase');
+if (motvindCaseEl) motvindCaseEl.innerHTML = caseMarkup(PROJECT_DETAILS.motvind);
+
+function showProjectDetail(id) {
+  const data = PROJECT_DETAILS[id];
+  if (!data) return;
+  detailContentEl.innerHTML = caseMarkup(data);
   detailContentEl.scrollTop = 0;
   projectListEl.hidden = true;
   projectDetailEl.hidden = false;
@@ -1859,14 +1907,15 @@ moreLink.addEventListener('click', () => {
 // ==========================================================================
 // PILES — stacks of cards of their own, lying on the table left of the
 // hand. A pile is an id and a list of cards; the first is the projects the
-// Prosjekter pack held. Visual only for now: its cards carry no data-app,
-// so the hand's drag and throw (wired to every .sub-card[data-app]) leave
-// them alone.
+// Prosjekter pack held. Its cards carry no data-app, so the hand's drag and
+// throw (wired to every .sub-card[data-app]) leave them alone; a card that
+// opens a page has data-pile-app and is wired to throw by createPile.
 // ==========================================================================
 const piles = new Map();
 
-// cards: [{id, title, meta, glow}], glow naming a --relic-*-rgb token; the
-// first card lies in front.
+// cards: [{id, title, meta, glow, app}], glow naming a --relic-*-rgb token;
+// the first card lies in front. A card with an `app` can be thrown into the
+// portal to open that page (the portal mechanic wires it); the rest lie still.
 function createPile(id, cards, label = '') {
   const el = document.createElement('div');
   el.className = 'card-pile';
@@ -1881,12 +1930,13 @@ function createPile(id, cards, label = '') {
     slot.style.setProperty('--card-glow-rgb', `var(${card.glow})`);
     slot.style.zIndex = String(cards.length - i);
     slot.innerHTML = `
-      <div class="sub-card sub-card--pile">
+      <div class="sub-card sub-card--pile"${card.app ? ` data-pile-app="${card.app}"` : ''}>
         <span class="sub-card-title">${card.title}</span>
         ${card.meta ? `<span class="sub-card-footer">${card.meta}</span>` : ''}
       </div>
     `;
     el.appendChild(slot);
+    if (card.app && wireThrowCard) wireThrowCard(slot.querySelector('.sub-card'), {pile: true});
   });
   // Before the hand, so the hand is the one in front where the two meet.
   const hand = document.querySelector('.card-hand');
@@ -1896,25 +1946,29 @@ function createPile(id, cards, label = '') {
   return pile;
 }
 
+// One card out of the portal's centre to where it rests: the deal, and a
+// pile card's return when it is taken back from the portal.
+function flyFromPortal(card, delay = 0, duration = 1000) {
+  const origin = document.querySelector('.portal-origin').getBoundingClientRect();
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // The stack's own offset is the card's `transform`; the flight uses the
+  // individual properties, which apply outside it, in viewport pixels.
+  const r = card.getBoundingClientRect();
+  const dx = origin.left - (r.left + r.width / 2);
+  const dy = origin.top - (r.top + r.height / 2);
+  return card.animate([
+    {translate: `${dx}px ${dy}px`, scale: .05, rotate: '-35deg', opacity: 0, filter: 'blur(4px)'},
+    {translate: `${dx * .5}px ${dy * .5 - 90}px`, scale: .75, rotate: '-12deg', opacity: 1, filter: 'blur(0px)', offset: .5},
+    {translate: '0px 0px', scale: 1, rotate: '0deg', opacity: 1, filter: 'blur(0px)'},
+  ], {duration: reduced ? 80 : duration, delay: reduced ? 0 : delay * 1000,
+    easing: 'cubic-bezier(.16,.65,.3,1)', fill: 'backwards'}).finished;
+}
+
 // Sends a pile's cards out of the portal's centre to where they rest, the
 // back card first so the front one lands on top, 120 ms apart.
 function dealPile(pile, {delay = 0} = {}) {
-  const origin = document.querySelector('.portal-origin').getBoundingClientRect();
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cards = [...pile.el.querySelectorAll('.pile-card')].reverse();
-  return Promise.all(cards.map((card, i) => {
-    // The stack's own offset is the card's `transform`; the flight uses the
-    // individual properties, which apply outside it, in viewport pixels.
-    const r = card.getBoundingClientRect();
-    const dx = origin.left - (r.left + r.width / 2);
-    const dy = origin.top - (r.top + r.height / 2);
-    return card.animate([
-      {translate: `${dx}px ${dy}px`, scale: .05, rotate: '-35deg', opacity: 0, filter: 'blur(4px)'},
-      {translate: `${dx * .5}px ${dy * .5 - 90}px`, scale: .75, rotate: '-12deg', opacity: 1, filter: 'blur(0px)', offset: .5},
-      {translate: '0px 0px', scale: 1, rotate: '0deg', opacity: 1, filter: 'blur(0px)'},
-    ], {duration: reduced ? 80 : 1000, delay: reduced ? 0 : (delay + i * .12) * 1000,
-      easing: 'cubic-bezier(.16,.65,.3,1)', fill: 'backwards'}).finished;
-  }));
+  return Promise.all(cards.map((card, i) => flyFromPortal(card, delay + i * .12)));
 }
 
 // ==========================================================================
@@ -1927,7 +1981,7 @@ const PACK_PILE = {
   id: 'prosjekter',
   label: 'Prosjekter',
   cards: [
-    {id: 'motvind', title: 'Motvind Norge', meta: PROJECT_DETAILS.motvind.meta, glow: '--relic-gold-rgb'},
+    {id: 'motvind', app: 'motvind', title: 'Motvind Norge', meta: 'RVK2101 · Research', glow: '--relic-gold-rgb'},
     {id: 'dukkehjem', title: 'Et dukkehjem', meta: PROJECT_DETAILS.dukkehjem.meta, glow: '--relic-burgundy-rgb'},
     {id: 'husflid', title: 'Norges Husflidslag', meta: PROJECT_DETAILS.husflid.meta, glow: '--relic-teal-rgb'},
   ],

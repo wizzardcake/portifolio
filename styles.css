@@ -1044,6 +1044,9 @@ body.intro-active .screen {
 }
 
 .pile-card .sub-card { pointer-events: auto; cursor: default; animation: none; }
+/* A pile card that can be thrown into the portal (script.js wireCard). */
+.pile-card .sub-card.is-throwable { cursor: grab; touch-action: none; }
+.pile-card .sub-card.is-throwable:active { cursor: grabbing; }
 .sub-card--pile { font-size: clamp(9px, 7.5cqw, 14px); }
 /* At the top: the card's lower part sinks below the viewport, as the hand's. */
 .sub-card--pile .sub-card-footer {

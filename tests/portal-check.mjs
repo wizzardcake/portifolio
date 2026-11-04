@@ -391,6 +391,22 @@ try {
           await until(`document.querySelector('#app-${front}').classList.contains('active')`);
           await click('#portalRetrieve'); await sleep(650);
           assert.equal(await evaluate(`!!document.querySelector('.app-view.active')`),false,'The hand still throws and retrieves after the pack');
+          // The pile's Motvind card is thrown like a hand card and opens the case.
+          const motvind='.pile-card[data-card="motvind"] .sub-card';
+          await evaluate(`document.querySelector('${motvind}').focus({preventScroll:true})`);
+          await cdp('Input.dispatchKeyEvent', {type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+          await cdp('Input.dispatchKeyEvent', {type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+          await until(`document.querySelector('#app-motvind').classList.contains('active')`);
+          await sleep(350); await shot('motvind-case-' + width); await assertViewport();
+          assert.ok(await evaluate(`document.querySelector('#app-motvind').textContent.includes('Instagram')`),'The Motvind page holds the case');
+          await click('#portalRetrieve'); await sleep(1100);
+          assert.equal(await evaluate(`!!document.querySelector('.app-view.active')`),false,'Retrieving closes the Motvind page');
+          assert.equal(await evaluate(`getComputedStyle(document.querySelector('${motvind}')).visibility`),'visible','The Motvind card is back in its pile');
+          // And by hand: aimed with a ghost, released over the portal.
+          await drag(motvind,await bounds('.portal-origin'));
+          await until(`document.querySelector('#app-motvind').classList.contains('active')`);
+          await click('#portalRetrieve'); await sleep(1100);
+          assert.equal(await evaluate(`!!document.querySelector('.app-view.active')`),false,'A dragged Motvind card retrieves too');
         }
       console.log('PASS: composition, retained hand, keyboard activation and retrieval at',width,height);
     }

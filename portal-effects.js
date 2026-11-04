@@ -511,7 +511,7 @@
       presentation = presentations.get(appId) || null;
       pageTarget = target ?? presentation?.target ?? null;
       presentation?.begin?.();
-      const nextTint = appId === 'ommeg' ? [.52,.21,.28] : ['prosjekter','arbeidserfaring'].includes(appId) ? [.57,.42,.21] : [.24,.56,.49];
+      const nextTint = appId === 'ommeg' ? [.52,.21,.28] : ['prosjekter','motvind','arbeidserfaring'].includes(appId) ? [.57,.42,.21] : [.24,.56,.49];
       screen.classList.add('is-projecting');
       const complete = await transitionTo('page', settings.pageDuration * 1000, flight, nextTint);
       if (complete) screen.classList.remove('is-projecting');

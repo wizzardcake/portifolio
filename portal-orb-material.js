@@ -35,7 +35,7 @@
     arrivalDrop: 1,   // strength of the dive when a card arrives (0 = none)
     arrivalDelay: .12,// s from the card's splash to the orb's fall
     handoff: 0,       // s offset from clear + .08/diveSpeed; bounded before rebound apex
-    pageDuration: 1.25, // s travelling/opening into the page (80 ms under reduced motion)
+    pageDuration: 1.6, // s travelling/opening into the page (80 ms under reduced motion)
     formBlend: .32,   // s blending the rising droplet's residual shape into the opening
     pageLens: 1,      // how far it spreads into a lens facing the reader as the page opens
   });

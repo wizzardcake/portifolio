@@ -293,7 +293,7 @@ async function check() {
             neck: p.neck, s: p.stretch, presence: p.presence, open: s.open, morph: s.morph, vz: s.velocity.z,
             canvas: Number(c.style.opacity || 1), html: !!document.querySelector('.app-view.active')}); }
         return true; }; return true; })()`);
-    for (const [ms, name] of [[1140, 'rebound'], [1300, 'neck'], [1480, 'lift'], [1800, 'lens'], [2100, 'unfolding'], [2450, 'glass'], [3300, 'reader']]) {
+    for (const [ms, name] of [[1140, 'rebound'], [1300, 'neck'], [1480, 'lift'], [1800, 'lens'], [2100, 'unfolding'], [2450, 'glass'], [3650, 'reader']]) {
       await evaluate(`__film(${ms})`); await shot(name);
     }
     const flight = await evaluate('__frames'), face = await evaluate('__face');

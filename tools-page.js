@@ -328,7 +328,11 @@
     touched.clear(); written = new WeakMap();
   }
   window.portalMatter.registerPresentation('verktoy', {
-    target: base => ({...base, width:base.width*settings.widthScale, height:base.height*settings.heightScale}),
+    // Composed for the compact reader, not the full reading page (scene-camera.js).
+    target: () => {
+      const base = window.sceneCamera.reader(true);
+      return {...base, width:base.width*settings.widthScale, height:base.height*settings.heightScale};
+    },
     begin, sample, end,
   });
   window.toolsPage = {

@@ -715,10 +715,11 @@ try {
   // The page holds the sealed pack, sized to fit it without a scroll; wheel
   // events over it must not move the table or the hand either.
   await assertSealedPack();
-  const reader=await bounds('.app-view.active .app-content');
+  const reader=await bounds('.app-view.active .app-content'), handBefore=await bounds('.hand-card--arbeidserfaring');
   await cdp('Input.dispatchMouseEvent',{type:'mouseWheel',x:reader.right-12,y:reader.y,deltaX:0,deltaY:700});
   await sleep(300);
   assert.ok(await evaluate(`(c => c.scrollHeight<=c.clientHeight)(document.querySelector('#app-prosjekter .app-content'))`),'The sealed pack fits the page without a scroll');
+  assert.deepEqual(await bounds('.hand-card--arbeidserfaring'), handBefore, 'The wheel leaves the hand where it is');
   await assertViewport();
   const page = await bounds('.portal-page');
   assert.ok(page.top > 0 && page.bottom < 1000, 'The whole emitted page must fit in the viewport');

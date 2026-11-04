@@ -270,6 +270,10 @@ body.portal-unlocked .portal-hint { opacity: 0; }
    Visible cards retain their hit areas and the existing drag handlers. */
 body:has(.screen.portal-active) .desktop { pointer-events: none; }
 body:has(.screen.portal-active) .hand-card .sub-card { pointer-events: auto; }
+/* An open page is read with the hand laid down: the cards' tops stay in view
+   and in reach below it, clear of its text and its retrieve button.
+   Verktøy keeps its compact composition, and the hand up. */
+body:has(.screen .app-view.active:not(#app-verktoy)) .hand-card { --hand-tuck: 66%; }
 /* Only the thrown card's lifecycle hides it. Keep the rest of the hand. */
 body:not(.intro-done) .hand-card, body:not(.intro-done) .card-pile { visibility: hidden; pointer-events: none; }
 body:not(.intro-done) .theme-toggle { visibility: hidden; }
@@ -311,7 +315,8 @@ body:not(.intro-done) .theme-toggle { visibility: hidden; }
   transform: translate(calc(-50% + var(--page-x-offset, 0px)), calc(-50% + var(--page-y-offset, 0px))) translateZ(var(--page-lift, 80px)) rotateX(calc(var(--view-pitch) * -1));
 }
 .screen .app-view {
-  position: absolute; inset: 5%; z-index: 5; border-radius: 14px 18px 12px 16px;
+  /* The strip below the glass holds «Få tilbake kort», clear of the text. */
+  position: absolute; inset: 10px 10px 72px; z-index: 5; border-radius: 14px 18px 12px 16px;
   background: radial-gradient(ellipse at 20% 0, rgba(var(--portal-glow-rgb, 40,85,76), .16), transparent 65%),
     linear-gradient(155deg, #24333085, #101918ba 40%, #13131cba);
   border: 1px solid #a0b1a34a;
@@ -326,20 +331,15 @@ body:not(.intro-done) .theme-toggle { visibility: hidden; }
   animation: projected-content .65s both;
 }
 .screen .app-view.active .app-content { animation-delay: .1s; }
-.screen .app-view .app-content { padding-bottom: 76px; }
 .screen .app-content { scrollbar-width: thin; scrollbar-color: #74877a66 #0c131333; }
-.portal-retrieve { z-index: 7; bottom: 7%; border-color: #8a9c8155; background: #18221ff2; transform: translateZ(6px); }
+.portal-retrieve { z-index: 7; bottom: 14px; border-color: #8a9c8155; background: #18221ff2; transform: translateZ(6px); }
 .portal-retrieve:hover { transform: translate3d(0, -2px, 6px); }
 body.scene-interacting .device { animation-play-state: paused; }
-/* Desktop: the content pages are given room (the page itself is larger —
-   scene-camera.js reader(true)), so the inside breathes too. */
+/* Desktop: the content inside the larger page breathes too. The page's own
+   shape (its margin, header and retrieve button) is set above, with the
+   reader (scene-camera.js), and is not changed here. */
 @media (min-width: 900px) {
-  .screen .app-view { inset: 3.5% 3%; }
-  .screen .app-header { padding: 28px 48px; gap: 24px; }
-  .screen .app-header h2 { font-size: 1.6em; }
-  .screen .back-btn { padding: 10px 22px; }
   .screen .app-content { padding: 32px 56px 40px; }
-  .screen .app-view .app-content { padding-bottom: 92px; }
   .screen .project-list:not([hidden]) { gap: 40px; align-items: center; }
   .screen .deck { max-width: min(440px, 33dvh); margin: 20px auto 22px; }
   .screen .deck-card { padding: 26px 30px; }
@@ -371,8 +371,14 @@ body.scene-interacting .device { animation-play-state: paused; }
   .desktop-icons { --hand-card-w: clamp(130px, 22dvh, 180px); }
   .hand-card .sub-card { font-size: 12px; }
   .device-topbar { inset: 18px 16px auto; }
-  .screen .app-view { inset: 4%; }
+  .screen .app-view { inset: 8px 8px 68px; }
   .portal-hint { font-size: 9px; }
+}
+/* With room in the page's header row, «Få tilbake kort» sits there, level
+   with «Tilbake», and the glass takes the strip below. */
+@media (min-width: 700px) {
+  .screen .app-view { inset: 10px; }
+  .screen .portal-page:not(.has-tools) .portal-retrieve { top: 26px; bottom: auto; left: auto; right: 34px; translate: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .device, .device-tilt, .portal-matter, .app-header, .app-content { animation: none !important; }
